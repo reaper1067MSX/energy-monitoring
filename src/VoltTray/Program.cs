@@ -1,4 +1,5 @@
 using System.Runtime.InteropServices;
+using VoltTray.Core.Ports;
 using VoltTray.Infrastructure.Hid;
 using VoltTray.Infrastructure.OS;
 using VoltTray.UI.Dialogs;
@@ -31,13 +32,42 @@ public static class Program
     [STAThread]
     public static int Main(string[] args)
     {
+        bool isSimulation = args.Any(a => a.Equals("--simulate", StringComparison.OrdinalIgnoreCase) ||
+                                          a.Equals("--sim", StringComparison.OrdinalIgnoreCase) ||
+                                          a.Equals("--mock", StringComparison.OrdinalIgnoreCase));
+
+        bool isDryRun = args.Any(a => a.Equals("--dry-run", StringComparison.OrdinalIgnoreCase));
+
+        int intervalMs = 1500;
+        for (int i = 0; i < args.Length - 1; i++)
+        {
+            if (args[i].Equals("--interval", StringComparison.OrdinalIgnoreCase) && int.TryParse(args[i + 1], out int val))
+            {
+                intervalMs = Math.Max(250, val);
+            }
+        }
+
         using var mutex = SingleInstanceManager.TryAcquire();
         if (mutex == null) return 0;
+
         try
         {
-            using var lifecycle = new HostLifecycle(new Win32HidUpsPort(), new WindowsShutdownPort(), new WindowsNotificationPort(), new TrayRenderer(), new PopoverPainter(), new ExitDialog());
+            IUpsDevicePort upsPort = isSimulation ? new SimulatedUpsDevicePort() : new Win32HidUpsPort();
+            var shutdownPort = new WindowsShutdownPort();
+            var notificationPort = new WindowsNotificationPort();
+            var trayRenderer = new TrayRenderer();
+            var popoverPainter = new PopoverPainter();
+            var exitDialog = new ExitDialog();
+
+            using var lifecycle = new HostLifecycle(upsPort, shutdownPort, notificationPort, trayRenderer, popoverPainter, exitDialog);
+            if (isDryRun)
+            {
+                lifecycle.ShutdownCoordinator.DryRun = true;
+            }
+
             lifecycle.ExitAction = () => PostQuitMessage(0);
-            lifecycle.Start();
+            lifecycle.Start(intervalMs);
+
             int exitCode = RunMessageLoop();
             lifecycle.Stop();
             return exitCode;
