@@ -1,0 +1,27 @@
+{
+  "font": { "family": "Segoe UI Variable, Segoe UI, system-ui, sans-serif", "sizes": { "caption": 12, "body": 14, "bodyStrong": 14, "subtitle": 18, "dialogTitle": 20, "display": 44 } },
+  "radius": { "card": 8, "dialog": 8, "button": 6, "chip": 12, "bar": 4, "toggleTrack": 12 },
+  "size": { "popoverWidth": 372, "dialogWidth": 560, "menuWidth": 268, "buttonHeight": 44, "menuItemHeight": 36, "trayIconPx": [16, 20, 24, 32] },
+  "themes": {
+    "dark": {
+      "surface": "#2B2B2B", "surfaceInset": "#202020", "surfaceAlpha": "PENDING", "surfaceInsetAlpha": "PENDING",
+      "buttonSecondaryAlpha": "PENDING", "hoverAlpha": "PENDING", "borderAlpha": "PENDING", "chipAlpha": "PENDING",
+      "border": "#444444", "borderStrong": "#555555",
+      "text": "#FFFFFF", "textMuted": "#C4C4C4", "accent": "#60CDFF", "onAccent": "#0A1A22",
+      "buttonSecondary": "#363636", "hover": "#404040", "danger": "#FF9A93", "warning": "#FFB84D", "onWarning": "#1A1200",
+      "ok": "#6CCB5F", "okChipBg": "#1D3A22", "okChipText": "#7BE070", "toggleKnobOn": "#141414",
+      "taskbar": "#1C1C1C", "icon": "#FFFFFF"
+    },
+    "light": {
+      "surface": "#FAFAFA", "surfaceInset": "#EEEEEE", "surfaceAlpha": "PENDING", "surfaceInsetAlpha": "PENDING",
+      "buttonSecondaryAlpha": "PENDING", "hoverAlpha": "PENDING", "borderAlpha": "PENDING", "chipAlpha": "PENDING",
+      "border": "#D0D0D0", "borderStrong": "#B5B5B5",
+      "text": "#1A1A1A", "textMuted": "#4A4A4A", "accent": "#005FB8", "onAccent": "#FFFFFF",
+      "buttonSecondary": "#FFFFFF", "hover": "#E3E3E3", "danger": "#B3261E", "warning": "#9D5D00", "onWarning": "#FFFFFF",
+      "ok": "#1E7A34", "okChipBg": "#E7F6E9", "okChipText": "#126425", "toggleKnobOn": "#FFFFFF",
+      "taskbar": "#F3F3F3", "icon": "#1A1A1A"
+    }
+  },
+  "trayStateColors": { "online": "#6CCB5F", "onBattery": "#FFB84D", "avr": "#7CC4FF", "fault": "#FF7B72", "noComm": "#9AA0A6" },
+  "trayStateColorsLight": { "online": "#137A2C", "onBattery": "#A65600", "avr": "#005FB8", "fault": "#C42B1C", "noComm": "#5F6368" }
+}
