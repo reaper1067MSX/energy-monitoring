@@ -1,5 +1,6 @@
 <Solution>
   <Folder Name="/src/">
+    <Project Path="src/VoltTray/VoltTray.csproj" />
     <Project Path="src/VoltTray.Core/VoltTray.Core.csproj" />
     <Project Path="src/VoltTray.Infrastructure/VoltTray.Infrastructure.csproj" />
     <Project Path="src/VoltTray.UI/VoltTray.UI.csproj" />
