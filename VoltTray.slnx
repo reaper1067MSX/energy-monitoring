@@ -2,6 +2,7 @@
   <Folder Name="/src/">
     <Project Path="src/VoltTray.Core/VoltTray.Core.csproj" />
     <Project Path="src/VoltTray.Infrastructure/VoltTray.Infrastructure.csproj" />
+    <Project Path="src/VoltTray.UI/VoltTray.UI.csproj" />
   </Folder>
   <Folder Name="/tests/">
     <Project Path="tests/VoltTray.Tests/VoltTray.Tests.csproj" />
