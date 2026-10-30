@@ -46,7 +46,27 @@ public sealed class HostLifecycle : IVoltTrayView, IDisposable
         _parser = parser ?? new VoltronicParser();
         _shutdownCoordinator = new ShutdownCoordinator(shutdownPort ?? new WindowsShutdownPort(), notificationPort ?? new WindowsNotificationPort());
         _presenter = new SplitCockpitPresenter(this, _trayRenderer, _popoverPainter, cmd => _upsPort.SendCommandAsync(cmd).GetAwaiter().GetResult());
-        if (_popoverPainter is PopoverPainter p) { p.OnSelfTestRequested += () => _presenter.TriggerSelfTest(); p.OnToggleBeeperRequested += () => _presenter.ToggleBeeper(); }
+
+        if (_popoverPainter is PopoverPainter p)
+        {
+            p.OnSelfTestRequested += () => _presenter.TriggerSelfTest();
+            p.OnToggleBeeperRequested += () => _presenter.ToggleBeeper();
+        }
+
+        if (_trayRenderer is TrayRenderer tr)
+        {
+            tr.OnTrayIconClicked += () =>
+            {
+                if (_popoverPainter.IsVisible) _popoverPainter.Hide();
+                else
+                {
+                    var tel = CurrentTelemetry ?? UpsTelemetry.CreateDefault();
+                    var theme = (_popoverPainter as PopoverPainter)?.CurrentTheme ?? UITheme.Dark;
+                    _popoverPainter.Show(tel, theme, new ViewRect(1800, 1040, 1832, 1072), TaskbarEdge.Bottom, new ViewRect(0, 0, 1920, 1080));
+                }
+            };
+            tr.OnContextMenuRequested += () => ShowExitDialog();
+        }
     }
 
     public HostLifecycle(IUpsDevicePort port, ITrayIconView tray, IPopoverView popover) : this(port, null, null, tray, popover) { }
@@ -54,6 +74,11 @@ public sealed class HostLifecycle : IVoltTrayView, IDisposable
     public void Start(int intervalMs = DefaultPollingIntervalMs)
     {
         if (_pollingTask != null) return;
+
+        // Render initial icon and tooltip immediately to appear on Windows Taskbar
+        _trayRenderer.UpdateIcon(OperationalState, 0, 96);
+        _trayRenderer.SetTooltip(SplitCockpitPresenter.FormatTooltip(OperationalState, 0, 0));
+
         _cts = new CancellationTokenSource();
         var token = _cts.Token;
         _pollingTask = Task.Run(async () => {
