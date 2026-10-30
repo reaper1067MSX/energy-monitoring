@@ -24,6 +24,7 @@
     <ProjectReference Include="..\..\src\VoltTray.Core\VoltTray.Core.csproj" />
     <ProjectReference Include="..\..\src\VoltTray.Infrastructure\VoltTray.Infrastructure.csproj" />
     <ProjectReference Include="..\..\src\VoltTray.UI\VoltTray.UI.csproj" />
+    <ProjectReference Include="..\..\src\VoltTray\VoltTray.csproj" />
   </ItemGroup>
 
 </Project>
