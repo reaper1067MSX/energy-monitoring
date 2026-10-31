@@ -40,6 +40,21 @@ public class InfrastructureAdaptersTests
     }
 
     [Fact]
+    public async Task Win32HidUpsPort_RealHardwareQuery_SucceedsIfHardwarePresent()
+    {
+        using var port = new Win32HidUpsPort();
+        if (port.TryConnect())
+        {
+            for (int i = 0; i < 3; i++)
+            {
+                string? response = await port.QueryAsync("QS\r");
+                Assert.NotNull(response);
+                Assert.StartsWith("#", response);
+            }
+        }
+    }
+
+    [Fact]
     public void Win32HidUpsPort_InitialState_IsDisconnected()
     {
         using var port = new Win32HidUpsPort();
