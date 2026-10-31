@@ -233,12 +233,19 @@ public sealed class Win32HidUpsPort : IUpsDevicePort
                             for (int b = 1; b < read; b++)
                             {
                                 byte val = inReport[b];
-                                if (val == 0) continue;
 
-                                if (response.Count == 0 && expectHeader && val != 0x23 && val != 0x28)
+                                if (response.Count == 0)
                                 {
-                                    // Discard stale unconsumed bytes from a previous interrupted query
-                                    continue;
+                                    if (expectHeader && val != 0x23 && val != 0x28)
+                                    {
+                                        // Discard stale unconsumed bytes from a previous interrupted query
+                                        continue;
+                                    }
+                                    if (val == 0)
+                                    {
+                                        // Discard leading null padding before header
+                                        continue;
+                                    }
                                 }
 
                                 response.Add(val);

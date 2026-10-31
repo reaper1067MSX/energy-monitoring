@@ -58,9 +58,7 @@ public sealed class SimulatedUpsDevicePort : IUpsDevicePort
                 double inV = Math.Round(116.2 + jitterV, 1);
                 double outV = Math.Round(116.2 + jitterV, 1);
                 int loadPct = 14 + _random.Next(-1, 2);
-                double freq = 60.0;
                 double batV = _selfTestActive ? 26.94 : 27.41;
-                double temp = 25.0;
 
                 // Status Byte 1:
                 // Bit 3 = Line-Interactive (1)
@@ -72,11 +70,26 @@ public sealed class SimulatedUpsDevicePort : IUpsDevicePort
 
                 string statusBits = Convert.ToString(statusByte, 2).PadLeft(8, '0');
 
-                // Voltronic format: #(MMM.M QQQ.Q SSS.S RRR.R KKK.K III.I b7b6b5b4b3b2b1b0\r
-                string frame = string.Create(System.Globalization.CultureInfo.InvariantCulture,
-                    $"#{inV:F1} {outV:F1} {loadPct:D3} {freq:F1} {batV:F2} {temp:F1} {statusBits}\r");
+                // Voltronic Taurus Protocol 'T' (QS-Hex) binary format:
+                // # inV_hex in_ratio outV_hex out_ratio load_pct freq1 freq2 bat1 bat2 status1 status2 \r
+                byte[] frameBytes = new byte[]
+                {
+                    0x23,                         // '#'
+                    0x73, 0x01, 0x20,             // inV (117.3 V)
+                    0x34, 0x20,                   // inRatio (52)
+                    0x73, 0x01, 0x20,             // outV (117.3 V)
+                    0x34, 0x20,                   // outRatio (52)
+                    (byte)loadPct, 0x20,          // load %
+                    0x50, 0x0C, 0x20,             // freq part 1
+                    0x12, 0xC0, 0x20,             // freq part 2 (60.0 Hz)
+                    0xE9, 0x20,                   // bat part 1
+                    0x3C, 0x20,                   // bat part 2 (27.41 V)
+                    statusByte, 0x20,             // status byte 1
+                    0xA1,                         // status byte 2
+                    0x0D                          // '\r'
+                };
 
-                return Task.FromResult<string?>(frame);
+                return Task.FromResult<string?>(Encoding.Latin1.GetString(frameBytes));
             }
 
             return Task.FromResult<string?>(null);

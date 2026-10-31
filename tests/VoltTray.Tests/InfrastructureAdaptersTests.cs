@@ -1,4 +1,6 @@
+using System.Text;
 using VoltTray.Core.Ports;
+using VoltTray.Core.Services;
 using VoltTray.Infrastructure.Hid;
 using VoltTray.Infrastructure.OS;
 
@@ -99,6 +101,10 @@ public class InfrastructureAdaptersTests
 
         string? testFrame = await port.QueryAsync("QS\r");
         Assert.NotNull(testFrame);
-        Assert.Contains("26.94", testFrame);
+        
+        var parser = new VoltronicParser();
+        var telemetry = parser.Parse(Encoding.Latin1.GetBytes(testFrame));
+        Assert.NotNull(telemetry);
+        Assert.True(telemetry.IsTestInProgress);
     }
 }
