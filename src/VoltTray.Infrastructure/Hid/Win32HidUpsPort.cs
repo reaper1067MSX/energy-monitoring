@@ -1,7 +1,6 @@
-using System.IO;
+using System.Diagnostics;
 using System.Runtime.InteropServices;
 using System.Text;
-using System.Threading;
 using Microsoft.Win32;
 using Microsoft.Win32.SafeHandles;
 using VoltTray.Core.Ports;
@@ -25,6 +24,16 @@ public sealed class Win32HidUpsPort : IUpsDevicePort
     private const uint OPEN_EXISTING = 3;
     private const uint FILE_FLAG_OVERLAPPED = 0x40000000;
 
+    [StructLayout(LayoutKind.Sequential)]
+    private struct OVERLAPPED
+    {
+        public IntPtr Internal;
+        public IntPtr InternalHigh;
+        public uint Offset;
+        public uint OffsetHigh;
+        public IntPtr hEvent;
+    }
+
     [DllImport("kernel32.dll", EntryPoint = "CreateFileW", SetLastError = true, CharSet = CharSet.Unicode)]
     private static extern SafeFileHandle CreateFile(
         string lpFileName,
@@ -34,6 +43,38 @@ public sealed class Win32HidUpsPort : IUpsDevicePort
         uint dwCreationDisposition,
         uint dwFlagsAndAttributes,
         IntPtr hTemplateFile);
+
+    [DllImport("kernel32.dll", SetLastError = true)]
+    private static extern bool WriteFile(
+        SafeFileHandle hFile,
+        byte[] lpBuffer,
+        uint nNumberOfBytesToWrite,
+        out uint lpNumberOfBytesWritten,
+        IntPtr lpOverlapped);
+
+    [DllImport("kernel32.dll", SetLastError = true)]
+    private static extern bool ReadFile(
+        SafeFileHandle hFile,
+        byte[] lpBuffer,
+        uint nNumberOfBytesToRead,
+        out uint lpNumberOfBytesRead,
+        IntPtr lpOverlapped);
+
+    [DllImport("kernel32.dll", SetLastError = true)]
+    private static extern IntPtr CreateEvent(IntPtr lpEventAttributes, bool bManualReset, bool bInitialState, string? lpName);
+
+    [DllImport("kernel32.dll", SetLastError = true)]
+    private static extern uint WaitForSingleObject(IntPtr hHandle, uint dwMilliseconds);
+
+    [DllImport("kernel32.dll", SetLastError = true)]
+    private static extern bool GetOverlappedResult(
+        SafeFileHandle hFile,
+        IntPtr lpOverlapped,
+        out uint lpNumberOfBytesTransferred,
+        bool bWait);
+
+    [DllImport("kernel32.dll", SetLastError = true)]
+    private static extern bool CloseHandle(IntPtr hObject);
 
     [DllImport("kernel32.dll", SetLastError = true)]
     private static extern bool CancelIoEx(SafeFileHandle hFile, IntPtr lpOverlapped);
@@ -67,6 +108,7 @@ public sealed class Win32HidUpsPort : IUpsDevicePort
             if (TryOpenHandle(targetPath))
             {
                 ActiveDevicePath = targetPath;
+                DrainStaleBufferInternal();
                 return true;
             }
 
@@ -82,6 +124,7 @@ public sealed class Win32HidUpsPort : IUpsDevicePort
                         if (TryOpenHandle(candidatePath))
                         {
                             ActiveDevicePath = candidatePath;
+                            DrainStaleBufferInternal();
                             return true;
                         }
                     }
@@ -139,56 +182,77 @@ public sealed class Win32HidUpsPort : IUpsDevicePort
         ActiveDevicePath = null;
     }
 
-    public async Task<string?> QueryAsync(string command, CancellationToken cancellationToken = default)
+    private void DrainStaleBufferInternal()
     {
-        if (!IsConnected && !TryConnect())
-            return null;
+        if (_handle == null || _handle.IsClosed) return;
+        byte[] drainBuf = new byte[9];
+        while (ReadOverlapped(_handle, drainBuf, 25) > 0) { }
+    }
 
-        return await Task.Run(() =>
+    public Task<string?> QueryAsync(string command, CancellationToken cancellationToken = default)
+    {
+        return Task.Run(() =>
         {
             lock (_lock)
             {
+                if (!IsConnected && !TryConnect())
+                    return null;
+
                 if (_handle == null || _handle.IsClosed) return null;
 
                 try
                 {
-                    using var stream = new FileStream(_handle, FileAccess.ReadWrite, 9, isAsync: false);
+                    DrainStaleBufferInternal();
 
-                    // Send command in 8-byte chunks (Byte 0 = 0x00 Report ID)
                     byte[] cmdBytes = Encoding.ASCII.GetBytes(command);
-                    int offset = 0;
-                    while (offset < cmdBytes.Length)
+                    int chunkLen = 8;
+                    for (int i = 0; i < cmdBytes.Length; i += chunkLen)
                     {
                         byte[] report = new byte[9];
-                        report[0] = 0x00;
-                        int chunk = Math.Min(8, cmdBytes.Length - offset);
-                        Array.Copy(cmdBytes, offset, report, 1, chunk);
-                        stream.Write(report, 0, 9);
-                        offset += chunk;
-                    }
-
-                    // Read response until \r (0x0D)
-                    var sb = new StringBuilder();
-                    byte[] inReport = new byte[9];
-                    DateTime deadline = DateTime.UtcNow.AddMilliseconds(2000);
-
-                    while (DateTime.UtcNow < deadline)
-                    {
-                        if (cancellationToken.IsCancellationRequested) return null;
-
-                        int read = stream.Read(inReport, 0, 9);
-                        if (read <= 0) break;
-
-                        for (int i = 1; i < read; i++)
+                        report[0] = 0x00; // Report ID
+                        int count = Math.Min(chunkLen, cmdBytes.Length - i);
+                        Array.Copy(cmdBytes, i, report, 1, count);
+                        if (!WriteOverlapped(_handle, report, 1000))
                         {
-                            byte b = inReport[i];
-                            if (b == 0x00) continue;
-                            sb.Append((char)b);
-                            if (b == 0x0D) return sb.ToString();
+                            DisconnectInternal();
+                            return null;
                         }
                     }
 
-                    return sb.Length > 0 ? sb.ToString() : null;
+                    List<byte> response = new();
+                    bool expectHeader = command.StartsWith("Q", StringComparison.OrdinalIgnoreCase);
+                    var sw = Stopwatch.StartNew();
+                    while (sw.ElapsedMilliseconds < 1500)
+                    {
+                        if (cancellationToken.IsCancellationRequested) return null;
+
+                        byte[] inReport = new byte[9];
+                        int read = ReadOverlapped(_handle, inReport, 200);
+                        if (read > 0)
+                        {
+                            for (int b = 1; b < read; b++)
+                            {
+                                byte val = inReport[b];
+                                if (val == 0) continue;
+
+                                if (response.Count == 0 && expectHeader && val != 0x23 && val != 0x28)
+                                {
+                                    // Discard stale unconsumed bytes from a previous interrupted query
+                                    continue;
+                                }
+
+                                response.Add(val);
+                                if (val == 0x0D) goto Done; // CR delimiter
+                            }
+                        }
+                        else if (response.Count > 0)
+                        {
+                            break;
+                        }
+                    }
+
+                Done:
+                    return response.Count > 0 ? Encoding.Latin1.GetString(response.ToArray()) : null;
                 }
                 catch
                 {
@@ -203,6 +267,72 @@ public sealed class Win32HidUpsPort : IUpsDevicePort
     {
         var response = await QueryAsync(command, cancellationToken);
         return response != null;
+    }
+
+    private static int ReadOverlapped(SafeFileHandle handle, byte[] buffer, int timeoutMs)
+    {
+        IntPtr hEvent = CreateEvent(IntPtr.Zero, true, false, null);
+        OVERLAPPED ov = new() { hEvent = hEvent };
+        IntPtr pOv = Marshal.AllocHGlobal(Marshal.SizeOf(ov));
+        Marshal.StructureToPtr(ov, pOv, false);
+
+        try
+        {
+            bool ok = ReadFile(handle, buffer, (uint)buffer.Length, out uint read, pOv);
+            if (!ok && Marshal.GetLastWin32Error() == 997) // ERROR_IO_PENDING
+            {
+                uint wait = WaitForSingleObject(hEvent, (uint)timeoutMs);
+                if (wait == 0) // WAIT_OBJECT_0
+                {
+                    GetOverlappedResult(handle, pOv, out read, false);
+                    return (int)read;
+                }
+                else
+                {
+                    CancelIoEx(handle, pOv);
+                    return 0;
+                }
+            }
+            return (int)read;
+        }
+        finally
+        {
+            CloseHandle(hEvent);
+            Marshal.FreeHGlobal(pOv);
+        }
+    }
+
+    private static bool WriteOverlapped(SafeFileHandle handle, byte[] buffer, int timeoutMs)
+    {
+        IntPtr hEvent = CreateEvent(IntPtr.Zero, true, false, null);
+        OVERLAPPED ov = new() { hEvent = hEvent };
+        IntPtr pOv = Marshal.AllocHGlobal(Marshal.SizeOf(ov));
+        Marshal.StructureToPtr(ov, pOv, false);
+
+        try
+        {
+            bool ok = WriteFile(handle, buffer, (uint)buffer.Length, out uint written, pOv);
+            if (!ok && Marshal.GetLastWin32Error() == 997) // ERROR_IO_PENDING
+            {
+                uint wait = WaitForSingleObject(hEvent, (uint)timeoutMs);
+                if (wait == 0) // WAIT_OBJECT_0
+                {
+                    GetOverlappedResult(handle, pOv, out written, false);
+                    return written == buffer.Length;
+                }
+                else
+                {
+                    CancelIoEx(handle, pOv);
+                    return false;
+                }
+            }
+            return ok;
+        }
+        finally
+        {
+            CloseHandle(hEvent);
+            Marshal.FreeHGlobal(pOv);
+        }
     }
 
     public void Dispose()

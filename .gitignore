@@ -7,6 +7,7 @@ obj/
 *.userosscache
 *.sln.docstates
 .vs/
+.idea/
 TestResults/
 *.suo
 *.userprefs

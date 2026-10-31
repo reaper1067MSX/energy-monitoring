@@ -40,6 +40,21 @@ public class InfrastructureAdaptersTests
     }
 
     [Fact]
+    public async Task Win32HidUpsPort_RealHardwareQuery_SucceedsIfHardwarePresent()
+    {
+        using var port = new Win32HidUpsPort();
+        if (port.TryConnect())
+        {
+            for (int i = 0; i < 3; i++)
+            {
+                string? response = await port.QueryAsync("QS\r");
+                Assert.NotNull(response);
+                Assert.StartsWith("#", response);
+            }
+        }
+    }
+
+    [Fact]
     public void Win32HidUpsPort_InitialState_IsDisconnected()
     {
         using var port = new Win32HidUpsPort();
@@ -61,5 +76,29 @@ public class InfrastructureAdaptersTests
         string? response = await port.QueryAsync("QS\r", cts.Token);
 
         Assert.Null(response);
+    }
+
+    [Fact]
+    public async Task SimulatedUpsDevicePort_GeneratesProtocolTFrame_AndHandlesCommands()
+    {
+        using var port = new SimulatedUpsDevicePort();
+
+        Assert.True(port.IsConnected);
+        Assert.NotNull(port.ActiveDevicePath);
+
+        string? frame = await port.QueryAsync("QS\r");
+        Assert.NotNull(frame);
+        Assert.StartsWith("#", frame);
+        Assert.EndsWith("\r", frame);
+
+        bool beeperToggled = await port.SendCommandAsync("Q\r");
+        Assert.True(beeperToggled);
+
+        bool testStarted = await port.SendCommandAsync("T\r");
+        Assert.True(testStarted);
+
+        string? testFrame = await port.QueryAsync("QS\r");
+        Assert.NotNull(testFrame);
+        Assert.Contains("26.94", testFrame);
     }
 }

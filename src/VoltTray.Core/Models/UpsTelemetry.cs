@@ -17,4 +17,25 @@ public sealed record UpsTelemetry(
     bool IsBeeperMuted,
     bool IsTestInProgress,
     BatteryBankSpec BankSpec,
-    DateTimeOffset Timestamp);
+    DateTimeOffset Timestamp)
+{
+    public static UpsTelemetry CreateDefault(DateTimeOffset? timestamp = null) =>
+        new(
+            InputVoltageAc: 116.2,
+            FaultReferenceVoltageAc: 116.2,
+            OutputVoltageAc: 116.2,
+            LoadPercentage: 14,
+            ActiveLoadWatts: 126,
+            FrequencyHz: 60.0,
+            BatteryVoltageDc: 27.41,
+            Cell1VoltageDc: 13.70,
+            Cell2VoltageDc: 13.70,
+            BatteryPercentage: 100,
+            EstimatedRuntimeMinutes: 25,
+            TemperatureCelsius: 25.0,
+            State: UpsOperationalState.LineNormal,
+            IsBeeperMuted: false,
+            IsTestInProgress: false,
+            BankSpec: new BatteryBankSpec(),
+            Timestamp: timestamp ?? DateTimeOffset.UtcNow);
+}
