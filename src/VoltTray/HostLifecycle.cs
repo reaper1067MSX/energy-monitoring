@@ -4,6 +4,7 @@ using VoltTray.Core.Ports;
 using VoltTray.Core.Presenters;
 using VoltTray.Core.Services;
 using VoltTray.Core.Views;
+using VoltTray.Core.Shared.Constants;
 using VoltTray.Infrastructure.OS;
 using VoltTray.UI.Dialogs;
 using VoltTray.UI.Rendering;
@@ -103,7 +104,7 @@ public sealed class HostLifecycle : IVoltTrayView, IDisposable
             }
         }
         string? response = null;
-        try { response = await _upsPort.QueryAsync("QS\r", token); } catch { response = null; }
+        try { response = await _upsPort.QueryAsync(VoltronicProtocolConstants.QueryStatusCommand, token); } catch { response = null; }
         if (string.IsNullOrEmpty(response)) {
             if (++_consecutiveErrors >= 3 || CurrentTelemetry == null) {
                 OperationalState = UpsOperationalState.CommunicationsLost;

@@ -4,6 +4,7 @@ using System.Text;
 using VoltTray.Core.Models;
 using VoltTray.Core.Ports;
 using VoltTray.Core.Views;
+using VoltTray.Tests.ObjectMothers;
 
 namespace VoltTray.Tests;
 
@@ -46,8 +47,8 @@ public class HostLifecycleTests
     private sealed class FakeNotificationPort : INotificationPort { public void ShowNotification(string t, string m, NotificationSeverity s) { } }
     private sealed class MockExitDialog : IExitDialogView { public ExitDialogResult Result { get; set; } = ExitDialogResult.Cancel; public ExitDialogResult Show(UITheme t, nint o = 0) => Result; }
 
-    private static readonly string GoldenFrameString = Encoding.Latin1.GetString([0x23, 0x73, 0x01, 0x20, 0x34, 0x20, 0x73, 0x01, 0x20, 0x34, 0x20, 0x0E, 0x20, 0x50, 0x0C, 0x20, 0x12, 0xC0, 0x20, 0xE9, 0x20, 0x3C, 0x20, 0x08, 0x20, 0xA1, 0x0D]);
-    private static readonly string OutageLowString = Encoding.Latin1.GetString([0x23, 0x73, 0x01, 0x20, 0x34, 0x20, 0x73, 0x01, 0x20, 0x34, 0x20, 0x0E, 0x20, 0x50, 0x0C, 0x20, 0x12, 0xC0, 0x20, 0xE9, 0x20, 0x3C, 0x20, 0xC0, 0x20, 0xA1, 0x0D]);
+    private static readonly string GoldenFrameString = VoltronicFrameMother.GoldenFrameString;
+    private static readonly string OutageLowString = Encoding.Latin1.GetString(VoltronicFrameMother.CreateBatteryLowFrame());
 
     [Fact]
     public void SingleInstance_AllowsFirst_AndRejectsSecondary()

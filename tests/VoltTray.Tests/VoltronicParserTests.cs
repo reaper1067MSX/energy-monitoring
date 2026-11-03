@@ -2,6 +2,8 @@ using System;
 using System.Text;
 using VoltTray.Core.Models;
 using VoltTray.Core.Services;
+using VoltTray.Core.Shared.Constants;
+using VoltTray.Tests.ObjectMothers;
 using Xunit;
 
 namespace VoltTray.Tests;
@@ -10,18 +12,10 @@ public class VoltronicParserTests
 {
     private readonly VoltronicParser _parser = new();
 
-    // Golden frame bytes from spec_miner_physics/handoff.md
-    private static readonly byte[] GoldenFrame =
-    [
-        0x23, 0x73, 0x01, 0x20, 0x34, 0x20, 0x73, 0x01, 0x20, 0x34, 0x20,
-        0x0E, 0x20, 0x50, 0x0C, 0x20, 0x12, 0xC0, 0x20, 0xE9, 0x20, 0x3C, 0x20,
-        0x08, 0x20, 0xA1, 0x0D
-    ];
-
     [Fact]
     public void Parse_GoldenFrame_DecodesExactTelemetryValues()
     {
-        var telemetry = _parser.Parse(GoldenFrame);
+        var telemetry = _parser.Parse(VoltronicFrameMother.GoldenFrame);
 
         Assert.NotNull(telemetry);
         Assert.Equal(117.3, telemetry.InputVoltageAc);
@@ -51,17 +45,15 @@ public class VoltronicParserTests
     [Fact]
     public void Parse_MalformedFramesAndNak_PreservesPreviousTelemetry()
     {
-        var initial = _parser.Parse(GoldenFrame);
+        var initial = _parser.Parse(VoltronicFrameMother.GoldenFrame);
         Assert.NotNull(initial);
 
         // NAK frame: N\r
-        byte[] nakFrame = [0x4E, 0x0D];
-        var resultAfterNak = _parser.Parse(nakFrame, previous: initial);
+        var resultAfterNak = _parser.Parse(VoltronicFrameMother.CreateNakFrame(), previous: initial);
         Assert.Same(initial, resultAfterNak);
 
         // Truncated frame
-        byte[] truncated = [0x23, 0x73, 0x01, 0x0D];
-        var resultAfterTruncated = _parser.Parse(truncated, previous: initial);
+        var resultAfterTruncated = _parser.Parse(VoltronicFrameMother.CreateTruncatedFrame(), previous: initial);
         Assert.Same(initial, resultAfterTruncated);
 
         // Missing '#' prefix
@@ -70,8 +62,7 @@ public class VoltronicParserTests
         Assert.Same(initial, resultMissingPrefix);
 
         // Missing '\r' terminator
-        byte[] missingTerminator = [0x23, 0x73, 0x01];
-        var resultMissingTerminator = _parser.Parse(missingTerminator, previous: initial);
+        var resultMissingTerminator = _parser.Parse(VoltronicFrameMother.CreateCorruptedMissingCr(), previous: initial);
         Assert.Same(initial, resultMissingTerminator);
 
         // Null frame
@@ -80,11 +71,11 @@ public class VoltronicParserTests
     }
 
     [Theory]
-    [InlineData(0x10, UpsOperationalState.Fault)]       // Bit 4
-    [InlineData(0xC0, UpsOperationalState.BatteryLow)]  // Bit 7 + Bit 6 on battery
-    [InlineData(0x80, UpsOperationalState.OnBattery)]   // Bit 7
-    [InlineData(0x20, UpsOperationalState.ChargingAvr)] // Bit 5
-    [InlineData(0x08, UpsOperationalState.LineNormal)]  // Bit 3 only
+    [InlineData(VoltronicProtocolConstants.StatusFaultMask, UpsOperationalState.Fault)]       // Bit 4
+    [InlineData(VoltronicProtocolConstants.StatusBatteryLow, UpsOperationalState.BatteryLow)]  // Bit 7 + Bit 6 on battery
+    [InlineData(VoltronicProtocolConstants.StatusOnBattery, UpsOperationalState.OnBattery)]   // Bit 7
+    [InlineData(VoltronicProtocolConstants.StatusAvrBoostBuckMask, UpsOperationalState.ChargingAvr)] // Bit 5
+    [InlineData(VoltronicProtocolConstants.StatusLineNormal, UpsOperationalState.LineNormal)]  // Bit 3 only
     public void DecodeStatusBits_MapsPrecedenceAccurately(byte statusByte, UpsOperationalState expectedState)
     {
         var (state, _, _) = VoltronicParser.DecodeStatusBits(statusByte, inV: 120.0, outV: 120.0);
@@ -95,7 +86,7 @@ public class VoltronicParserTests
     public void DecodeStatusBits_InferredAvrOnMainsDivergence_AssertsChargingAvr()
     {
         // 100V in, 118V out (divergence > 5%) with Bit 5 = 0, Bit 7 = 0
-        var (state, _, _) = VoltronicParser.DecodeStatusBits(0x08, inV: 100.0, outV: 118.0);
+        var (state, _, _) = VoltronicParser.DecodeStatusBits(VoltronicProtocolConstants.StatusLineNormal, inV: 100.0, outV: 118.0);
         Assert.Equal(UpsOperationalState.ChargingAvr, state);
     }
 
@@ -106,14 +97,12 @@ public class VoltronicParserTests
         var startTime = new DateTimeOffset(2026, 10, 30, 12, 0, 0, TimeSpan.Zero);
 
         // Normal frame before test (Bit 2 = 0)
-        byte[] frameIdle = (byte[])GoldenFrame.Clone();
-        frameIdle[23] = 0x08; // Bit 2 = 0
+        byte[] frameIdle = VoltronicFrameMother.CreateIdleFrame();
         var t0 = parser.Parse(frameIdle, now: startTime);
         Assert.False(t0!.IsTestInProgress);
 
         // Test starts: rising edge (Bit 2 = 1) at t = 0s
-        byte[] frameTesting = (byte[])GoldenFrame.Clone();
-        frameTesting[23] = 0x0C; // Bit 3=1, Bit 2=1 (0x0C)
+        byte[] frameTesting = VoltronicFrameMother.CreateSelfTestFrame();
         var t1 = parser.Parse(frameTesting, now: startTime);
         Assert.True(t1!.IsTestInProgress);
 

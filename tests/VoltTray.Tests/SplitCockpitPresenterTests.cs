@@ -1,6 +1,7 @@
 using VoltTray.Core.Models;
 using VoltTray.Core.Presenters;
 using VoltTray.Core.Views;
+using VoltTray.Tests.ObjectMothers;
 
 namespace VoltTray.Tests;
 
@@ -128,24 +129,7 @@ public class SplitCockpitPresenterTests
         presenter.Initialize();
         Assert.True(mockView.Initialized);
 
-        var telemetry = new UpsTelemetry(
-            InputVoltageAc: 116.2,
-            FaultReferenceVoltageAc: 116.2,
-            OutputVoltageAc: 116.2,
-            LoadPercentage: 14,
-            ActiveLoadWatts: 126,
-            FrequencyHz: 60.0,
-            BatteryVoltageDc: 27.41,
-            Cell1VoltageDc: 13.70,
-            Cell2VoltageDc: 13.70,
-            BatteryPercentage: 100,
-            EstimatedRuntimeMinutes: 25,
-            TemperatureCelsius: 25.0,
-            State: UpsOperationalState.LineNormal,
-            IsBeeperMuted: false,
-            IsTestInProgress: false,
-            BankSpec: new BatteryBankSpec(),
-            Timestamp: DateTimeOffset.UtcNow);
+        var telemetry = TelemetryMother.CreateLineNormal(inV: 116.2, outV: 116.2, runtimeMinutes: 25);
 
         presenter.UpdateTelemetry(telemetry, dpi: 144);
 
@@ -180,24 +164,7 @@ public class SplitCockpitPresenterTests
             popover: mockPopover,
             sendCommand: _ => true);
 
-        var telemetry = new UpsTelemetry(
-            InputVoltageAc: 116.2,
-            FaultReferenceVoltageAc: 116.2,
-            OutputVoltageAc: 116.2,
-            LoadPercentage: 14,
-            ActiveLoadWatts: 126,
-            FrequencyHz: 60.0,
-            BatteryVoltageDc: 27.41,
-            Cell1VoltageDc: 13.70,
-            Cell2VoltageDc: 13.70,
-            BatteryPercentage: 100,
-            EstimatedRuntimeMinutes: 25,
-            TemperatureCelsius: 25.0,
-            State: UpsOperationalState.LineNormal,
-            IsBeeperMuted: false,
-            IsTestInProgress: false,
-            BankSpec: new BatteryBankSpec(),
-            Timestamp: DateTimeOffset.UtcNow);
+        var telemetry = TelemetryMother.CreateLineNormal(inV: 116.2, outV: 116.2, runtimeMinutes: 25);
 
         presenter.UpdateTelemetry(telemetry);
 

@@ -4,6 +4,7 @@ using System.Text;
 using Microsoft.Win32;
 using Microsoft.Win32.SafeHandles;
 using VoltTray.Core.Ports;
+using VoltTray.Core.Shared.Constants;
 
 namespace VoltTray.Infrastructure.Hid;
 
@@ -14,8 +15,8 @@ namespace VoltTray.Infrastructure.Hid;
 /// </summary>
 public sealed class Win32HidUpsPort : IUpsDevicePort
 {
-    public const string DefaultDevicePath = @"\\?\HID#VID_0665&PID_5161#7&1949aaec&0&0000#{4d1e55b2-f16f-11cf-88cb-001111000030}";
-    private const string HidInterfaceGuid = "{4d1e55b2-f16f-11cf-88cb-001111000030}";
+    public const string DefaultDevicePath = HidConstants.DefaultDevicePath;
+    private const string HidInterfaceGuid = HidConstants.HidInterfaceGuid;
 
     private const uint GENERIC_READ = 0x80000000;
     private const uint GENERIC_WRITE = 0x40000000;
@@ -115,12 +116,12 @@ public sealed class Win32HidUpsPort : IUpsDevicePort
             // Fallback: Registry enumeration
             try
             {
-                using var key = Registry.LocalMachine.OpenSubKey(@"SYSTEM\CurrentControlSet\Enum\HID\VID_0665&PID_5161");
+                using var key = Registry.LocalMachine.OpenSubKey($@"SYSTEM\CurrentControlSet\Enum\HID\{HidConstants.DeviceIdSubstring}");
                 if (key != null)
                 {
                     foreach (string subKey in key.GetSubKeyNames())
                     {
-                        string candidatePath = $@"\\?\HID#VID_0665&PID_5161#{subKey}#{HidInterfaceGuid}";
+                        string candidatePath = $@"\\?\HID#{HidConstants.DeviceIdSubstring}#{subKey}#{HidInterfaceGuid}";
                         if (TryOpenHandle(candidatePath))
                         {
                             ActiveDevicePath = candidatePath;
@@ -185,8 +186,8 @@ public sealed class Win32HidUpsPort : IUpsDevicePort
     private void DrainStaleBufferInternal()
     {
         if (_handle == null || _handle.IsClosed) return;
-        byte[] drainBuf = new byte[9];
-        while (ReadOverlapped(_handle, drainBuf, 25) > 0) { }
+        byte[] drainBuf = new byte[HidConstants.ReportLength];
+        while (ReadOverlapped(_handle, drainBuf, HidConstants.DefaultDrainTimeoutMs) > 0) { }
     }
 
     public Task<string?> QueryAsync(string command, CancellationToken cancellationToken = default)
@@ -205,14 +206,14 @@ public sealed class Win32HidUpsPort : IUpsDevicePort
                     DrainStaleBufferInternal();
 
                     byte[] cmdBytes = Encoding.ASCII.GetBytes(command);
-                    int chunkLen = 8;
+                    int chunkLen = HidConstants.PayloadChunkLength;
                     for (int i = 0; i < cmdBytes.Length; i += chunkLen)
                     {
-                        byte[] report = new byte[9];
-                        report[0] = 0x00; // Report ID
+                        byte[] report = new byte[HidConstants.ReportLength];
+                        report[0] = HidConstants.DefaultReportId;
                         int count = Math.Min(chunkLen, cmdBytes.Length - i);
                         Array.Copy(cmdBytes, i, report, 1, count);
-                        if (!WriteOverlapped(_handle, report, 1000))
+                        if (!WriteOverlapped(_handle, report, HidConstants.DefaultWriteTimeoutMs))
                         {
                             DisconnectInternal();
                             return null;
@@ -220,14 +221,14 @@ public sealed class Win32HidUpsPort : IUpsDevicePort
                     }
 
                     List<byte> response = new();
-                    bool expectHeader = command.StartsWith("Q", StringComparison.OrdinalIgnoreCase);
+                    bool expectHeader = command.StartsWith(VoltronicProtocolConstants.QueryCommandPrefix, StringComparison.OrdinalIgnoreCase);
                     var sw = Stopwatch.StartNew();
-                    while (sw.ElapsedMilliseconds < 1500)
+                    while (sw.ElapsedMilliseconds < HidConstants.DefaultQueryTimeoutMs)
                     {
                         if (cancellationToken.IsCancellationRequested) return null;
 
-                        byte[] inReport = new byte[9];
-                        int read = ReadOverlapped(_handle, inReport, 200);
+                        byte[] inReport = new byte[HidConstants.ReportLength];
+                        int read = ReadOverlapped(_handle, inReport, HidConstants.DefaultReadTimeoutMs);
                         if (read > 0)
                         {
                             for (int b = 1; b < read; b++)
@@ -236,12 +237,12 @@ public sealed class Win32HidUpsPort : IUpsDevicePort
 
                                 if (response.Count == 0)
                                 {
-                                    if (expectHeader && val != 0x23 && val != 0x28)
+                                    if (expectHeader && val != VoltronicProtocolConstants.FrameHeaderHash && val != VoltronicProtocolConstants.FrameHeaderParen)
                                     {
                                         // Discard stale unconsumed bytes from a previous interrupted query
                                         continue;
                                     }
-                                    if (val == 0)
+                                    if (val == VoltronicProtocolConstants.NullByte)
                                     {
                                         // Discard leading null padding before header
                                         continue;
@@ -249,7 +250,7 @@ public sealed class Win32HidUpsPort : IUpsDevicePort
                                 }
 
                                 response.Add(val);
-                                if (val == 0x0D) goto Done; // CR delimiter
+                                if (val == VoltronicProtocolConstants.CarriageReturn) goto Done;
                             }
                         }
                         else if (response.Count > 0)
