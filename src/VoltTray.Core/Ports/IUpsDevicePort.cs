@@ -1,39 +1,46 @@
+using VoltTray.Core.Models;
+
 namespace VoltTray.Core.Ports;
 
 /// <summary>
-/// Domain port for communicating with the UPS hardware device over USB HID.
-/// Isolated from OS-specific drivers and Win32 P/Invoke implementations.
+/// Domain port for communicating with the UPS hardware device.
+/// Expresses domain intent without leaking wire protocols or OS transport details.
 /// </summary>
 public interface IUpsDevicePort : IDisposable
 {
     /// <summary>
-    /// Gets whether the underlying USB HID device handle is actively open and responsive.
+    /// Gets whether the underlying UPS device connection is active and responsive.
     /// </summary>
     bool IsConnected { get; }
 
     /// <summary>
-    /// Gets the hardware device path if connected, or null.
+    /// Gets the active hardware or simulated device path if connected, or null.
     /// </summary>
     string? ActiveDevicePath { get; }
 
     /// <summary>
-    /// Attempts to locate and open the physical HID device.
+    /// Attempts to locate and open the physical UPS device.
     /// Returns true if connected successfully, false otherwise.
     /// </summary>
     bool TryConnect(string? customPath = null);
 
     /// <summary>
-    /// Immediately releases the device handle and frees the USB interface within 100 ms.
+    /// Immediately releases the device connection within 100 ms.
     /// </summary>
     void Disconnect();
 
     /// <summary>
-    /// Asynchronously transmits a command and reads the terminated response frame.
+    /// Asynchronously reads and decodes the latest operational telemetry snapshot from the UPS.
     /// </summary>
-    Task<string?> QueryAsync(string command, CancellationToken cancellationToken = default);
+    Task<UpsTelemetry?> ReadTelemetryAsync(DateTimeOffset? now = null, CancellationToken cancellationToken = default);
 
     /// <summary>
-    /// Asynchronously transmits a control command (such as Q\r, T\r, CT\r) without expecting a multi-byte telemetry response.
+    /// Asynchronously toggles the audible beeper/alarm on the UPS.
     /// </summary>
-    Task<bool> SendCommandAsync(string command, CancellationToken cancellationToken = default);
+    Task<bool> ToggleBeeperAsync(CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Asynchronously initiates a battery self-test on the UPS.
+    /// </summary>
+    Task<bool> TriggerSelfTestAsync(CancellationToken cancellationToken = default);
 }

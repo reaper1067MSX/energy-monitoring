@@ -2,9 +2,9 @@ using System;
 using System.Collections.Generic;
 using VoltTray.Core.Models;
 using VoltTray.Core.Ports;
-using VoltTray.Core.Shared.Constants;
+using VoltTray.Core.Services;
 
-namespace VoltTray.Core.Services;
+namespace VoltTray.Infrastructure.Protocol;
 
 public sealed class VoltronicParser
 {

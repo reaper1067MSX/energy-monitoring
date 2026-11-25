@@ -1,4 +1,4 @@
-namespace VoltTray.Core.Shared.Constants;
+namespace VoltTray.Infrastructure.Protocol;
 
 /// <summary>
 /// Centralized protocol and framing constants for Voltronic Taurus Protocol 'T' (QS-Hex) and related protocols.

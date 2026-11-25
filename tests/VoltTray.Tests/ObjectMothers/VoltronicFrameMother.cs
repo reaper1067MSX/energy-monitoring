@@ -1,5 +1,5 @@
 using System.Text;
-using VoltTray.Core.Shared.Constants;
+using VoltTray.Infrastructure.Protocol;
 
 namespace VoltTray.Tests.ObjectMothers;
 

@@ -1,4 +1,4 @@
-namespace VoltTray.Core.Shared.Constants;
+namespace VoltTray.Infrastructure.Hid;
 
 /// <summary>
 /// Centralized Win32 USB Human Interface Device (HID) hardware and communication constants.
@@ -20,7 +20,7 @@ public static class HidConstants
 
     // Communication Timeouts (Milliseconds)
     public const int DefaultDrainTimeoutMs = 25;
-    public const int DefaultReadTimeoutMs = 200;
+    public const int DefaultReadTimeoutMs = 400;
     public const int DefaultWriteTimeoutMs = 1000;
     public const int DefaultQueryTimeoutMs = 1500;
 

@@ -4,6 +4,7 @@ using System.Text;
 using VoltTray.Core.Models;
 using VoltTray.Core.Ports;
 using VoltTray.Core.Services;
+using VoltTray.Infrastructure.Protocol;
 using VoltTray.Tests.ObjectMothers;
 using Xunit;
 

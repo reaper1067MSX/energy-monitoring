@@ -1,10 +1,8 @@
-using System.Text;
 using VoltTray.Core.Models;
 using VoltTray.Core.Ports;
 using VoltTray.Core.Presenters;
 using VoltTray.Core.Services;
 using VoltTray.Core.Views;
-using VoltTray.Core.Shared.Constants;
 using VoltTray.Infrastructure.OS;
 using VoltTray.UI.Dialogs;
 using VoltTray.UI.Rendering;
@@ -15,7 +13,6 @@ public sealed class HostLifecycle : IVoltTrayView, IDisposable
 {
     public const int DefaultPollingIntervalMs = 1500, DefaultPauseMinutes = 15;
     private readonly IUpsDevicePort _upsPort;
-    private readonly VoltronicParser _parser;
     private readonly ShutdownCoordinator _shutdownCoordinator;
     private readonly ITrayIconView _trayRenderer;
     private readonly IPopoverView _popoverPainter;
@@ -38,15 +35,19 @@ public sealed class HostLifecycle : IVoltTrayView, IDisposable
     public IUpsDevicePort UpsPort => _upsPort;
 
     public HostLifecycle(IUpsDevicePort upsPort, ISafetyShutdownPort? shutdownPort = null, INotificationPort? notificationPort = null,
-        ITrayIconView? trayRenderer = null, IPopoverView? popoverPainter = null, IExitDialogView? exitDialog = null, VoltronicParser? parser = null)
+        ITrayIconView? trayRenderer = null, IPopoverView? popoverPainter = null, IExitDialogView? exitDialog = null)
     {
         _upsPort = upsPort ?? throw new ArgumentNullException(nameof(upsPort));
         _trayRenderer = trayRenderer ?? new TrayRenderer();
         _popoverPainter = popoverPainter ?? new PopoverPainter();
         _exitDialog = exitDialog ?? new ExitDialog();
-        _parser = parser ?? new VoltronicParser();
         _shutdownCoordinator = new ShutdownCoordinator(shutdownPort ?? new WindowsShutdownPort(), notificationPort ?? new WindowsNotificationPort());
-        _presenter = new SplitCockpitPresenter(this, _trayRenderer, _popoverPainter, cmd => _upsPort.SendCommandAsync(cmd).GetAwaiter().GetResult());
+        _presenter = new SplitCockpitPresenter(
+            this,
+            _trayRenderer,
+            _popoverPainter,
+            () => _upsPort.ToggleBeeperAsync().GetAwaiter().GetResult(),
+            () => _upsPort.TriggerSelfTestAsync().GetAwaiter().GetResult());
 
         if (_popoverPainter is PopoverPainter p)
         {
@@ -103,9 +104,9 @@ public sealed class HostLifecycle : IVoltTrayView, IDisposable
                 return CurrentTelemetry;
             }
         }
-        string? response = null;
-        try { response = await _upsPort.QueryAsync(VoltronicProtocolConstants.QueryStatusCommand, token); } catch { response = null; }
-        if (string.IsNullOrEmpty(response)) {
+        UpsTelemetry? telemetry = null;
+        try { telemetry = await _upsPort.ReadTelemetryAsync(timestamp, token); } catch { telemetry = null; }
+        if (telemetry == null) {
             if (++_consecutiveErrors >= 3 || CurrentTelemetry == null) {
                 OperationalState = UpsOperationalState.CommunicationsLost;
                 _trayRenderer.UpdateIcon(UpsOperationalState.CommunicationsLost, 0, 96);
@@ -114,16 +115,13 @@ public sealed class HostLifecycle : IVoltTrayView, IDisposable
             return CurrentTelemetry;
         }
         _consecutiveErrors = 0;
-        var telemetry = _parser.Parse(Encoding.Latin1.GetBytes(response), CurrentTelemetry, timestamp);
-        if (telemetry != null) {
-            OperationalState = telemetry.State;
-            _shutdownCoordinator.Evaluate(telemetry, timestamp);
-            _presenter.UpdateTelemetry(telemetry);
-            if (_popoverPainter.IsVisible) {
-                var theme = (_popoverPainter as PopoverPainter)?.CurrentTheme ?? UITheme.Dark;
-                var iconRect = (_popoverPainter as PopoverPainter)?.CurrentIconRect ?? new ViewRect(1800, 1040, 1832, 1072);
-                _popoverPainter.Show(telemetry, theme, iconRect, TaskbarEdge.Bottom, new ViewRect(0, 0, 1920, 1080));
-            }
+        OperationalState = telemetry.State;
+        _shutdownCoordinator.Evaluate(telemetry, timestamp);
+        _presenter.UpdateTelemetry(telemetry);
+        if (_popoverPainter.IsVisible) {
+            var theme = (_popoverPainter as PopoverPainter)?.CurrentTheme ?? UITheme.Dark;
+            var iconRect = (_popoverPainter as PopoverPainter)?.CurrentIconRect ?? new ViewRect(1800, 1040, 1832, 1072);
+            _popoverPainter.Show(telemetry, theme, iconRect, TaskbarEdge.Bottom, new ViewRect(0, 0, 1920, 1080));
         }
         return telemetry;
     }

@@ -5,13 +5,11 @@ namespace VoltTray.Core.Presenters;
 
 public class SplitCockpitPresenter
 {
-    public const string BeeperToggleCommand = "Q\r";
-    public const string SelfTestCommand = "T\r";
-
     private readonly IVoltTrayView _view;
     private readonly ITrayIconView _trayIcon;
     private readonly IPopoverView _popover;
-    private readonly Func<string, bool> _sendCommand;
+    private readonly Func<bool> _toggleBeeper;
+    private readonly Func<bool> _triggerSelfTest;
 
     public UpsTelemetry? CurrentTelemetry { get; private set; }
 
@@ -19,12 +17,14 @@ public class SplitCockpitPresenter
         IVoltTrayView view,
         ITrayIconView trayIcon,
         IPopoverView popover,
-        Func<string, bool> sendCommand)
+        Func<bool> toggleBeeper,
+        Func<bool> triggerSelfTest)
     {
         _view = view ?? throw new ArgumentNullException(nameof(view));
         _trayIcon = trayIcon ?? throw new ArgumentNullException(nameof(trayIcon));
         _popover = popover ?? throw new ArgumentNullException(nameof(popover));
-        _sendCommand = sendCommand ?? throw new ArgumentNullException(nameof(sendCommand));
+        _toggleBeeper = toggleBeeper ?? throw new ArgumentNullException(nameof(toggleBeeper));
+        _triggerSelfTest = triggerSelfTest ?? throw new ArgumentNullException(nameof(triggerSelfTest));
     }
 
     public void Initialize() => _view.Initialize();
@@ -51,9 +51,9 @@ public class SplitCockpitPresenter
         }
     }
 
-    public bool ToggleBeeper() => _sendCommand(BeeperToggleCommand);
+    public bool ToggleBeeper() => _toggleBeeper();
 
-    public bool TriggerSelfTest() => _sendCommand(SelfTestCommand);
+    public bool TriggerSelfTest() => _triggerSelfTest();
 
     public static (double Cell1, double Cell2) DeriveSymmetricCells(double totalVoltageDc)
     {

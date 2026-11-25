@@ -1,8 +1,6 @@
 using System;
-using System.Text;
 using VoltTray.Core.Models;
-using VoltTray.Core.Services;
-using VoltTray.Core.Shared.Constants;
+using VoltTray.Infrastructure.Protocol;
 using VoltTray.Tests.ObjectMothers;
 using Xunit;
 
