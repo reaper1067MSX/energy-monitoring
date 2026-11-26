@@ -4,6 +4,7 @@ using VoltTray.UI.Interop;
 using VoltTray.UI.Models;
 using VoltTray.UI.Presenters;
 using VoltTray.UI.Tokens;
+using VoltTray.UI.Tokens.Themes;
 using VoltTray.UI.Views;
 
 namespace VoltTray.UI.Rendering;
@@ -79,7 +80,7 @@ public sealed class PopoverPainter : IPopoverView
         IsVisible = false;
         if (_hwnd != IntPtr.Zero)
         {
-            GdiNative.ShowWindow(_hwnd, GdiNative.SW_HIDE);
+            GdiNative.ShowWindow(_hwnd, Win32UiConstants.SwHide);
         }
     }
 
@@ -122,55 +123,9 @@ public sealed class PopoverPainter : IPopoverView
         ViewRect iconRect,
         TaskbarEdge edge,
         ViewRect workArea,
-        int cardHeight = DesignTokens.Sizes.PopoverCardHeight)
+        int cardHeight = 320)
     {
-        int popoverWidth = DesignTokens.Sizes.PopoverWidth;
-        int margin = DesignTokens.Sizes.PopoverEdgeMarginPx;
-
-        int left;
-        int top;
-
-        switch (edge)
-        {
-            case TaskbarEdge.Top:
-                left = iconRect.Left + (iconRect.Width / 2) - (popoverWidth / 2);
-                top = iconRect.Bottom + margin;
-                break;
-            case TaskbarEdge.Left:
-                left = iconRect.Right + margin;
-                top = iconRect.Top + (iconRect.Height / 2) - (cardHeight / 2);
-                break;
-            case TaskbarEdge.Right:
-                left = iconRect.Left - popoverWidth - margin;
-                top = iconRect.Top + (iconRect.Height / 2) - (cardHeight / 2);
-                break;
-            default:
-                left = iconRect.Left + (iconRect.Width / 2) - (popoverWidth / 2);
-                top = iconRect.Top - cardHeight - margin;
-                break;
-        }
-
-        if (left + popoverWidth > workArea.Right - margin)
-        {
-            left = workArea.Right - popoverWidth - margin;
-        }
-
-        if (left < workArea.Left + margin)
-        {
-            left = workArea.Left + margin;
-        }
-
-        if (top + cardHeight > workArea.Bottom - margin)
-        {
-            top = workArea.Bottom - cardHeight - margin;
-        }
-
-        if (top < workArea.Top + margin)
-        {
-            top = workArea.Top + margin;
-        }
-
-        return new ViewRect(left, top, left + popoverWidth, top + cardHeight);
+        return PopoverPlacementCalculator.Calculate(iconRect, edge, workArea, cardHeight);
     }
 
     public void TriggerSelfTest() => OnSelfTestRequested?.Invoke();
@@ -203,7 +158,7 @@ public sealed class PopoverPainter : IPopoverView
                 bounds.Top,
                 bounds.Width,
                 bounds.Height,
-                GdiNative.SWP_SHOWWINDOW);
+                Win32UiConstants.SwpShowWindow);
             GdiNative.InvalidateRect(_hwnd, IntPtr.Zero, true);
         }
         catch
@@ -237,10 +192,10 @@ public sealed class PopoverPainter : IPopoverView
         }
 
         _hwnd = GdiNative.CreateWindowEx(
-            GdiNative.WS_EX_TOOLWINDOW | GdiNative.WS_EX_TOPMOST,
+            Win32UiConstants.WsExToolWindow | Win32UiConstants.WsExTopmost,
             className,
             CurrentViewModel?.Title ?? nameof(PopoverPainter),
-            GdiNative.WS_POPUP,
+            Win32UiConstants.WsPopup,
             bounds.Left,
             bounds.Top,
             bounds.Width,
@@ -252,10 +207,10 @@ public sealed class PopoverPainter : IPopoverView
 
         if (_hwnd != IntPtr.Zero)
         {
-            int roundPreference = GdiNative.DWMWCP_ROUND;
+            int roundPreference = Win32UiConstants.DwmwcpRound;
             _ = GdiNative.DwmSetWindowAttribute(
                 _hwnd,
-                GdiNative.DWMWA_WINDOW_CORNER_PREFERENCE,
+                Win32UiConstants.DwmwaWindowCornerPreference,
                 ref roundPreference,
                 sizeof(int));
         }
@@ -265,13 +220,13 @@ public sealed class PopoverPainter : IPopoverView
     {
         switch (msg)
         {
-            case GdiNative.WM_ACTIVATE when (wParam.ToInt64() & 0xFFFF) == GdiNative.WA_INACTIVE:
+            case Win32UiConstants.WmActivate when (wParam.ToInt64() & 0xFFFF) == Win32UiConstants.WaInactive:
                 Hide();
                 return IntPtr.Zero;
-            case GdiNative.WM_KEYDOWN:
+            case Win32UiConstants.WmKeyDown:
                 HandleKeyDown((int)wParam.ToInt64());
                 return IntPtr.Zero;
-            case GdiNative.WM_PAINT:
+            case Win32UiConstants.WmPaint:
                 PaintNativeWindow(hWnd);
                 return IntPtr.Zero;
             default:
@@ -284,7 +239,7 @@ public sealed class PopoverPainter : IPopoverView
         IntPtr hdc = GdiNative.BeginPaint(hWnd, out GdiNative.PaintStruct paintStruct);
         try
         {
-            DesignTokens.Palette palette = DesignTokens.GetPalette(CurrentTheme);
+            ThemePalette palette = DesignTokens.GetPalette(CurrentTheme);
             IntPtr surfaceBrush = GdiNative.CreateSolidBrush(DesignTokens.ParseBgrColor(palette.Surface));
             GdiNative.NativeRect fullRect = paintStruct.PaintRect;
             GdiNative.FillRect(hdc, ref fullRect, surfaceBrush);
@@ -295,20 +250,20 @@ public sealed class PopoverPainter : IPopoverView
                 return;
             }
 
-            GdiNative.SetBkMode(hdc, GdiNative.TRANSPARENT);
+            GdiNative.SetBkMode(hdc, Win32UiConstants.TransparentBkMode);
             GdiNative.SetTextColor(hdc, DesignTokens.ParseBgrColor(palette.Text));
 
             var titleRect = new GdiNative.NativeRect(16, 14, CurrentBounds.Width - 16, 40);
-            GdiNative.DrawText(hdc, vm.Title, vm.Title.Length, ref titleRect, GdiNative.DT_LEFT | GdiNative.DT_SINGLELINE);
+            GdiNative.DrawText(hdc, vm.Title, vm.Title.Length, ref titleRect, Win32UiConstants.DtLeft | Win32UiConstants.DtSingleLine);
 
             GdiNative.SetTextColor(hdc, DesignTokens.ParseBgrColor(palette.TextMuted));
             var subRect = new GdiNative.NativeRect(16, 38, CurrentBounds.Width - 16, 58);
-            GdiNative.DrawText(hdc, vm.BankSubtitle, vm.BankSubtitle.Length, ref subRect, GdiNative.DT_LEFT | GdiNative.DT_SINGLELINE);
+            GdiNative.DrawText(hdc, vm.BankSubtitle, vm.BankSubtitle.Length, ref subRect, Win32UiConstants.DtLeft | Win32UiConstants.DtSingleLine);
 
             string summary = $"{vm.StatusLabel} · {vm.InputVoltageText} · {vm.RuntimeText}";
             var summaryRect = new GdiNative.NativeRect(16, 76, CurrentBounds.Width - 16, 108);
             GdiNative.SetTextColor(hdc, DesignTokens.ParseBgrColor(palette.Text));
-            GdiNative.DrawText(hdc, summary, summary.Length, ref summaryRect, GdiNative.DT_LEFT | GdiNative.DT_SINGLELINE);
+            GdiNative.DrawText(hdc, summary, summary.Length, ref summaryRect, Win32UiConstants.DtLeft | Win32UiConstants.DtSingleLine);
         }
         finally
         {

@@ -4,59 +4,6 @@ namespace VoltTray.UI.Interop;
 
 internal static partial class GdiNative
 {
-    public const int DWMWA_WINDOW_CORNER_PREFERENCE = 33;
-    public const int DWMWCP_ROUND = 2;
-
-    public const uint WS_POPUP = 0x80000000;
-    public const uint WS_EX_TOOLWINDOW = 0x00000080;
-    public const uint WS_EX_TOPMOST = 0x00000008;
-    public const uint WS_EX_NOACTIVATE = 0x08000000;
-
-    public const int SW_HIDE = 0;
-    public const int SW_SHOWNOACTIVATE = 4;
-    public const int SW_SHOW = 5;
-
-    public const uint SWP_NOSIZE = 0x0001;
-    public const uint SWP_NOMOVE = 0x0002;
-    public const uint SWP_NOACTIVATE = 0x0010;
-    public const uint SWP_SHOWWINDOW = 0x0040;
-
-    public const int SM_CXSCREEN = 0;
-    public const int SM_CYSCREEN = 1;
-    public const int SM_CXSMICON = 49;
-    public const int SM_CYSMICON = 50;
-    public const uint MONITOR_DEFAULTTONEAREST = 0x00000002;
-
-    public const uint NIM_ADD = 0x00000000;
-    public const uint NIM_MODIFY = 0x00000001;
-    public const uint NIM_DELETE = 0x00000002;
-    public const uint NIM_SETVERSION = 0x00000004;
-
-    public const uint NIF_MESSAGE = 0x00000001;
-    public const uint NIF_ICON = 0x00000002;
-    public const uint NIF_TIP = 0x00000004;
-
-    public const uint WM_USER = 0x0400;
-    public const uint WM_TRAYICON = WM_USER + 101;
-    public const uint WM_ACTIVATE = 0x0006;
-    public const uint WM_PAINT = 0x000F;
-    public const uint WM_KEYDOWN = 0x0100;
-    public const uint WM_LBUTTONUP = 0x0202;
-    public const uint WM_RBUTTONUP = 0x0205;
-    public const int WA_INACTIVE = 0;
-
-    public const int TRANSPARENT = 1;
-    public const int PS_SOLID = 0;
-    public const uint DT_LEFT = 0x0000;
-    public const uint DT_CENTER = 0x0001;
-    public const uint DT_RIGHT = 0x0002;
-    public const uint DT_VCENTER = 0x0004;
-    public const uint DT_SINGLELINE = 0x0020;
-
-    public const int NotifyTipCapacity = 128;
-    public const int NotifyInfoCapacity = 256;
-    public const int NotifyInfoTitleCapacity = 64;
-
     [StructLayout(LayoutKind.Sequential)]
     public struct IconInfo
     {
@@ -122,12 +69,12 @@ internal static partial class GdiNative
         public uint Flags;
         public uint CallbackMessage;
         public IntPtr IconHandle;
-        public fixed char Tip[NotifyTipCapacity];
+        public fixed char Tip[Win32UiConstants.NotifyTipCapacity];
         public uint State;
         public uint StateMask;
-        public fixed char Info[NotifyInfoCapacity];
+        public fixed char Info[Win32UiConstants.NotifyInfoCapacity];
         public uint TimeoutOrVersion;
-        public fixed char InfoTitle[NotifyInfoTitleCapacity];
+        public fixed char InfoTitle[Win32UiConstants.NotifyInfoTitleCapacity];
         public uint InfoFlags;
         public Guid GuidItem;
         public IntPtr BalloonIconHandle;
@@ -136,7 +83,7 @@ internal static partial class GdiNative
         {
             fixed (char* tipPtr = Tip)
             {
-                var span = new Span<char>(tipPtr, NotifyTipCapacity);
+                var span = new Span<char>(tipPtr, Win32UiConstants.NotifyTipCapacity);
                 span.Clear();
 
                 if (string.IsNullOrEmpty(text))
@@ -144,7 +91,7 @@ internal static partial class GdiNative
                     return;
                 }
 
-                int copyLength = Math.Min(text.Length, NotifyTipCapacity - 1);
+                int copyLength = Math.Min(text.Length, Win32UiConstants.NotifyTipCapacity - 1);
                 text.AsSpan(0, copyLength).CopyTo(span);
             }
         }

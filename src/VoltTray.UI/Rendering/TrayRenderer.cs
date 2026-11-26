@@ -80,14 +80,14 @@ public sealed class TrayRenderer : ITrayIconView
 
     private IntPtr TrayWndProc(IntPtr hWnd, uint msg, IntPtr wParam, IntPtr lParam)
     {
-        if (msg == GdiNative.WM_TRAYICON)
+        if (msg == Win32UiConstants.WmTrayIcon)
         {
             uint evt = (uint)(lParam.ToInt64() & 0xFFFF);
-            if (evt == GdiNative.WM_LBUTTONUP)
+            if (evt == Win32UiConstants.WmLButtonUp)
             {
                 OnTrayIconClicked?.Invoke();
             }
-            else if (evt == GdiNative.WM_RBUTTONUP)
+            else if (evt == Win32UiConstants.WmRButtonUp)
             {
                 OnContextMenuRequested?.Invoke();
             }
@@ -117,18 +117,18 @@ public sealed class TrayRenderer : ITrayIconView
                         Size = (uint)sizeof(GdiNative.NotifyIconDataW),
                         WindowHandle = _hwnd,
                         Id = 1001,
-                        Flags = GdiNative.NIF_MESSAGE | GdiNative.NIF_ICON | GdiNative.NIF_TIP,
-                        CallbackMessage = GdiNative.WM_TRAYICON,
+                        Flags = Win32UiConstants.NifMessage | Win32UiConstants.NifIcon | Win32UiConstants.NifTip,
+                        CallbackMessage = Win32UiConstants.WmTrayIcon,
                         IconHandle = _currentHIcon
                     };
                     _nid.SetTip(CurrentTooltip ?? "VoltTray: Monitor de Energía");
-                    _iconAdded = GdiNative.Shell_NotifyIcon(GdiNative.NIM_ADD, ref _nid);
+                    _iconAdded = GdiNative.Shell_NotifyIcon(Win32UiConstants.NimAdd, ref _nid);
                 }
                 else
                 {
-                    _nid.Flags = GdiNative.NIF_ICON;
+                    _nid.Flags = Win32UiConstants.NifIcon;
                     _nid.IconHandle = _currentHIcon;
-                    GdiNative.Shell_NotifyIcon(GdiNative.NIM_MODIFY, ref _nid);
+                    GdiNative.Shell_NotifyIcon(Win32UiConstants.NimModify, ref _nid);
                 }
             }
         }
@@ -141,9 +141,9 @@ public sealed class TrayRenderer : ITrayIconView
             CurrentTooltip = text;
             if (_iconAdded && _hwnd != IntPtr.Zero)
             {
-                _nid.Flags = GdiNative.NIF_TIP;
+                _nid.Flags = Win32UiConstants.NifTip;
                 _nid.SetTip(text);
-                GdiNative.Shell_NotifyIcon(GdiNative.NIM_MODIFY, ref _nid);
+                GdiNative.Shell_NotifyIcon(Win32UiConstants.NimModify, ref _nid);
             }
         }
     }
@@ -154,14 +154,14 @@ public sealed class TrayRenderer : ITrayIconView
         {
             if (_iconAdded)
             {
-                GdiNative.Shell_NotifyIcon(GdiNative.NIM_DELETE, ref _nid);
+                GdiNative.Shell_NotifyIcon(Win32UiConstants.NimDelete, ref _nid);
                 _iconAdded = false;
             }
             if (_currentHIcon != IntPtr.Zero)
             {
-                _nid.Flags = GdiNative.NIF_MESSAGE | GdiNative.NIF_ICON | GdiNative.NIF_TIP;
+                _nid.Flags = Win32UiConstants.NifMessage | Win32UiConstants.NifIcon | Win32UiConstants.NifTip;
                 _nid.IconHandle = _currentHIcon;
-                _iconAdded = GdiNative.Shell_NotifyIcon(GdiNative.NIM_ADD, ref _nid);
+                _iconAdded = GdiNative.Shell_NotifyIcon(Win32UiConstants.NimAdd, ref _nid);
             }
         }
     }
@@ -242,7 +242,7 @@ public sealed class TrayRenderer : ITrayIconView
         {
             if (_iconAdded)
             {
-                GdiNative.Shell_NotifyIcon(GdiNative.NIM_DELETE, ref _nid);
+                GdiNative.Shell_NotifyIcon(Win32UiConstants.NimDelete, ref _nid);
                 _iconAdded = false;
             }
             if (_currentHIcon != IntPtr.Zero)

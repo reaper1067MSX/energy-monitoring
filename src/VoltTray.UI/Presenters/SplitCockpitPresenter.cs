@@ -2,6 +2,7 @@ using VoltTray.Core.Telemetry;
 using VoltTray.Shared;
 using VoltTray.UI.Models;
 using VoltTray.UI.Tokens;
+using VoltTray.UI.Tokens.Primitives;
 using VoltTray.UI.Views;
 
 namespace VoltTray.UI.Presenters;
@@ -27,7 +28,7 @@ public class SplitCockpitPresenter
         _triggerSelfTest = triggerSelfTest ?? throw new ArgumentNullException(nameof(triggerSelfTest));
     }
 
-    public void UpdateTelemetry(UpsTelemetry telemetry, int dpi = DesignTokens.Sizes.DefaultDpi, string? modelName = null)
+    public void UpdateTelemetry(UpsTelemetry telemetry, int dpi = LayoutTokens.DefaultDpi, string? modelName = null)
     {
         CurrentTelemetry = telemetry;
 
