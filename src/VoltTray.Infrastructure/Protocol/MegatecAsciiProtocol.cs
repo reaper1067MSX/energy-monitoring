@@ -13,19 +13,6 @@ namespace VoltTray.Infrastructure.Protocol;
 /// </summary>
 public sealed class MegatecAsciiProtocol : IUpsProtocolStrategy
 {
-    private const int InputVoltageTokenIndex = 0;
-    private const int FaultVoltageTokenIndex = 1;
-    private const int OutputVoltageTokenIndex = 2;
-    private const int LoadPercentageTokenIndex = 3;
-    private const int FrequencyTokenIndex = 4;
-    private const int BatteryVoltageTokenIndex = 5;
-    private const int TemperatureTokenIndex = 6;
-    private const int StatusFlagsTokenIndex = 7;
-
-    private const int NominalAcTokenIndex = 0;
-    private const int NominalDcTokenIndex = 2;
-    private const int NominalFreqTokenIndex = 3;
-
     private readonly IBatteryAutonomyEstimator _estimator;
     private readonly double _capacityFactor;
     private readonly SelfTestLatch _selfTestLatch = new();
@@ -68,19 +55,19 @@ public sealed class MegatecAsciiProtocol : IUpsProtocolStrategy
             return previous;
         }
 
-        if (!double.TryParse(tokens[InputVoltageTokenIndex], NumberStyles.Float, CultureInfo.InvariantCulture, out double inputVoltageAc) ||
-            !double.TryParse(tokens[FaultVoltageTokenIndex], NumberStyles.Float, CultureInfo.InvariantCulture, out double faultVoltageAc) ||
-            !double.TryParse(tokens[OutputVoltageTokenIndex], NumberStyles.Float, CultureInfo.InvariantCulture, out double outputVoltageAc) ||
-            !int.TryParse(tokens[LoadPercentageTokenIndex], NumberStyles.Integer, CultureInfo.InvariantCulture, out int rawLoad) ||
-            !double.TryParse(tokens[FrequencyTokenIndex], NumberStyles.Float, CultureInfo.InvariantCulture, out double frequencyHz) ||
-            !double.TryParse(tokens[BatteryVoltageTokenIndex], NumberStyles.Float, CultureInfo.InvariantCulture, out double parsedBatteryVoltage) ||
-            !TryParseStatusFlagsByte(tokens[StatusFlagsTokenIndex], out byte statusByte1))
+        if (!double.TryParse(tokens[MegatecProtocolConstants.InputVoltageTokenIndex], NumberStyles.Float, CultureInfo.InvariantCulture, out double inputVoltageAc) ||
+            !double.TryParse(tokens[MegatecProtocolConstants.FaultVoltageTokenIndex], NumberStyles.Float, CultureInfo.InvariantCulture, out double faultVoltageAc) ||
+            !double.TryParse(tokens[MegatecProtocolConstants.OutputVoltageTokenIndex], NumberStyles.Float, CultureInfo.InvariantCulture, out double outputVoltageAc) ||
+            !int.TryParse(tokens[MegatecProtocolConstants.LoadPercentageTokenIndex], NumberStyles.Integer, CultureInfo.InvariantCulture, out int rawLoad) ||
+            !double.TryParse(tokens[MegatecProtocolConstants.FrequencyTokenIndex], NumberStyles.Float, CultureInfo.InvariantCulture, out double frequencyHz) ||
+            !double.TryParse(tokens[MegatecProtocolConstants.BatteryVoltageTokenIndex], NumberStyles.Float, CultureInfo.InvariantCulture, out double parsedBatteryVoltage) ||
+            !TryParseStatusFlagsByte(tokens[MegatecProtocolConstants.StatusFlagsTokenIndex], out byte statusByte1))
         {
             return previous;
         }
 
         double? temperatureCelsius = double.TryParse(
-            tokens[TemperatureTokenIndex],
+            tokens[MegatecProtocolConstants.TemperatureTokenIndex],
             NumberStyles.Float,
             CultureInfo.InvariantCulture,
             out double parsedTemperature)
@@ -143,7 +130,7 @@ public sealed class MegatecAsciiProtocol : IUpsProtocolStrategy
 
         string[] tokens = body.Split(' ', StringSplitOptions.RemoveEmptyEntries);
         return tokens.Length >= VoltronicProtocolConstants.MegatecStatusTokenCount &&
-               TryParseStatusFlagsByte(tokens[StatusFlagsTokenIndex], out _);
+               TryParseStatusFlagsByte(tokens[MegatecProtocolConstants.StatusFlagsTokenIndex], out _);
     }
 
     public static bool TryParseRatingsResponse(
@@ -159,9 +146,9 @@ public sealed class MegatecAsciiProtocol : IUpsProtocolStrategy
 
         string[] tokens = body.Split(' ', StringSplitOptions.RemoveEmptyEntries);
         if (tokens.Length < VoltronicProtocolConstants.RatingResponseMinTokenCount ||
-            !double.TryParse(tokens[NominalAcTokenIndex], NumberStyles.Float, CultureInfo.InvariantCulture, out double nominalAc) ||
-            !double.TryParse(tokens[NominalDcTokenIndex], NumberStyles.Float, CultureInfo.InvariantCulture, out double nominalDc) ||
-            !double.TryParse(tokens[NominalFreqTokenIndex], NumberStyles.Float, CultureInfo.InvariantCulture, out double nominalFrequencyHz))
+            !double.TryParse(tokens[MegatecProtocolConstants.NominalAcTokenIndex], NumberStyles.Float, CultureInfo.InvariantCulture, out double nominalAc) ||
+            !double.TryParse(tokens[MegatecProtocolConstants.NominalDcTokenIndex], NumberStyles.Float, CultureInfo.InvariantCulture, out double nominalDc) ||
+            !double.TryParse(tokens[MegatecProtocolConstants.NominalFreqTokenIndex], NumberStyles.Float, CultureInfo.InvariantCulture, out double nominalFrequencyHz))
         {
             return false;
         }
@@ -202,6 +189,27 @@ public sealed class MegatecAsciiProtocol : IUpsProtocolStrategy
 
         updatedCapabilities = currentCapabilities with { ModelName = string.Join(" ", parts) };
         return true;
+    }
+
+    internal static UpsCapabilities ProbeCapabilities(
+        Func<string, byte[]?> queryRaw,
+        UpsCapabilities capabilities)
+    {
+        byte[]? ratingsResponse = queryRaw(VoltronicProtocolConstants.NominalRatingsCommand);
+        if (ratingsResponse != null &&
+            TryParseRatingsResponse(ratingsResponse, capabilities, out UpsCapabilities withRatings))
+        {
+            capabilities = withRatings;
+        }
+
+        byte[]? vendorResponse = queryRaw(VoltronicProtocolConstants.VendorInformationCommand);
+        if (vendorResponse != null &&
+            TryParseVendorInfoResponse(vendorResponse, capabilities, out UpsCapabilities withVendor))
+        {
+            capabilities = withVendor;
+        }
+
+        return capabilities;
     }
 
     private static double ApplyPerCellMultiplierIfNeeded(double batteryVoltageDc, double nominalBankVoltageDc)

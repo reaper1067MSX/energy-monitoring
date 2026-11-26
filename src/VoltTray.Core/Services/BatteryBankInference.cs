@@ -1,3 +1,4 @@
+using VoltTray.Core.Constants;
 using VoltTray.Core.Models;
 using VoltTray.Shared;
 
@@ -5,21 +6,13 @@ namespace VoltTray.Core.Services;
 
 public sealed class BatteryBankInference
 {
-    public const int RequiredConsecutiveReadings = 3;
-
-    private const double Min12VBand = 9.5;
-    private const double Max12VBand = 15.5;
-    private const double Min24VBand = 19.0;
-    private const double Max24VBand = 31.0;
-    private const double Min36VBand = 31.1;
-    private const double Max36VBand = 46.5;
-    private const double Min48VBand = 46.6;
-    private const double Max48VBand = 62.0;
-
-    private const int SeriesCount12V = 1;
-    private const int SeriesCount24V = 2;
-    private const int SeriesCount36V = 3;
-    private const int SeriesCount48V = 4;
+    private static readonly BatteryVoltageBand[] SupportedBands =
+    [
+        new(SeriesCount: 1, MinVoltageDc: 9.5, MaxVoltageDc: 15.5),
+        new(SeriesCount: 2, MinVoltageDc: 19.0, MaxVoltageDc: 31.0),
+        new(SeriesCount: 3, MinVoltageDc: 31.1, MaxVoltageDc: 46.5),
+        new(SeriesCount: 4, MinVoltageDc: 46.6, MaxVoltageDc: 62.0)
+    ];
 
     public BatteryBankSpec? LatchedBank { get; private set; }
     public int? PendingSeriesCount { get; private set; }
@@ -42,7 +35,7 @@ public sealed class BatteryBankInference
 
             LatchedBank = hardwareBank;
             PendingSeriesCount = hardwareSeriesCount;
-            ConsecutiveMatchCount = RequiredConsecutiveReadings;
+            ConsecutiveMatchCount = BatteryConstants.RequiredConsecutiveReadings;
             return hardwareBank;
         }
 
@@ -64,7 +57,7 @@ public sealed class BatteryBankInference
             ConsecutiveMatchCount = 1;
         }
 
-        if (ConsecutiveMatchCount >= RequiredConsecutiveReadings)
+        if (ConsecutiveMatchCount >= BatteryConstants.RequiredConsecutiveReadings)
         {
             LatchedBank = new BatteryBankSpec(
                 SeriesBatteryCount: detectedSeriesCount.Value,
@@ -83,24 +76,12 @@ public sealed class BatteryBankInference
             return null;
         }
 
-        if (measuredVoltageDc >= Min12VBand && measuredVoltageDc <= Max12VBand)
+        foreach (BatteryVoltageBand band in SupportedBands)
         {
-            return SeriesCount12V;
-        }
-
-        if (measuredVoltageDc >= Min24VBand && measuredVoltageDc <= Max24VBand)
-        {
-            return SeriesCount24V;
-        }
-
-        if (measuredVoltageDc >= Min36VBand && measuredVoltageDc <= Max36VBand)
-        {
-            return SeriesCount36V;
-        }
-
-        if (measuredVoltageDc >= Min48VBand && measuredVoltageDc <= Max48VBand)
-        {
-            return SeriesCount48V;
+            if (measuredVoltageDc >= band.MinVoltageDc && measuredVoltageDc <= band.MaxVoltageDc)
+            {
+                return band.SeriesCount;
+            }
         }
 
         return null;

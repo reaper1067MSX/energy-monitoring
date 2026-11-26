@@ -1,5 +1,6 @@
 using System.Globalization;
 using System.Text.Json;
+using VoltTray.Hosting;
 using VoltTray.Infrastructure.Hid;
 
 namespace VoltTray.Cli;
@@ -9,12 +10,6 @@ namespace VoltTray.Cli;
 /// </summary>
 public static class UpsProbeCaptureFormatter
 {
-    private const char PrintableAsciiMin = ' ';
-    private const char PrintableAsciiMax = '~';
-
-    public const string SafeCaptureGuidance =
-        "Safe capture: wall-powered PC, uninterrupted PE ground, upstream Line (L) cut only, 25-60W resistive load, <=10s outage window.";
-
     public static void WriteDeviceDescriptors(IReadOnlyList<HidDeviceDescriptor> devices, TextWriter output)
     {
         foreach (HidDeviceDescriptor descriptor in devices)
@@ -80,7 +75,7 @@ public static class UpsProbeCaptureFormatter
             FormatTokenHexBreakdown(capture.Tokens),
             capture.FrequencyHz,
             capture.StatusByte2Ratings,
-            SafeCaptureGuidance);
+            CliConstants.SafeCaptureGuidance);
 
         return JsonSerializer.Serialize(document, UpsProbeJsonContext.Default.UpsProbeCaptureDocument);
     }
@@ -96,7 +91,7 @@ public static class UpsProbeCaptureFormatter
         for (int index = 0; index < bytes.Length; index++)
         {
             char candidate = (char)bytes[index];
-            chars[index] = candidate >= PrintableAsciiMin && candidate <= PrintableAsciiMax
+            chars[index] = candidate >= CliConstants.PrintableAsciiMin && candidate <= CliConstants.PrintableAsciiMax
                 ? candidate
                 : '.';
         }

@@ -6,137 +6,161 @@ using VoltTray.Shared;
 namespace VoltTray.Hosting;
 
 /// <summary>
-/// Strictly parses command-line arguments in a single sequential pass into discriminated <see cref="ApplicationLaunchOptions"/>.
+/// Strictly parses command-line arguments via a data-driven flag rule registry
+/// into discriminated <see cref="ApplicationLaunchOptions"/>.
 /// </summary>
 public static class ApplicationOptionsParser
 {
-    private const string FlagPrefix = "--";
-    private const string InspectFlag = "--inspect";
-    private const string SimulateFlag = "--simulate";
-    private const string SimFlag = "--sim";
-    private const string MockFlag = "--mock";
-    private const string DryRunFlag = "--dry-run";
-    private const string IntervalFlag = "--interval";
-    private const string AllHidFlag = "--all-hid";
-    private const string CommandFlag = "--cmd";
-    private const string ExportFlag = "--export";
+    private static readonly IReadOnlyDictionary<string, CliFlagRule> FlagRules = BuildFlagRuleRegistry();
 
     public static ApplicationLaunchOptions Parse(string[] args)
     {
         ArgumentNullException.ThrowIfNull(args);
 
-        bool isInspectMode = false;
-        bool isSimulation = false;
-        bool isDryRun = false;
-        int pollingIntervalMs = ApplicationDefaults.DefaultPollingIntervalMs;
-        bool includeAllHidDevices = false;
-        UpsDiagnosticInquiry inquiry = UpsDiagnosticInquiry.QuickStatus;
-        string? exportPath = null;
-        string? firstTrayOnlyFlag = null;
-        string? firstInspectOnlyFlag = null;
+        var state = new CliParseState();
 
         for (int index = 0; index < args.Length; index++)
         {
             string argument = args[index];
-
-            if (argument.Equals(InspectFlag, StringComparison.OrdinalIgnoreCase))
+            if (!FlagRules.TryGetValue(argument, out CliFlagRule? rule))
             {
-                isInspectMode = true;
-                continue;
+                return new InvalidLaunchOptions($"Unknown argument '{argument}'.");
             }
 
-            if (argument.Equals(SimulateFlag, StringComparison.OrdinalIgnoreCase) ||
-                argument.Equals(SimFlag, StringComparison.OrdinalIgnoreCase) ||
-                argument.Equals(MockFlag, StringComparison.OrdinalIgnoreCase))
-            {
-                isSimulation = true;
-                firstTrayOnlyFlag ??= argument;
-                continue;
-            }
+            state.RecordScopeFlag(rule.Scope, argument);
 
-            if (argument.Equals(DryRunFlag, StringComparison.OrdinalIgnoreCase))
+            string? rawValue = null;
+            if (rule.RequiresValue)
             {
-                isDryRun = true;
-                firstTrayOnlyFlag ??= argument;
-                continue;
-            }
-
-            if (argument.Equals(IntervalFlag, StringComparison.OrdinalIgnoreCase))
-            {
-                firstTrayOnlyFlag ??= argument;
-                if (!TryConsumeFlagValue(args, ref index, IntervalFlag, out string rawInterval, out string? missingError))
+                if (!TryConsumeFlagValue(args, ref index, rule.Aliases[0], out string consumedValue, out string? missingError))
                 {
                     return new InvalidLaunchOptions(missingError!);
                 }
 
-                bool isValidPositiveInteger =
-                    int.TryParse(rawInterval, NumberStyles.Integer, CultureInfo.InvariantCulture, out int parsedInterval) &&
-                    parsedInterval > 0;
-
-                if (!isValidPositiveInteger)
-                {
-                    return new InvalidLaunchOptions(
-                        $"Invalid value for {IntervalFlag}: '{rawInterval}'. Expected a positive integer.");
-                }
-
-                pollingIntervalMs = Math.Max(ApplicationDefaults.MinimumPollingIntervalMs, parsedInterval);
-                continue;
+                rawValue = consumedValue;
             }
 
-            if (argument.Equals(AllHidFlag, StringComparison.OrdinalIgnoreCase))
+            string? applyError = rule.Apply(state, rawValue);
+            if (applyError != null)
             {
-                includeAllHidDevices = true;
-                firstInspectOnlyFlag ??= argument;
-                continue;
+                return new InvalidLaunchOptions(applyError);
             }
-
-            if (argument.Equals(CommandFlag, StringComparison.OrdinalIgnoreCase))
-            {
-                firstInspectOnlyFlag ??= argument;
-                if (!TryConsumeFlagValue(args, ref index, CommandFlag, out string rawCommand, out string? missingError))
-                {
-                    return new InvalidLaunchOptions(missingError!);
-                }
-
-                if (!VoltronicInquiryCodec.TryParseWireCommand(rawCommand, out UpsDiagnosticInquiry parsedInquiry))
-                {
-                    string formattedCommand = rawCommand.Replace("\r", "\\r");
-                    return new InvalidLaunchOptions(
-                        $"Command '{formattedCommand}' is blocked by the read-only diagnostic inquiry policy.");
-                }
-
-                inquiry = parsedInquiry;
-                continue;
-            }
-
-            if (argument.Equals(ExportFlag, StringComparison.OrdinalIgnoreCase))
-            {
-                firstInspectOnlyFlag ??= argument;
-                if (!TryConsumeFlagValue(args, ref index, ExportFlag, out string rawExportPath, out string? missingError))
-                {
-                    return new InvalidLaunchOptions(missingError!);
-                }
-
-                exportPath = rawExportPath;
-                continue;
-            }
-
-            return new InvalidLaunchOptions($"Unknown argument '{argument}'.");
         }
 
-        if (isInspectMode && firstTrayOnlyFlag != null)
+        if (state.IsInspectMode && state.FirstTrayOnlyFlag != null)
         {
-            return new InvalidLaunchOptions($"Flag '{firstTrayOnlyFlag}' cannot be combined with {InspectFlag}.");
+            return new InvalidLaunchOptions($"Flag '{state.FirstTrayOnlyFlag}' cannot be combined with {CliConstants.InspectFlag}.");
         }
 
-        if (!isInspectMode && firstInspectOnlyFlag != null)
+        if (!state.IsInspectMode && state.FirstInspectOnlyFlag != null)
         {
-            return new InvalidLaunchOptions($"Flag '{firstInspectOnlyFlag}' is only valid with {InspectFlag}.");
+            return new InvalidLaunchOptions($"Flag '{state.FirstInspectOnlyFlag}' is only valid with {CliConstants.InspectFlag}.");
         }
 
-        return isInspectMode
-            ? new InspectLaunchOptions(inquiry, includeAllHidDevices, exportPath)
-            : new TrayMonitorLaunchOptions(isSimulation, isDryRun, pollingIntervalMs);
+        return state.IsInspectMode
+            ? new InspectLaunchOptions(state.Inquiry, state.IncludeAllHidDevices, state.ExportPath)
+            : new TrayMonitorLaunchOptions(state.IsSimulation, state.IsDryRun, state.PollingIntervalMs);
+    }
+
+    private static IReadOnlyDictionary<string, CliFlagRule> BuildFlagRuleRegistry()
+    {
+        CliFlagRule[] rules =
+        [
+            new(
+                Aliases: [CliConstants.InspectFlag],
+                Scope: CliOptionScope.ModeSelector,
+                RequiresValue: false,
+                Apply: (state, _) =>
+                {
+                    state.IsInspectMode = true;
+                    return null;
+                }),
+            new(
+                Aliases: [CliConstants.SimulateFlag, CliConstants.SimFlag, CliConstants.MockFlag],
+                Scope: CliOptionScope.TrayOnly,
+                RequiresValue: false,
+                Apply: (state, _) =>
+                {
+                    state.IsSimulation = true;
+                    return null;
+                }),
+            new(
+                Aliases: [CliConstants.DryRunFlag],
+                Scope: CliOptionScope.TrayOnly,
+                RequiresValue: false,
+                Apply: (state, _) =>
+                {
+                    state.IsDryRun = true;
+                    return null;
+                }),
+            new(
+                Aliases: [CliConstants.IntervalFlag],
+                Scope: CliOptionScope.TrayOnly,
+                RequiresValue: true,
+                Apply: ApplyInterval),
+            new(
+                Aliases: [CliConstants.AllHidFlag],
+                Scope: CliOptionScope.InspectOnly,
+                RequiresValue: false,
+                Apply: (state, _) =>
+                {
+                    state.IncludeAllHidDevices = true;
+                    return null;
+                }),
+            new(
+                Aliases: [CliConstants.CommandFlag],
+                Scope: CliOptionScope.InspectOnly,
+                RequiresValue: true,
+                Apply: ApplyCommand),
+            new(
+                Aliases: [CliConstants.ExportFlag],
+                Scope: CliOptionScope.InspectOnly,
+                RequiresValue: true,
+                Apply: (state, value) =>
+                {
+                    state.ExportPath = value;
+                    return null;
+                })
+        ];
+
+        var registry = new Dictionary<string, CliFlagRule>(StringComparer.OrdinalIgnoreCase);
+        foreach (CliFlagRule rule in rules)
+        {
+            foreach (string alias in rule.Aliases)
+            {
+                registry[alias] = rule;
+            }
+        }
+
+        return registry;
+    }
+
+    private static string? ApplyInterval(CliParseState state, string? rawInterval)
+    {
+        bool isValidPositiveInteger =
+            int.TryParse(rawInterval, NumberStyles.Integer, CultureInfo.InvariantCulture, out int parsedInterval) &&
+            parsedInterval > 0;
+
+        if (!isValidPositiveInteger)
+        {
+            return $"Invalid value for {CliConstants.IntervalFlag}: '{rawInterval}'. Expected a positive integer.";
+        }
+
+        state.PollingIntervalMs = Math.Max(ApplicationDefaults.MinimumPollingIntervalMs, parsedInterval);
+        return null;
+    }
+
+    private static string? ApplyCommand(CliParseState state, string? rawCommand)
+    {
+        string commandText = rawCommand ?? string.Empty;
+        if (!VoltronicInquiryCodec.TryParseWireCommand(commandText, out UpsDiagnosticInquiry parsedInquiry))
+        {
+            string formattedCommand = commandText.Replace("\r", "\\r");
+            return $"Command '{formattedCommand}' is blocked by the read-only diagnostic inquiry policy.";
+        }
+
+        state.Inquiry = parsedInquiry;
+        return null;
     }
 
     private static bool TryConsumeFlagValue(
@@ -146,7 +170,7 @@ public static class ApplicationOptionsParser
         out string value,
         out string? errorMessage)
     {
-        if (index + 1 >= args.Length || args[index + 1].StartsWith(FlagPrefix, StringComparison.Ordinal))
+        if (index + 1 >= args.Length || args[index + 1].StartsWith(CliConstants.FlagPrefix, StringComparison.Ordinal))
         {
             value = string.Empty;
             errorMessage = $"Missing value for {flagName}.";

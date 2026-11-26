@@ -1,9 +1,9 @@
+using VoltTray.UI.Tokens;
+
 namespace VoltTray.UI.Presenters;
 
 public static class RuntimeDisplayFormatter
 {
-    private const string SpanishCulturePrefix = "es";
-
     public static string? FormatRuntimeString(int? minutes)
     {
         return minutes is int value
@@ -18,7 +18,7 @@ public static class RuntimeDisplayFormatter
             return null;
         }
 
-        if (cultureName.StartsWith(SpanishCulturePrefix, StringComparison.OrdinalIgnoreCase))
+        if (cultureName.StartsWith(LocalizationConstants.SpanishCulturePrefix, StringComparison.OrdinalIgnoreCase))
         {
             return $"Autonomía a {loadPercentage} % de carga";
         }

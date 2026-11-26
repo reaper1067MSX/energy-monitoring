@@ -9,10 +9,6 @@ namespace VoltTray.Infrastructure.OS;
 /// </summary>
 public sealed class WindowsShutdownPort : ISafetyShutdownPort
 {
-    private const uint SHTDN_REASON_MAJOR_POWER = 0x00060000;
-    private const uint SHTDN_REASON_MINOR_ENVIRONMENT = 0x0000000c;
-    private const uint SHTDN_REASON_FLAG_PLANNED = 0x80000000;
-
     [DllImport("advapi32.dll", EntryPoint = "InitiateSystemShutdownExW", SetLastError = true, CharSet = CharSet.Unicode)]
     private static extern bool InitiateSystemShutdownEx(
         string? lpMachineName,
@@ -35,8 +31,17 @@ public sealed class WindowsShutdownPort : ISafetyShutdownPort
             return true;
         }
 
-        uint reasonCode = SHTDN_REASON_MAJOR_POWER | SHTDN_REASON_MINOR_ENVIRONMENT | SHTDN_REASON_FLAG_PLANNED;
-        return InitiateSystemShutdownEx(null, reason, 30, true, false, reasonCode);
+        uint reasonCode =
+            Win32ShutdownConstants.MajorPower |
+            Win32ShutdownConstants.MinorEnvironment |
+            Win32ShutdownConstants.FlagPlanned;
+        return InitiateSystemShutdownEx(
+            null,
+            reason,
+            Win32ShutdownConstants.DefaultTimeoutSeconds,
+            true,
+            false,
+            reasonCode);
     }
 
     public bool AbortShutdown()

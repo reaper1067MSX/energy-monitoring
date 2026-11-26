@@ -11,8 +11,8 @@ namespace VoltTray.UI.Dialogs;
 /// </summary>
 public sealed class ExitDialog : IExitDialogView
 {
-    public const int DialogWidth = 380;
-    public const int DialogHeight = 220;
+    public static int DialogWidth => DesignTokens.Sizes.ExitDialogWidth;
+    public static int DialogHeight => DesignTokens.Sizes.ExitDialogHeight;
     public static int ActionButtonHeight => DesignTokens.Sizes.ButtonHeight;
 
     public Func<UITheme, ExitDialogResult>? MockDialogHandler { get; set; }
