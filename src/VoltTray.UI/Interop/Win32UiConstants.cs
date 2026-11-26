@@ -69,4 +69,24 @@ internal static class Win32UiConstants
     public const int Dpi125 = 120;
     public const int Dpi150 = 144;
     public const int Dpi200 = 192;
+
+    public const uint WsExLayered = 0x00080000;
+    public const byte AcSrcOver = 0;
+    public const byte AcSrcAlpha = 1;
+    public const uint UlwAlpha = 0x00000002;
+    public const uint WmDpiChanged = 0x02E0;
+    public const int QunsBusy = 2;
+    public const int QunsRunningD3dFullScreen = 3;
+    public const int QunsPresentationMode = 4;
+    public const uint PillHitTestAlpha = 0x01000000;
+    public const int PillDefaultWidthPx = 144;
+    public const int PillDefaultHeightPx = 48;
+    public const int PillDefaultRightMarginFallbackPx = 220;
+    public const int PillEdgeGapPx = 6;
+    public const int HwndTopmost = -1;
+    public const string ShellTrayWndClass = "Shell_TrayWnd";
+    public const string TrayNotifyWndClass = "TrayNotifyWnd";
+    public const string StartButtonClass = "Start";
+    public const string TaskbarPillWindowClass = "VoltTray_TaskbarPill";
+    public const string TaskbarPillWindowTitle = "VoltTray Taskbar Pill";
 }

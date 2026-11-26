@@ -9,6 +9,7 @@ public static class CliConstants
     public const string MockFlag = "--mock";
     public const string DryRunFlag = "--dry-run";
     public const string IntervalFlag = "--interval";
+    public const string TaskbarPillFlag = "--taskbar-pill";
     public const string AllHidFlag = "--all-hid";
     public const string CommandFlag = "--cmd";
     public const string ExportFlag = "--export";

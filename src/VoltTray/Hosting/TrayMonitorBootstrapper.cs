@@ -1,4 +1,6 @@
+using VoltTray.Subscribers;
 using VoltTray.UI.Atoms;
+using VoltTray.UI.TaskbarPill;
 using VoltTray.UI.Tray;
 using VoltTray.UI.Popover;
 using VoltTray.Core.Telemetry;
@@ -20,6 +22,8 @@ public sealed class TrayMonitorBootstrapper : IDisposable
     private readonly IUpsDevicePort _decoratedPort;
     private readonly TrayRenderer _trayRenderer;
     private readonly PopoverPainter _popoverPainter;
+    private readonly TaskbarPillWindow? _taskbarPill;
+    private readonly TaskbarPillSubscriber? _taskbarPillSubscriber;
 
     public HostLifecycle Lifecycle { get; }
 
@@ -53,10 +57,23 @@ public sealed class TrayMonitorBootstrapper : IDisposable
         {
             Lifecycle.ShutdownCoordinator.DryRun = true;
         }
+
+        if (options.EnableTaskbarPill)
+        {
+            _taskbarPill = new TaskbarPillWindow(
+                new TaskbarPillPlacementCalculator(),
+                new TaskbarPillSurfaceRenderer(trayIconRasterizer),
+                new Win32FullscreenStateProvider(),
+                WindowsThemeDetector.IsLightTaskbar,
+                enableNativeWindow: true);
+            _taskbarPillSubscriber = new TaskbarPillSubscriber(Lifecycle.EventBus, _taskbarPill, Lifecycle);
+        }
     }
 
     public void Dispose()
     {
+        _taskbarPillSubscriber?.Dispose();
+        _taskbarPill?.Dispose();
         Lifecycle.Dispose();
         _popoverPainter.Dispose();
         _trayRenderer.Dispose();

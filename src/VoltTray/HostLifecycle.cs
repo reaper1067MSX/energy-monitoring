@@ -44,6 +44,7 @@ public sealed class HostLifecycle : IDisposable
     public IPopoverView PopoverPainter => _popoverPainter;
     public ShutdownCoordinator ShutdownCoordinator => _shutdownCoordinator;
     public IUpsDevicePort UpsPort => _upsPort;
+    public IEventBus EventBus => _eventBus;
 
     public HostLifecycle(
         IUpsDevicePort upsPort,
@@ -298,6 +299,10 @@ public sealed class HostLifecycle : IDisposable
         _popoverPainter.Dispose();
         _upsPort.Dispose();
     }
+
+    public void TogglePopoverFromTray() => HandleTrayIconClicked();
+
+    public void OpenContextMenuFromTray() => HandleContextMenuRequested();
 
     private void HandleSelfTestRequested()
     {

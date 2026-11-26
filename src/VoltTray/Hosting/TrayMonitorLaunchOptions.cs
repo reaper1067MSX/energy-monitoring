@@ -6,4 +6,5 @@ namespace VoltTray.Hosting;
 public sealed record TrayMonitorLaunchOptions(
     bool IsSimulation,
     bool IsDryRun,
-    int PollingIntervalMs) : ApplicationLaunchOptions;
+    int PollingIntervalMs,
+    bool EnableTaskbarPill = false) : ApplicationLaunchOptions;

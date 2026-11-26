@@ -59,7 +59,7 @@ public static class ApplicationOptionsParser
 
         return state.IsInspectMode
             ? new InspectLaunchOptions(state.Inquiry, state.IncludeAllHidDevices, state.ExportPath)
-            : new TrayMonitorLaunchOptions(state.IsSimulation, state.IsDryRun, state.PollingIntervalMs);
+            : new TrayMonitorLaunchOptions(state.IsSimulation, state.IsDryRun, state.PollingIntervalMs, state.EnableTaskbarPill);
     }
 
     private static IReadOnlyDictionary<string, CliFlagRule> BuildFlagRuleRegistry()
@@ -98,6 +98,15 @@ public static class ApplicationOptionsParser
                 Scope: CliOptionScope.TrayOnly,
                 RequiresValue: true,
                 Apply: ApplyInterval),
+            new(
+                Aliases: [CliConstants.TaskbarPillFlag],
+                Scope: CliOptionScope.TrayOnly,
+                RequiresValue: false,
+                Apply: (state, _) =>
+                {
+                    state.EnableTaskbarPill = true;
+                    return null;
+                }),
             new(
                 Aliases: [CliConstants.AllHidFlag],
                 Scope: CliOptionScope.InspectOnly,
