@@ -25,4 +25,14 @@ public static class HidConstants
     public const int DefaultRandomSeed = 42;
     public const int MinimumLoadJitterOffset = -1;
     public const int MaximumLoadJitterExclusiveOffset = 2;
+
+    // Win32 Open Error Codes & Bounded Retry Policy
+    public const int Win32ErrorFileNotFound = 2;
+    public const int Win32ErrorPathNotFound = 3;
+    public const int Win32ErrorAccessDenied = 5;
+    public const int Win32ErrorSharingViolation = 32;
+    public const int Win32ErrorBusy = 170;
+    public const int MaxConnectAttempts = 3;
+    public const int ConnectRetryJitterMaxMs = 25;
+    public static readonly int[] ConnectRetryDelaysMs = [100, 250, 500];
 }

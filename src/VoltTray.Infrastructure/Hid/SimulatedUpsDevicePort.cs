@@ -9,7 +9,7 @@ namespace VoltTray.Infrastructure.Hid;
 /// In-memory simulated UPS device port implementing Voltronic Protocol 'T' (QS-Hex).
 /// Provides realistic telemetry snapshots with micro-jitter for local UI testing without physical hardware.
 /// </summary>
-public sealed class SimulatedUpsDevicePort : IUpsDevicePort
+public sealed class SimulatedUpsDevicePort : IUpsDevicePort, IRawTelemetryPort
 {
     private readonly Random _random = new(HidConstants.DefaultRandomSeed);
     private readonly object _lock = new();
@@ -42,6 +42,23 @@ public sealed class SimulatedUpsDevicePort : IUpsDevicePort
         }
     }
 
+    public Task<Result<string>> ConnectAsync(
+        string? customPath = null,
+        CancellationToken cancellationToken = default)
+    {
+        if (cancellationToken.IsCancellationRequested)
+        {
+            return Task.FromResult(Result<string>.Failure(new DomainError(
+                SharedErrorConstants.TransportTimeoutCode,
+                "Simulated UPS connection cancelled.",
+                ErrorCategory.TransportTimeout,
+                IsTransient: false)));
+        }
+
+        TryConnect(customPath);
+        return Task.FromResult(Result<string>.Success(ActiveDevicePath!));
+    }
+
     public void Disconnect()
     {
         lock (_lock)
@@ -55,11 +72,24 @@ public sealed class SimulatedUpsDevicePort : IUpsDevicePort
         DateTimeOffset? now = null,
         CancellationToken cancellationToken = default)
     {
+        RawUpsTelemetrySample? sample = CreateTelemetrySample(now);
+        return Task.FromResult(sample?.Telemetry);
+    }
+
+    public Task<RawUpsTelemetrySample?> ReadRawTelemetryAsync(
+        DateTimeOffset? now = null,
+        CancellationToken cancellationToken = default)
+    {
+        return Task.FromResult(CreateTelemetrySample(now));
+    }
+
+    private RawUpsTelemetrySample? CreateTelemetrySample(DateTimeOffset? now)
+    {
         lock (_lock)
         {
             if (!_isConnected)
             {
-                return Task.FromResult<UpsTelemetry?>(null);
+                return null;
             }
 
             if (_selfTestActive && DateTime.UtcNow >= _selfTestExpires)
@@ -95,7 +125,7 @@ public sealed class SimulatedUpsDevicePort : IUpsDevicePort
                 _lastTelemetry = parsed;
             }
 
-            return Task.FromResult(parsed);
+            return new RawUpsTelemetrySample(frameBytes, parsed);
         }
     }
 

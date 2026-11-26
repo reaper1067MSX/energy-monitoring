@@ -23,6 +23,8 @@ public sealed class HostLifecycle : IDisposable
     private readonly IExitDialogView _exitDialog;
     private readonly IScreenPlacementProvider _screenPlacementProvider;
     private readonly InProcessTelemetryProbe _telemetryProbe;
+    private readonly IExecutionBoundary _executionBoundary;
+    private readonly bool _delegateDiagnosticsToPort;
     private readonly SplitCockpitPresenter _presenter;
 
     private CancellationTokenSource? _cts;
@@ -50,7 +52,9 @@ public sealed class HostLifecycle : IDisposable
         IPopoverView? popoverPainter = null,
         IExitDialogView? exitDialog = null,
         IScreenPlacementProvider? screenPlacementProvider = null,
-        InProcessTelemetryProbe? telemetryProbe = null)
+        InProcessTelemetryProbe? telemetryProbe = null,
+        IExecutionBoundary? executionBoundary = null,
+        bool delegateDiagnosticsToPort = false)
     {
         _upsPort = upsPort ?? throw new ArgumentNullException(nameof(upsPort));
         _trayRenderer = trayRenderer ?? new TrayRenderer();
@@ -58,6 +62,8 @@ public sealed class HostLifecycle : IDisposable
         _exitDialog = exitDialog ?? new ExitDialog();
         _screenPlacementProvider = screenPlacementProvider ?? new Win32ScreenPlacementProvider();
         _telemetryProbe = telemetryProbe ?? new InProcessTelemetryProbe();
+        _executionBoundary = executionBoundary ?? new SafeExecutionMiddleware(_telemetryProbe);
+        _delegateDiagnosticsToPort = delegateDiagnosticsToPort;
         _shutdownCoordinator = new ShutdownCoordinator(
             shutdownPort ?? new WindowsShutdownPort(),
             notificationPort ?? new WindowsNotificationPort());
@@ -93,19 +99,30 @@ public sealed class HostLifecycle : IDisposable
         _pollingTask = Task.Run(async () =>
         {
             using var timer = new PeriodicTimer(TimeSpan.FromMilliseconds(intervalMs));
+            int reconnectBackoffMs = 0;
+
             while (!token.IsCancellationRequested)
             {
                 try
                 {
-                    await PollOnceAsync(token);
-                    await timer.WaitForNextTickAsync(token);
+                    Result<UpsTelemetry?> loopResult = await _executionBoundary
+                        .ExecuteAsync(ct => PollOnceAsync(ct), "HostLifecycle.PollLoop", token)
+                        .ConfigureAwait(false);
+
+                    bool isHealthySample = loopResult.IsSuccess && loopResult.Value != null && _consecutiveErrors == 0;
+                    if (isHealthySample)
+                    {
+                        reconnectBackoffMs = 0;
+                        await timer.WaitForNextTickAsync(token).ConfigureAwait(false);
+                        continue;
+                    }
+
+                    reconnectBackoffMs = ComputeNextReconnectBackoffMs(intervalMs, reconnectBackoffMs);
+                    await Task.Delay(reconnectBackoffMs, token).ConfigureAwait(false);
                 }
                 catch (OperationCanceledException)
                 {
                     break;
-                }
-                catch
-                {
                 }
             }
         }, token);
@@ -129,15 +146,10 @@ public sealed class HostLifecycle : IDisposable
             }
         }
 
-        UpsTelemetry? telemetry = null;
-        try
-        {
-            telemetry = await _upsPort.ReadTelemetryAsync(timestamp, token);
-        }
-        catch
-        {
-            telemetry = null;
-        }
+        Result<UpsTelemetry?> pollResult = await _executionBoundary
+            .ExecuteAsync(ct => _upsPort.ReadTelemetryAsync(timestamp, ct), "HostLifecycle.ReadTelemetry", token)
+            .ConfigureAwait(false);
+        UpsTelemetry? telemetry = pollResult.IsSuccess ? pollResult.Value : null;
 
         if (telemetry == null)
         {
@@ -153,19 +165,22 @@ public sealed class HostLifecycle : IDisposable
             return CurrentTelemetry;
         }
 
-        TelemetryAnomalyKind? physicsAnomaly = TelemetryPlausibilityGuard.EvaluatePhysics(telemetry, CurrentTelemetry);
-        if (physicsAnomaly != null)
+        if (!_delegateDiagnosticsToPort)
         {
-            _telemetryProbe.Record(
-                ReadOnlySpan<byte>.Empty,
-                telemetry,
-                physicsAnomaly,
-                "Quarantined in HostLifecycle.PollOnceAsync");
-            _telemetryProbe.DumpRecent();
-            return CurrentTelemetry;
-        }
+            TelemetryAnomalyKind? physicsAnomaly = TelemetryPlausibilityGuard.EvaluatePhysics(telemetry, CurrentTelemetry);
+            if (physicsAnomaly != null)
+            {
+                _telemetryProbe.Record(
+                    ReadOnlySpan<byte>.Empty,
+                    telemetry,
+                    physicsAnomaly,
+                    "Quarantined in HostLifecycle.PollOnceAsync");
+                _telemetryProbe.DumpRecent();
+                return CurrentTelemetry;
+            }
 
-        _telemetryProbe.Record(ReadOnlySpan<byte>.Empty, telemetry);
+            _telemetryProbe.Record(ReadOnlySpan<byte>.Empty, telemetry);
+        }
         _consecutiveErrors = 0;
         OperationalState = telemetry.State;
         _shutdownCoordinator.Evaluate(telemetry, timestamp);
@@ -244,7 +259,11 @@ public sealed class HostLifecycle : IDisposable
         {
             _pollingTask?.Wait(HostConstants.PollingStopTimeoutMs);
         }
-        catch
+        catch (OperationCanceledException)
+        {
+        }
+        catch (AggregateException aggregateException) when (
+            aggregateException.InnerExceptions.All(ex => ex is OperationCanceledException))
         {
         }
 
@@ -327,5 +346,17 @@ public sealed class HostLifecycle : IDisposable
             anchorTop + HostConstants.FallbackAnchorSizePx);
 
         return (fallbackAnchor, fallbackWorkArea, fallbackEdge);
+    }
+
+    private static int ComputeNextReconnectBackoffMs(int baseIntervalMs, int currentBackoffMs)
+    {
+        int initialDelayMs = Math.Max(HostConstants.MinimumPauseTimerMs, baseIntervalMs);
+        if (currentBackoffMs <= 0)
+        {
+            return initialDelayMs;
+        }
+
+        int maxBackoffMs = Math.Max(initialDelayMs, HostConstants.MaxReconnectBackoffMs);
+        return Math.Min(currentBackoffMs * HostConstants.BackoffMultiplier, maxBackoffMs);
     }
 }

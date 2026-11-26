@@ -1,4 +1,5 @@
 using VoltTray.Core.Models;
+using VoltTray.Shared;
 
 namespace VoltTray.Core.Ports;
 
@@ -23,6 +24,12 @@ public interface IUpsDevicePort : IDisposable
     /// Returns true if connected successfully, false otherwise.
     /// </summary>
     bool TryConnect(string? customPath = null);
+
+    /// <summary>
+    /// Asynchronously connects to the UPS device with bounded retry on transient open failures
+    /// and rich diagnostic errors on contention or missing hardware.
+    /// </summary>
+    Task<Result<string>> ConnectAsync(string? customPath = null, CancellationToken cancellationToken = default);
 
     /// <summary>
     /// Immediately releases the device connection within 100 ms.

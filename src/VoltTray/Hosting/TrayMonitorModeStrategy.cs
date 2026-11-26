@@ -1,4 +1,5 @@
 using VoltTray.Core.Ports;
+using VoltTray.Infrastructure.Diagnostics;
 using VoltTray.Infrastructure.Hid;
 using VoltTray.Infrastructure.OS;
 using VoltTray.Shared;
@@ -29,7 +30,10 @@ public sealed class TrayMonitorModeStrategy : IApplicationModeStrategy
 
         try
         {
-            using IUpsDevicePort upsPort = CreateUpsDevicePort(_options);
+            var telemetryProbe = new InProcessTelemetryProbe();
+            IExecutionBoundary executionBoundary = new SafeExecutionMiddleware(telemetryProbe);
+            using IUpsDevicePort rawPort = CreateUpsDevicePort(_options);
+            using IUpsDevicePort upsPort = new DiagnosticUpsPortDecorator(rawPort, telemetryProbe);
             var shutdownPort = new WindowsShutdownPort();
             var notificationPort = new WindowsNotificationPort();
             using var trayRenderer = new TrayRenderer();
@@ -42,7 +46,11 @@ public sealed class TrayMonitorModeStrategy : IApplicationModeStrategy
                 notificationPort,
                 trayRenderer,
                 popoverPainter,
-                exitDialog);
+                exitDialog,
+                screenPlacementProvider: null,
+                telemetryProbe,
+                executionBoundary,
+                delegateDiagnosticsToPort: true);
 
             if (_options.IsDryRun)
             {
