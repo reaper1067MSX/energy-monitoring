@@ -78,7 +78,7 @@ public class InfrastructureAdaptersTests
     [Fact]
     public async Task Win32HidUpsPort_ReadTelemetryAsync_WhenDeviceUnavailable_ReturnsNullWithoutThrowing()
     {
-        using var port = new Win32HidUpsPort(@"\\?\HID#NON_EXISTENT_UPS_DEVICE", allowRegistryFallback: false);
+        using var port = new Win32HidUpsPort(@"\\?\HID#NON_EXISTENT_UPS_DEVICE", allowAutoDiscovery: false);
         using var cts = new CancellationTokenSource(100);
 
         var telemetry = await port.ReadTelemetryAsync(cancellationToken: cts.Token);

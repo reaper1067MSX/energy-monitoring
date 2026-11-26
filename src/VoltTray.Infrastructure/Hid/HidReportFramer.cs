@@ -9,8 +9,6 @@ namespace VoltTray.Infrastructure.Hid;
 /// </summary>
 public static class HidReportFramer
 {
-    private const int ReportPayloadStartIndex = 1;
-
     /// <summary>
     /// Splits an ASCII UPS command into 9-byte HID output reports (Report ID 0x00 + up to 8 payload bytes).
     /// </summary>
@@ -27,7 +25,7 @@ public static class HidReportFramer
             byte[] report = new byte[HidConstants.ReportLength];
             report[0] = HidConstants.DefaultReportId;
             int copyLength = Math.Min(chunkLength, commandBytes.Length - offset);
-            Array.Copy(commandBytes, offset, report, ReportPayloadStartIndex, copyLength);
+            Array.Copy(commandBytes, offset, report, HidConstants.ReportPayloadStartIndex, copyLength);
             reports.Add(report);
         }
 
@@ -56,12 +54,12 @@ public static class HidReportFramer
 
         foreach (byte[] report in reports)
         {
-            if (report.Length <= ReportPayloadStartIndex)
+            if (report.Length <= HidConstants.ReportPayloadStartIndex)
             {
                 continue;
             }
 
-            if (AppendReportBytes(payload, report.AsSpan(ReportPayloadStartIndex), requireFramingHeader))
+            if (AppendReportBytes(payload, report.AsSpan(HidConstants.ReportPayloadStartIndex), requireFramingHeader))
             {
                 break;
             }

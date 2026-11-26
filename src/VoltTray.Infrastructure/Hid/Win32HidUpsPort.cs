@@ -1,6 +1,4 @@
 using System.Diagnostics;
-using Microsoft.Win32;
-using Microsoft.Win32.SafeHandles;
 using VoltTray.Core.Models;
 using VoltTray.Core.Ports;
 using VoltTray.Infrastructure.Protocol;
@@ -14,24 +12,41 @@ namespace VoltTray.Infrastructure.Hid;
 /// </summary>
 public sealed class Win32HidUpsPort : IUpsDevicePort
 {
-    public const string DefaultDevicePath = HidConstants.DefaultDevicePath;
-    private const string HidInterfaceGuid = HidConstants.HidInterfaceGuid;
-
-    private readonly object _lock = new();
-    private readonly string _defaultDevicePath;
-    private readonly bool _allowRegistryFallback;
+    private readonly object _stateLock = new();
+    private readonly SemaphoreSlim _ioGate = new(1, 1);
+    private readonly string? _preferredDevicePath;
+    private readonly bool _allowAutoDiscovery;
+    private readonly IHidDeviceScanner _deviceScanner;
+    private readonly IHidTransport _transport;
     private readonly VoltronicParser _parser;
+
     private UpsTelemetry? _lastTelemetry;
-    private SafeFileHandle? _handle;
+    private IHidConnection? _activeConnection;
+    private CancellationTokenSource? _connectionCts;
+    private string? _activeDevicePath;
+    private long _connectionGeneration;
     private bool _isDisposed;
 
     public Win32HidUpsPort(
-        string? defaultDevicePath = null,
-        bool allowRegistryFallback = true,
-        IBatteryAutonomyEstimator? estimator = null)
+        string? preferredDevicePath = null,
+        bool allowAutoDiscovery = true,
+        IBatteryAutonomyEstimator? estimator = null,
+        IHidDeviceScanner? deviceScanner = null)
+        : this(preferredDevicePath, allowAutoDiscovery, estimator, deviceScanner, new Win32HidTransport())
     {
-        _defaultDevicePath = defaultDevicePath ?? DefaultDevicePath;
-        _allowRegistryFallback = allowRegistryFallback;
+    }
+
+    internal Win32HidUpsPort(
+        string? preferredDevicePath,
+        bool allowAutoDiscovery,
+        IBatteryAutonomyEstimator? estimator,
+        IHidDeviceScanner? deviceScanner,
+        IHidTransport transport)
+    {
+        _preferredDevicePath = preferredDevicePath;
+        _allowAutoDiscovery = allowAutoDiscovery;
+        _deviceScanner = deviceScanner ?? new HidDeviceScanner();
+        _transport = transport;
         _parser = new VoltronicParser(estimator);
     }
 
@@ -39,48 +54,108 @@ public sealed class Win32HidUpsPort : IUpsDevicePort
     {
         get
         {
-            lock (_lock)
+            lock (_stateLock)
             {
-                return _handle != null && !_handle.IsInvalid && !_handle.IsClosed;
+                return IsConnectedUnsafe();
             }
         }
     }
 
-    public string? ActiveDevicePath { get; private set; }
+    public string? ActiveDevicePath
+    {
+        get
+        {
+            lock (_stateLock)
+            {
+                return _activeDevicePath;
+            }
+        }
+    }
 
     public bool TryConnect(string? customPath = null)
     {
-        lock (_lock)
+        lock (_stateLock)
         {
-            if (IsConnected)
-            {
-                return true;
-            }
-
-            DisconnectInternal();
-
-            string targetPath = customPath ?? _defaultDevicePath;
-            if (TryOpenHandle(targetPath))
-            {
-                ActiveDevicePath = targetPath;
-                DrainStaleBufferInternal();
-                return true;
-            }
-
-            if (customPath != null || !_allowRegistryFallback)
+            if (_isDisposed)
             {
                 return false;
             }
 
-            return TryConnectViaRegistryFallback();
+            if (IsConnectedUnsafe())
+            {
+                return true;
+            }
         }
+
+        string? targetPath = ResolveTargetPath(customPath);
+        if (string.IsNullOrEmpty(targetPath))
+        {
+            return false;
+        }
+
+        IHidConnection? openedConnection = _transport.TryOpen(targetPath);
+        if (openedConnection == null)
+        {
+            return false;
+        }
+
+        lock (_stateLock)
+        {
+            if (_isDisposed)
+            {
+                openedConnection.Dispose();
+                return false;
+            }
+
+            if (IsConnectedUnsafe())
+            {
+                openedConnection.Dispose();
+                return true;
+            }
+
+            _connectionGeneration++;
+            _activeConnection = openedConnection;
+            _connectionCts = new CancellationTokenSource();
+            _activeDevicePath = targetPath;
+        }
+
+        openedConnection.DrainInputBuffer(HidConstants.DefaultDrainTimeoutMs);
+        return true;
     }
 
     public void Disconnect()
     {
-        lock (_lock)
+        IHidConnection? connectionToDispose;
+        CancellationTokenSource? ctsToCancel;
+
+        lock (_stateLock)
         {
-            DisconnectInternal();
+            _connectionGeneration++;
+            connectionToDispose = _activeConnection;
+            _activeConnection = null;
+            ctsToCancel = _connectionCts;
+            _connectionCts = null;
+            _activeDevicePath = null;
+            _parser.ResetSelfTest();
+        }
+
+        if (ctsToCancel != null)
+        {
+            try
+            {
+                ctsToCancel.Cancel();
+            }
+            catch (ObjectDisposedException)
+            {
+            }
+
+            ctsToCancel.Dispose();
+        }
+
+        if (connectionToDispose != null)
+        {
+            connectionToDispose.CancelPendingIo();
+            connectionToDispose.Dispose();
         }
     }
 
@@ -88,19 +163,30 @@ public sealed class Win32HidUpsPort : IUpsDevicePort
         DateTimeOffset? now = null,
         CancellationToken cancellationToken = default)
     {
-        byte[]? raw = await QueryRawAsync(VoltronicProtocolConstants.QueryStatusCommand, cancellationToken);
-        if (raw is null or { Length: 0 })
+        var (rawBytes, capturedGeneration) = await QueryRawWithGenerationAsync(
+            VoltronicProtocolConstants.QueryStatusCommand,
+            cancellationToken);
+
+        if (rawBytes is null or { Length: 0 })
         {
             return null;
         }
 
-        UpsTelemetry? parsed = _parser.Parse(raw, _lastTelemetry, now);
-        if (parsed != null)
+        lock (_stateLock)
         {
-            _lastTelemetry = parsed;
-        }
+            if (_connectionGeneration != capturedGeneration || !IsConnectedUnsafe())
+            {
+                return null;
+            }
 
-        return parsed;
+            UpsTelemetry? parsed = _parser.Parse(rawBytes, _lastTelemetry, now);
+            if (parsed != null)
+            {
+                _lastTelemetry = parsed;
+            }
+
+            return parsed;
+        }
     }
 
     public Task<bool> ToggleBeeperAsync(CancellationToken cancellationToken = default)
@@ -113,124 +199,210 @@ public sealed class Win32HidUpsPort : IUpsDevicePort
         return SendControlCommandAsync(VoltronicProtocolConstants.SelfTestCommand, cancellationToken);
     }
 
-    public Task<byte[]?> QueryRawAsync(string command, CancellationToken cancellationToken = default)
+    public async Task<byte[]?> QueryRawAsync(string command, CancellationToken cancellationToken = default)
     {
-        return Task.Run(() =>
-        {
-            lock (_lock)
-            {
-                if (!IsConnected && !TryConnect())
-                {
-                    return null;
-                }
-
-                if (_handle == null || _handle.IsClosed)
-                {
-                    return null;
-                }
-
-                try
-                {
-                    DrainStaleBufferInternal();
-                    if (!HidReportFramer.WriteCommand(_handle, command))
-                    {
-                        DisconnectInternal();
-                        return null;
-                    }
-
-                    return ReadFramedResponse(_handle, command, cancellationToken);
-                }
-                catch
-                {
-                    DisconnectInternal();
-                    return null;
-                }
-            }
-        }, cancellationToken);
+        var (rawBytes, _) = await QueryRawWithGenerationAsync(command, cancellationToken);
+        return rawBytes;
     }
 
     public void Dispose()
     {
-        if (_isDisposed)
+        lock (_stateLock)
         {
-            return;
+            if (_isDisposed)
+            {
+                return;
+            }
+
+            _isDisposed = true;
         }
 
-        _isDisposed = true;
         Disconnect();
+        _ioGate.Dispose();
     }
 
-    private bool TryConnectViaRegistryFallback()
+    private bool IsConnectedUnsafe()
     {
-        try
+        return _activeConnection != null && _activeConnection.IsOpen;
+    }
+
+    private string? ResolveTargetPath(string? customPath)
+    {
+        if (!string.IsNullOrEmpty(customPath))
         {
-            using RegistryKey? key = Registry.LocalMachine.OpenSubKey($@"SYSTEM\CurrentControlSet\Enum\HID\{HidConstants.DeviceIdSubstring}");
-            if (key == null)
+            return customPath;
+        }
+
+        if (!string.IsNullOrEmpty(_preferredDevicePath))
+        {
+            return _preferredDevicePath;
+        }
+
+        if (!_allowAutoDiscovery)
+        {
+            return null;
+        }
+
+        HidDeviceDescriptor? discoveredDevice = _deviceScanner
+            .DiscoverDevices(includeAllHidDevices: false)
+            .FirstOrDefault(descriptor =>
+                descriptor.VendorId == HidConstants.VendorId &&
+                descriptor.ProductId == HidConstants.ProductId);
+
+        return discoveredDevice?.DevicePath;
+    }
+
+    private bool TrySnapshotActiveConnection(
+        CancellationToken callerToken,
+        out IHidConnection? connection,
+        out CancellationTokenSource? linkedCts,
+        out long generation)
+    {
+        lock (_stateLock)
+        {
+            if (_isDisposed || !IsConnectedUnsafe() || _connectionCts == null)
             {
+                connection = null;
+                linkedCts = null;
+                generation = 0;
                 return false;
             }
 
-            foreach (string subKey in key.GetSubKeyNames())
+            connection = _activeConnection;
+            generation = _connectionGeneration;
+            linkedCts = CancellationTokenSource.CreateLinkedTokenSource(callerToken, _connectionCts.Token);
+            return true;
+        }
+    }
+
+    private Task<(byte[]? RawBytes, long Generation)> QueryRawWithGenerationAsync(
+        string command,
+        CancellationToken cancellationToken)
+    {
+        return ExecuteSerializedCommandAsync<(byte[]?, long)>(
+            command,
+            cancellationToken,
+            fallbackResult: (null, 0L),
+            executeAfterWrite: (connection, linkedToken, generation) =>
             {
-                string candidatePath = $@"\\?\HID#{HidConstants.DeviceIdSubstring}#{subKey}#{HidInterfaceGuid}";
-                if (TryOpenHandle(candidatePath))
+                byte[]? response = ReadFramedResponse(connection, command, linkedToken);
+                return (response, response != null ? generation : 0L);
+            });
+    }
+
+    private Task<bool> SendControlCommandAsync(string command, CancellationToken cancellationToken)
+    {
+        return ExecuteSerializedCommandAsync(
+            command,
+            cancellationToken,
+            fallbackResult: false,
+            executeAfterWrite: (connection, linkedToken, _) =>
+            {
+                byte[] inputReport = new byte[HidConstants.ReportLength];
+                int bytesRead = connection.ReadReport(inputReport, HidConstants.DefaultReadTimeoutMs);
+                if (linkedToken.IsCancellationRequested)
                 {
-                    ActiveDevicePath = candidatePath;
-                    DrainStaleBufferInternal();
-                    return true;
+                    return false;
                 }
-            }
-        }
-        catch
-        {
-            // Registry access error fallback
-        }
 
-        return false;
+                bool isNak =
+                    bytesRead > HidConstants.ReportPayloadStartIndex &&
+                    inputReport[HidConstants.ReportPayloadStartIndex] == VoltronicProtocolConstants.NakHeader;
+
+                return !isNak;
+            });
     }
 
-    private bool TryOpenHandle(string path)
+    private async Task<TResult> ExecuteSerializedCommandAsync<TResult>(
+        string command,
+        CancellationToken cancellationToken,
+        TResult fallbackResult,
+        Func<IHidConnection, CancellationToken, long, TResult> executeAfterWrite)
     {
-        SafeFileHandle handle = HidOverlappedIo.OpenDeviceHandle(path);
-        if (handle.IsInvalid)
+        if (cancellationToken.IsCancellationRequested)
         {
-            handle.Dispose();
-            return false;
+            return fallbackResult;
         }
 
-        _handle = handle;
-        return true;
-    }
-
-    private void DisconnectInternal()
-    {
-        if (_handle != null)
+        if (!IsConnected && !TryConnect())
         {
-            if (!_handle.IsClosed && !_handle.IsInvalid)
+            return fallbackResult;
+        }
+
+        if (!TrySnapshotActiveConnection(
+                cancellationToken,
+                out IHidConnection? connection,
+                out CancellationTokenSource? linkedCts,
+                out long generation) ||
+            connection == null ||
+            linkedCts == null)
+        {
+            return fallbackResult;
+        }
+
+        try
+        {
+            await _ioGate.WaitAsync(linkedCts.Token).ConfigureAwait(false);
+        }
+        catch (OperationCanceledException)
+        {
+            linkedCts.Dispose();
+            return fallbackResult;
+        }
+        catch (ObjectDisposedException)
+        {
+            linkedCts.Dispose();
+            return fallbackResult;
+        }
+
+        try
+        {
+            return await Task.Run(() =>
             {
-                HidOverlappedIo.CancelPendingIo(_handle);
-                _handle.Dispose();
-            }
+                if (linkedCts.IsCancellationRequested || !connection.IsOpen)
+                {
+                    return fallbackResult;
+                }
 
-            _handle = null;
+                try
+                {
+                    connection.DrainInputBuffer(HidConstants.DefaultDrainTimeoutMs);
+                    if (linkedCts.IsCancellationRequested || !connection.WriteCommand(command))
+                    {
+                        if (!linkedCts.IsCancellationRequested)
+                        {
+                            Disconnect();
+                        }
+
+                        return fallbackResult;
+                    }
+
+                    return executeAfterWrite(connection, linkedCts.Token, generation);
+                }
+                catch
+                {
+                    if (!linkedCts.IsCancellationRequested)
+                    {
+                        Disconnect();
+                    }
+
+                    return fallbackResult;
+                }
+            }, linkedCts.Token).ConfigureAwait(false);
         }
-
-        ActiveDevicePath = null;
-        _parser.ResetSelfTest();
-    }
-
-    private void DrainStaleBufferInternal()
-    {
-        if (_handle == null || _handle.IsClosed)
+        catch (OperationCanceledException)
         {
-            return;
+            return fallbackResult;
         }
-
-        HidOverlappedIo.DrainInputBuffer(_handle, HidConstants.DefaultDrainTimeoutMs);
+        finally
+        {
+            ReleaseIoGateSafely();
+            linkedCts.Dispose();
+        }
     }
 
     private static byte[]? ReadFramedResponse(
-        SafeFileHandle handle,
+        IHidConnection connection,
         string command,
         CancellationToken cancellationToken)
     {
@@ -242,19 +414,29 @@ public sealed class Win32HidUpsPort : IUpsDevicePort
         var stopwatch = Stopwatch.StartNew();
         while (stopwatch.ElapsedMilliseconds < HidConstants.DefaultQueryTimeoutMs)
         {
-            if (cancellationToken.IsCancellationRequested)
+            if (cancellationToken.IsCancellationRequested || !connection.IsOpen)
             {
                 return null;
             }
 
             byte[] inputReport = new byte[HidConstants.ReportLength];
-            int bytesRead = HidOverlappedIo.ReadReport(handle, inputReport, HidConstants.DefaultReadTimeoutMs);
-            if (bytesRead <= 1)
+            int bytesRead = connection.ReadReport(inputReport, HidConstants.DefaultReadTimeoutMs);
+            if (cancellationToken.IsCancellationRequested)
+            {
+                return null;
+            }
+
+            if (bytesRead <= HidConstants.ReportPayloadStartIndex)
             {
                 continue;
             }
 
-            if (HidReportFramer.AppendReportBytes(response, inputReport.AsSpan(1, bytesRead - 1), requireFramingHeader))
+            int payloadLength = bytesRead - HidConstants.ReportPayloadStartIndex;
+            ReadOnlySpan<byte> payloadSlice = inputReport.AsSpan(
+                HidConstants.ReportPayloadStartIndex,
+                payloadLength);
+
+            if (HidReportFramer.AppendReportBytes(response, payloadSlice, requireFramingHeader))
             {
                 return response.ToArray();
             }
@@ -263,51 +445,14 @@ public sealed class Win32HidUpsPort : IUpsDevicePort
         return response.Count > 0 ? response.ToArray() : null;
     }
 
-    private Task<bool> SendControlCommandAsync(string command, CancellationToken cancellationToken)
+    private void ReleaseIoGateSafely()
     {
-        return Task.Run(() =>
+        try
         {
-            lock (_lock)
-            {
-                if (cancellationToken.IsCancellationRequested)
-                {
-                    return false;
-                }
-
-                if (!IsConnected && !TryConnect())
-                {
-                    return false;
-                }
-
-                if (_handle == null || _handle.IsClosed)
-                {
-                    return false;
-                }
-
-                try
-                {
-                    DrainStaleBufferInternal();
-                    if (!HidReportFramer.WriteCommand(_handle, command))
-                    {
-                        DisconnectInternal();
-                        return false;
-                    }
-
-                    byte[] inputReport = new byte[HidConstants.ReportLength];
-                    int bytesRead = HidOverlappedIo.ReadReport(handle: _handle, buffer: inputReport, timeoutMs: HidConstants.DefaultReadTimeoutMs);
-                    if (bytesRead > 1 && inputReport[1] == VoltronicProtocolConstants.NakHeader)
-                    {
-                        return false;
-                    }
-
-                    return true;
-                }
-                catch
-                {
-                    DisconnectInternal();
-                    return false;
-                }
-            }
-        }, cancellationToken);
+            _ioGate.Release();
+        }
+        catch (ObjectDisposedException)
+        {
+        }
     }
 }

@@ -16,9 +16,9 @@ public sealed class ReadOnlyUpsProbe
     private const int MinimumStatusByte2TokenCount = 11;
     private const int StatusByte2TokenIndex = 10;
 
-    private readonly HidDeviceScanner _deviceScanner;
+    private readonly IHidDeviceScanner _deviceScanner;
 
-    public ReadOnlyUpsProbe(HidDeviceScanner? deviceScanner = null)
+    public ReadOnlyUpsProbe(IHidDeviceScanner? deviceScanner = null)
     {
         _deviceScanner = deviceScanner ?? new HidDeviceScanner();
     }

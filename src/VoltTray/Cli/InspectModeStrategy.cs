@@ -12,13 +12,13 @@ namespace VoltTray.Cli;
 public sealed class InspectModeStrategy : IApplicationModeStrategy
 {
     private readonly TextWriter _output;
-    private readonly HidDeviceScanner _scanner;
+    private readonly IHidDeviceScanner _scanner;
     private readonly ReadOnlyUpsProbe _probe;
 
     public InspectModeStrategy(
         TextWriter? output = null,
         ReadOnlyUpsProbe? probe = null,
-        HidDeviceScanner? scanner = null)
+        IHidDeviceScanner? scanner = null)
     {
         _output = output ?? Console.Out;
         _scanner = scanner ?? new HidDeviceScanner();

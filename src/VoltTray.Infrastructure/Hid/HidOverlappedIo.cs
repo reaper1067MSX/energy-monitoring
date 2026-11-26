@@ -9,6 +9,8 @@ namespace VoltTray.Infrastructure.Hid;
 /// </summary>
 internal static class HidOverlappedIo
 {
+    private const int MinimumTimeoutMs = 0;
+
     public static SafeFileHandle OpenDeviceHandle(
         string devicePath,
         uint desiredAccess = HidNativeMethods.GenericRead | HidNativeMethods.GenericWrite,
@@ -26,7 +28,10 @@ internal static class HidOverlappedIo
 
     public static void CancelPendingIo(SafeFileHandle handle)
     {
-        HidNativeMethods.CancelIoEx(handle, IntPtr.Zero);
+        if (!handle.IsInvalid && !handle.IsClosed)
+        {
+            HidNativeMethods.CancelIoEx(handle, IntPtr.Zero);
+        }
     }
 
     public static void DrainInputBuffer(SafeFileHandle handle, int drainTimeoutMs)
@@ -37,15 +42,37 @@ internal static class HidOverlappedIo
         }
     }
 
+    public static int ClampTimeoutMs(int timeoutMs)
+    {
+        return Math.Max(MinimumTimeoutMs, timeoutMs);
+    }
+
     public static int ReadReport(SafeFileHandle handle, byte[] buffer, int timeoutMs)
     {
-        IntPtr eventHandle = HidNativeMethods.CreateEvent(IntPtr.Zero, manualReset: true, initialState: false, name: null);
-        IntPtr overlappedPointer = Marshal.AllocHGlobal(Marshal.SizeOf<HidNativeMethods.NativeOverlappedIo>());
-        IntPtr nativeBuffer = Marshal.AllocHGlobal(buffer.Length);
-        Marshal.StructureToPtr(new HidNativeMethods.NativeOverlappedIo { EventHandle = eventHandle }, overlappedPointer, fDeleteOld: false);
+        if (handle.IsInvalid || handle.IsClosed)
+        {
+            return 0;
+        }
+
+        IntPtr eventHandle = IntPtr.Zero;
+        IntPtr overlappedPointer = IntPtr.Zero;
+        IntPtr nativeBuffer = IntPtr.Zero;
 
         try
         {
+            eventHandle = HidNativeMethods.CreateEvent(IntPtr.Zero, manualReset: true, initialState: false, name: null);
+            if (eventHandle == IntPtr.Zero)
+            {
+                return 0;
+            }
+
+            overlappedPointer = Marshal.AllocHGlobal(Marshal.SizeOf<HidNativeMethods.NativeOverlappedIo>());
+            nativeBuffer = Marshal.AllocHGlobal(buffer.Length);
+            Marshal.StructureToPtr(
+                new HidNativeMethods.NativeOverlappedIo { EventHandle = eventHandle },
+                overlappedPointer,
+                fDeleteOld: false);
+
             bool completedSynchronously = HidNativeMethods.ReadFile(
                 handle,
                 nativeBuffer,
@@ -69,22 +96,37 @@ internal static class HidOverlappedIo
         }
         finally
         {
-            HidNativeMethods.CloseHandle(eventHandle);
-            Marshal.FreeHGlobal(overlappedPointer);
-            Marshal.FreeHGlobal(nativeBuffer);
+            ReleaseOverlappedResources(eventHandle, overlappedPointer, nativeBuffer);
         }
     }
 
     public static bool WriteReport(SafeFileHandle handle, byte[] buffer, int timeoutMs)
     {
-        IntPtr eventHandle = HidNativeMethods.CreateEvent(IntPtr.Zero, manualReset: true, initialState: false, name: null);
-        IntPtr overlappedPointer = Marshal.AllocHGlobal(Marshal.SizeOf<HidNativeMethods.NativeOverlappedIo>());
-        IntPtr nativeBuffer = Marshal.AllocHGlobal(buffer.Length);
-        Marshal.StructureToPtr(new HidNativeMethods.NativeOverlappedIo { EventHandle = eventHandle }, overlappedPointer, fDeleteOld: false);
-        Marshal.Copy(buffer, 0, nativeBuffer, buffer.Length);
+        if (handle.IsInvalid || handle.IsClosed)
+        {
+            return false;
+        }
+
+        IntPtr eventHandle = IntPtr.Zero;
+        IntPtr overlappedPointer = IntPtr.Zero;
+        IntPtr nativeBuffer = IntPtr.Zero;
 
         try
         {
+            eventHandle = HidNativeMethods.CreateEvent(IntPtr.Zero, manualReset: true, initialState: false, name: null);
+            if (eventHandle == IntPtr.Zero)
+            {
+                return false;
+            }
+
+            overlappedPointer = Marshal.AllocHGlobal(Marshal.SizeOf<HidNativeMethods.NativeOverlappedIo>());
+            nativeBuffer = Marshal.AllocHGlobal(buffer.Length);
+            Marshal.StructureToPtr(
+                new HidNativeMethods.NativeOverlappedIo { EventHandle = eventHandle },
+                overlappedPointer,
+                fDeleteOld: false);
+            Marshal.Copy(buffer, 0, nativeBuffer, buffer.Length);
+
             bool completedSynchronously = HidNativeMethods.WriteFile(
                 handle,
                 nativeBuffer,
@@ -102,9 +144,7 @@ internal static class HidOverlappedIo
         }
         finally
         {
-            HidNativeMethods.CloseHandle(eventHandle);
-            Marshal.FreeHGlobal(overlappedPointer);
-            Marshal.FreeHGlobal(nativeBuffer);
+            ReleaseOverlappedResources(eventHandle, overlappedPointer, nativeBuffer);
         }
     }
 
@@ -121,7 +161,8 @@ internal static class HidOverlappedIo
             return false;
         }
 
-        if (HidNativeMethods.WaitForSingleObject(eventHandle, (uint)timeoutMs) == HidNativeMethods.WaitObject0)
+        uint clampedTimeoutMs = (uint)ClampTimeoutMs(timeoutMs);
+        if (HidNativeMethods.WaitForSingleObject(eventHandle, clampedTimeoutMs) == HidNativeMethods.WaitObject0)
         {
             return HidNativeMethods.GetOverlappedResult(handle, overlappedPointer, out bytesTransferred, wait: false);
         }
@@ -129,5 +170,26 @@ internal static class HidOverlappedIo
         HidNativeMethods.CancelIoEx(handle, overlappedPointer);
         HidNativeMethods.GetOverlappedResult(handle, overlappedPointer, out _, wait: true);
         return false;
+    }
+
+    private static void ReleaseOverlappedResources(
+        IntPtr eventHandle,
+        IntPtr overlappedPointer,
+        IntPtr nativeBuffer)
+    {
+        if (overlappedPointer != IntPtr.Zero)
+        {
+            Marshal.FreeHGlobal(overlappedPointer);
+        }
+
+        if (nativeBuffer != IntPtr.Zero)
+        {
+            Marshal.FreeHGlobal(nativeBuffer);
+        }
+
+        if (eventHandle != IntPtr.Zero)
+        {
+            HidNativeMethods.CloseHandle(eventHandle);
+        }
     }
 }
