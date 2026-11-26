@@ -94,6 +94,7 @@ public sealed class ReadOnlyUpsProbe
 
     /// <summary>
     /// Builds an immutable forensic capture from captured HID reports and assembled payload bytes.
+    /// Binary Protocol 'T' decoding is gated strictly to <see cref="UpsDiagnosticInquiry.QuickStatus"/> '#' frames.
     /// </summary>
     public static UpsProbeCapture BuildCapture(
         HidDeviceDescriptor device,
@@ -102,13 +103,31 @@ public sealed class ReadOnlyUpsProbe
         byte[] rawPayload)
     {
         string wireCommand = VoltronicInquiryCodec.ToWireCommand(inquiry);
+        bool isProtocolTQuickStatusFrame =
+            inquiry == UpsDiagnosticInquiry.QuickStatus &&
+            rawPayload.Length > 0 &&
+            rawPayload[0] == VoltronicProtocolConstants.FrameHeaderHash;
+
+        if (!isProtocolTQuickStatusFrame)
+        {
+            return new UpsProbeCapture(
+                device,
+                inquiry,
+                wireCommand,
+                rawReports,
+                rawPayload,
+                rawPayload,
+                Array.Empty<byte[]>(),
+                frequencyHz: null,
+                statusByte2Ratings: null);
+        }
 
         IReadOnlyList<byte[]> tokens = VoltronicParser.TryTokenizeHashFrame(rawPayload, out IReadOnlyList<byte[]> parsedTokens)
             ? parsedTokens
             : Array.Empty<byte[]>();
 
         double? frequencyHz = tokens.Count >= MinimumFrequencyTokenCount
-            ? VoltronicParser.DecodeFrequencyHz(tokens[FrequencyPeriodTokenIndex], tokens[FrequencyClockTokenIndex])
+            ? VoltronicParser.TryDecodeFrequencyHz(tokens[FrequencyPeriodTokenIndex], tokens[FrequencyClockTokenIndex])
             : null;
 
         UpsStatusByte2Ratings? statusByte2Ratings =

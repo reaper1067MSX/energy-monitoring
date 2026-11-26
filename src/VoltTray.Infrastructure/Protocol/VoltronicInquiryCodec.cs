@@ -16,7 +16,7 @@ public static class VoltronicInquiryCodec
         {
             UpsDiagnosticInquiry.ProtocolIdentity => VoltronicProtocolConstants.ProtocolIdentityCommand,
             UpsDiagnosticInquiry.QuickStatus => VoltronicProtocolConstants.QueryStatusCommand,
-            UpsDiagnosticInquiry.MegatecStatus => VoltronicProtocolConstants.MegatecStatusCommand,
+            UpsDiagnosticInquiry.StandardAsciiStatus => VoltronicProtocolConstants.StandardAsciiStatusCommand,
             UpsDiagnosticInquiry.ProtocolId => VoltronicProtocolConstants.ProtocolIdCommand,
             UpsDiagnosticInquiry.DeviceId => VoltronicProtocolConstants.DeviceIdCommand,
             UpsDiagnosticInquiry.RatedInformation => VoltronicProtocolConstants.RatedInformationCommand,
@@ -56,8 +56,8 @@ public static class VoltronicInquiryCodec
             case VoltronicProtocolConstants.QueryStatusCommand:
                 inquiry = UpsDiagnosticInquiry.QuickStatus;
                 return true;
-            case VoltronicProtocolConstants.MegatecStatusCommand:
-                inquiry = UpsDiagnosticInquiry.MegatecStatus;
+            case VoltronicProtocolConstants.StandardAsciiStatusCommand:
+                inquiry = UpsDiagnosticInquiry.StandardAsciiStatus;
                 return true;
             case VoltronicProtocolConstants.ProtocolIdCommand:
                 inquiry = UpsDiagnosticInquiry.ProtocolId;

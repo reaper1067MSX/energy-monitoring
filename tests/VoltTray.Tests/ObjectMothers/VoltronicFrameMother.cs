@@ -5,58 +5,83 @@ namespace VoltTray.Tests.ObjectMothers;
 
 /// <summary>
 /// Object Mother providing standardized Voltronic Protocol 'T' (QS-Hex) binary frames
-/// and test vectors built exclusively from <see cref="VoltronicBinaryFrameBuilder"/> and <see cref="VoltronicProtocolConstants"/>.
+/// built exclusively from <see cref="VoltronicBinaryFrameBuilder"/>, <see cref="VoltronicFrameSpecification"/>,
+/// and named protocol/fixture constants. Returns fresh array instances on every access.
 /// </summary>
 public static class VoltronicFrameMother
 {
     private const byte DefaultOnBatteryLoadPercentage = 14;
-    private const double DefaultAvrInputVoltage = 98.0;
-    private const double DefaultAvrOutputVoltage = 118.0;
+    private const double DefaultAvrInputVoltageAc = 98.0;
+    private const double DefaultAvrOutputVoltageAc = 118.0;
+    private const int VoltageTokenByteWidth = 2;
+
+    private static readonly VoltronicFrameSpecification GoldenSpecification = new();
+
+    private static readonly VoltronicFrameSpecification Nt2401ProLiveSpecification = new()
+    {
+        StatusByte1 = VoltronicFixtureConstants.Nt2401ProStatusByte1BeeperOn,
+        StatusByte2 = VoltronicProtocolConstants.StatusByte2Nominal,
+        LoadPercentage = VoltronicFixtureConstants.Nt2401ProLoadPercentage,
+        InputVoltageBytes =
+        [
+            VoltronicFixtureConstants.Nt2401ProVoltageHexHigh,
+            VoltronicFixtureConstants.Nt2401ProVoltageHexLow
+        ],
+        OutputVoltageBytes =
+        [
+            VoltronicFixtureConstants.Nt2401ProVoltageHexHigh,
+            VoltronicFixtureConstants.Nt2401ProVoltageHexLow
+        ],
+        FrequencyPeriodTicksBytes =
+        [
+            VoltronicProtocolConstants.NominalFrequencyPart1High,
+            VoltronicFixtureConstants.Nt2401ProFrequencyPart1Low
+        ],
+        FrequencyTimerClockBytes = VoltronicBinaryFrameBuilder.EncodeBigEndianBytes(
+            VoltronicFixtureConstants.FrequencyClock1228800Hz,
+            VoltronicFixtureConstants.FrequencyClockByteWidth)
+    };
+
+    private static readonly VoltronicFrameSpecification Upstream50HzSpecification = new()
+    {
+        StatusByte2 = VoltronicFixtureConstants.StatusByte2European12V50Hz220V,
+        FrequencyPeriodTicksBytes = VoltronicBinaryFrameBuilder.EncodeBigEndianBytes(
+            VoltronicFixtureConstants.FrequencyTicks50HzReference,
+            VoltronicFixtureConstants.FrequencyTicks2ByteWidth),
+        FrequencyTimerClockBytes = VoltronicBinaryFrameBuilder.EncodeBigEndianBytes(
+            VoltronicFixtureConstants.FrequencyClock1228800Hz,
+            VoltronicFixtureConstants.FrequencyClockByteWidth)
+    };
+
+    private static readonly VoltronicFrameSpecification Dsp4ByteTimerSpecification = new()
+    {
+        FrequencyPeriodTicksBytes = VoltronicBinaryFrameBuilder.EncodeBigEndianBytes(
+            VoltronicFixtureConstants.Dsp4ByteTimerTicks,
+            VoltronicFixtureConstants.DspTimerByteWidth),
+        FrequencyTimerClockBytes = VoltronicBinaryFrameBuilder.EncodeBigEndianBytes(
+            VoltronicFixtureConstants.Dsp4ByteTimerClockHz,
+            VoltronicFixtureConstants.DspTimerByteWidth)
+    };
 
     /// <summary>
-    /// Canonical 27-byte golden frame verified against physical Forza FX-2200 LCD UPS:
-    /// In: 117.3V, Out: 117.3V, Load: 14% (126W), Freq: 60.0Hz, Bat: 27.41V, Status: LineNormal (0x08), Beeper Muted.
+    /// Canonical 27-byte golden frame verified against physical Forza FX-2200 LCD UPS.
     /// </summary>
-    public static readonly byte[] GoldenFrame = VoltronicBinaryFrameBuilder.Build();
+    public static byte[] GoldenFrame => VoltronicBinaryFrameBuilder.Build(GoldenSpecification);
 
     /// <summary>
     /// Live NT-2401PRO 28-byte QS\r frame (59.97 Hz, 0xA1 ratings, null bytes in T0/T2/T6).
     /// </summary>
-    public static readonly byte[] Nt2401ProLiveFrame = VoltronicBinaryFrameBuilder.Build(
-        statusByte1: VoltronicProtocolConstants.Nt2401ProStatusByte1BeeperOn,
-        statusByte2: VoltronicProtocolConstants.StatusByte2Nominal,
-        loadPercentage: VoltronicProtocolConstants.Nt2401ProLoadPercentage,
-        inVHexHigh: VoltronicProtocolConstants.Nt2401ProVoltageHexHigh,
-        inVHexLow: VoltronicProtocolConstants.Nt2401ProVoltageHexLow,
-        outVHexHigh: VoltronicProtocolConstants.Nt2401ProVoltageHexHigh,
-        outVHexLow: VoltronicProtocolConstants.Nt2401ProVoltageHexLow,
-        freq1Low: VoltronicProtocolConstants.Nt2401ProFrequencyPart1Low,
-        freq2Bytes: VoltronicBinaryFrameBuilder.EncodeBigEndianBytes(
-            VoltronicProtocolConstants.FrequencyClock1228800Hz,
-            VoltronicProtocolConstants.FrequencyClockByteWidth));
+    public static byte[] Nt2401ProLiveFrame => VoltronicBinaryFrameBuilder.Build(Nt2401ProLiveSpecification);
 
     /// <summary>
-    /// 50 Hz upstream frame (T5=0x5FD7, T6=0x12C000 -> 50.08 Hz, Status2=0x02).
+    /// 50 Hz upstream frame (50.08 Hz, Status2 = 0x02).
     /// </summary>
-    public static readonly byte[] Upstream50HzFrame = VoltronicBinaryFrameBuilder.Build(
-        statusByte2: VoltronicProtocolConstants.StatusByte2European12V50Hz220V,
-        freq1Bytes: VoltronicBinaryFrameBuilder.EncodeBigEndianBytes(
-            VoltronicProtocolConstants.FrequencyTicks50HzReference,
-            VoltronicProtocolConstants.FrequencyTicks2ByteWidth),
-        freq2Bytes: VoltronicBinaryFrameBuilder.EncodeBigEndianBytes(
-            VoltronicProtocolConstants.FrequencyClock1228800Hz,
-            VoltronicProtocolConstants.FrequencyClockByteWidth));
+    public static byte[] Upstream50HzFrame => VoltronicBinaryFrameBuilder.Build(Upstream50HzSpecification);
 
     /// <summary>
-    /// 4-byte DSP timer frame (T5=0x00190000, T6=0x05DC0000 -> 60.0 Hz).
+    /// 4-byte DSP timer frame (60.0 Hz).
     /// </summary>
-    public static readonly byte[] Dsp4ByteTimerFrame = VoltronicBinaryFrameBuilder.Build(
-        freq1Bytes: VoltronicBinaryFrameBuilder.EncodeBigEndianBytes(
-            VoltronicProtocolConstants.Dsp4ByteTimerTicks,
-            VoltronicProtocolConstants.DspTimerByteWidth),
-        freq2Bytes: VoltronicBinaryFrameBuilder.EncodeBigEndianBytes(
-            VoltronicProtocolConstants.Dsp4ByteTimerClockHz,
-            VoltronicProtocolConstants.DspTimerByteWidth));
+    public static byte[] Dsp4ByteTimerFrame => VoltronicBinaryFrameBuilder.Build(Dsp4ByteTimerSpecification);
 
     public static string GoldenFrameString => Encoding.Latin1.GetString(GoldenFrame);
 
@@ -71,21 +96,23 @@ public static class VoltronicFrameMother
         byte outVHexLow = VoltronicProtocolConstants.NominalOutputVoltageHexLow,
         byte outVRatio = VoltronicProtocolConstants.NominalOutputVoltageRatio)
     {
-        return VoltronicBinaryFrameBuilder.Build(
-            statusByte1: statusByte1,
-            statusByte2: statusByte2,
-            loadPercentage: loadPercentage,
-            inVHexHigh: inVHexHigh,
-            inVHexLow: inVHexLow,
-            inVRatio: inVRatio,
-            outVHexHigh: outVHexHigh,
-            outVHexLow: outVHexLow,
-            outVRatio: outVRatio);
+        var specification = new VoltronicFrameSpecification
+        {
+            StatusByte1 = statusByte1,
+            StatusByte2 = statusByte2,
+            LoadPercentage = loadPercentage,
+            InputVoltageBytes = [inVHexHigh, inVHexLow],
+            InputVoltageRatio = inVRatio,
+            OutputVoltageBytes = [outVHexHigh, outVHexLow],
+            OutputVoltageRatio = outVRatio
+        };
+
+        return VoltronicBinaryFrameBuilder.Build(specification);
     }
 
     public static byte[] CreateSelfTestFrame()
     {
-        return CreateFrame(statusByte1: VoltronicProtocolConstants.StatusSelfTest);
+        return CreateFrame(statusByte1: VoltronicFixtureConstants.StatusSelfTest);
     }
 
     public static byte[] CreateIdleFrame()
@@ -96,26 +123,33 @@ public static class VoltronicFrameMother
     public static byte[] CreateOnBatteryFrame(byte loadPercentage = DefaultOnBatteryLoadPercentage)
     {
         return CreateFrame(
-            statusByte1: VoltronicProtocolConstants.StatusOnBattery,
+            statusByte1: VoltronicFixtureConstants.StatusOnBattery,
             loadPercentage: loadPercentage,
-            inVHexHigh: VoltronicProtocolConstants.FaultBatteryLowZeroVoltageByte,
-            inVHexLow: VoltronicProtocolConstants.FaultBatteryLowZeroVoltageByte);
+            inVHexHigh: VoltronicFixtureConstants.FaultBatteryLowZeroVoltageByte,
+            inVHexLow: VoltronicFixtureConstants.FaultBatteryLowZeroVoltageByte);
     }
 
     public static byte[] CreateBatteryLowFrame()
     {
         return CreateFrame(
-            statusByte1: VoltronicProtocolConstants.StatusBatteryLow,
-            loadPercentage: VoltronicProtocolConstants.BatteryLowLoadPercentage,
-            inVHexHigh: VoltronicProtocolConstants.FaultBatteryLowZeroVoltageByte,
-            inVHexLow: VoltronicProtocolConstants.FaultBatteryLowZeroVoltageByte);
+            statusByte1: VoltronicFixtureConstants.StatusBatteryLow,
+            loadPercentage: VoltronicFixtureConstants.BatteryLowLoadPercentage,
+            inVHexHigh: VoltronicFixtureConstants.FaultBatteryLowZeroVoltageByte,
+            inVHexLow: VoltronicFixtureConstants.FaultBatteryLowZeroVoltageByte);
     }
 
     public static byte[] CreateAvrFrame(
-        double inV = DefaultAvrInputVoltage,
-        double outV = DefaultAvrOutputVoltage)
+        double inputVoltageAc = DefaultAvrInputVoltageAc,
+        double outputVoltageAc = DefaultAvrOutputVoltageAc)
     {
-        return CreateFrame(statusByte1: VoltronicProtocolConstants.StatusAvr);
+        var specification = new VoltronicFrameSpecification
+        {
+            StatusByte1 = VoltronicFixtureConstants.StatusAvr,
+            InputVoltageBytes = EncodeVoltageAcBytes(inputVoltageAc),
+            OutputVoltageBytes = EncodeVoltageAcBytes(outputVoltageAc)
+        };
+
+        return VoltronicBinaryFrameBuilder.Build(specification);
     }
 
     public static byte[] CreateFaultFrame()
@@ -125,14 +159,14 @@ public static class VoltronicFrameMother
 
     public static byte[] CreateCorruptedMissingHash()
     {
-        byte[] frame = (byte[])GoldenFrame.Clone();
+        byte[] frame = GoldenFrame;
         frame[0] = VoltronicProtocolConstants.SpaceDelimiter;
         return frame;
     }
 
     public static byte[] CreateCorruptedMissingCr()
     {
-        byte[] frame = (byte[])GoldenFrame.Clone();
+        byte[] frame = GoldenFrame;
         frame[^1] = VoltronicProtocolConstants.SpaceDelimiter;
         return frame;
     }
@@ -153,9 +187,20 @@ public static class VoltronicFrameMother
         return
         [
             VoltronicProtocolConstants.NakHeader,
-            VoltronicProtocolConstants.NakLetterA,
-            VoltronicProtocolConstants.NakLetterK,
+            VoltronicFixtureConstants.NakLetterA,
+            VoltronicFixtureConstants.NakLetterK,
             VoltronicProtocolConstants.CarriageReturn
         ];
+    }
+
+    private static byte[] EncodeVoltageAcBytes(double voltageAc)
+    {
+        double clampedVoltage = Math.Max(0.0, voltageAc);
+        ulong rawCount = (ulong)Math.Round(
+            clampedVoltage * VoltronicProtocolConstants.VoltageDivisor /
+            VoltronicProtocolConstants.NominalInputVoltageRatio,
+            MidpointRounding.AwayFromZero);
+
+        return VoltronicBinaryFrameBuilder.EncodeBigEndianBytes(rawCount, VoltageTokenByteWidth);
     }
 }

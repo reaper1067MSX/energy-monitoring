@@ -7,7 +7,7 @@ public enum UpsDiagnosticInquiry
 {
     ProtocolIdentity,
     QuickStatus,
-    MegatecStatus,
+    StandardAsciiStatus,
     ProtocolId,
     DeviceId,
     RatedInformation,

@@ -21,7 +21,4 @@ public static class HidConstants
     public const int DefaultReadTimeoutMs = 400;
     public const int DefaultWriteTimeoutMs = 1000;
     public const int DefaultQueryTimeoutMs = 1500;
-
-    // Timing Constants (Seconds)
-    public const int SelfTestDurationSeconds = 10;
 }

@@ -10,13 +10,45 @@ public sealed class VoltronicParser
 {
     private const int BitsPerByte = 8;
     private const int MaxBigEndianByteWidth = 8;
+    private const int MinimumLoadPercentage = 0;
+    private const int MaximumLoadPercentage = 100;
+    private const double PercentageScaleDivisor = 100.0;
+    private const double BatteryCellCount = 2.0;
     private const double SingleBatteryBankVolts = 12.0;
     private const double NominalFrequency50Hz = 50.0;
     private const double NominalFrequency60Hz = 60.0;
+    private const double DefaultFallbackVoltageAc = 120.0;
+    private const int FrequencyDecimalPrecision = 2;
+    private const int VoltageDecimalPrecision = 1;
+    private const int BatteryVoltageDecimalPrecision = 2;
+
+    private const int InputVoltageTokenIndex = 0;
+    private const int InputVoltageRatioTokenIndex = 1;
+    private const int OutputVoltageTokenIndex = 2;
+    private const int OutputVoltageRatioTokenIndex = 3;
+    private const int LoadPercentageTokenIndex = 4;
+    private const int FrequencyPeriodTicksTokenIndex = 5;
+    private const int FrequencyTimerClockTokenIndex = 6;
+    private const int MinimumFrequencyTokenCount = 7;
+    private const int BatteryVoltageHighTokenIndex = 7;
+    private const int BatteryVoltageLowTokenIndex = 8;
+    private const int StatusByte1TokenIndex = 9;
+    private const int MinimumStatusByte1TokenCount = 10;
+
+    private const int NominalAcCode110V = 0;
+    private const int NominalAcCode120V = 1;
+    private const int NominalAcCode220V = 2;
+    private const int NominalAcCode230V = 3;
+    private const int NominalAcCode240V = 4;
+    private const double NominalAc110Volts = 110.0;
+    private const double NominalAc120Volts = 120.0;
+    private const double NominalAc220Volts = 220.0;
+    private const double NominalAc230Volts = 230.0;
+    private const double NominalAc240Volts = 240.0;
 
     private readonly IBatteryAutonomyEstimator _estimator;
     private readonly double _capacityFactor;
-    private bool _lastBit2;
+    private bool _wasSelfTestBitActive;
     private DateTimeOffset? _selfTestStartTime;
 
     public VoltronicParser(IBatteryAutonomyEstimator? estimator = null, double capacityFactor = 1.0)
@@ -38,25 +70,42 @@ public sealed class VoltronicParser
             return previous;
         }
 
-        double inputVoltageAc = DecodeVoltage(tokens[0], tokens[1]);
-        double outputVoltageAc = DecodeVoltage(tokens[2], tokens[3]);
-        int loadPercentage = Math.Clamp(tokens[4].Length > 0 ? tokens[4][0] : 0, 0, 100);
+        double inputVoltageAc = DecodeVoltage(
+            tokens[InputVoltageTokenIndex],
+            tokens[InputVoltageRatioTokenIndex]);
+        double outputVoltageAc = DecodeVoltage(
+            tokens[OutputVoltageTokenIndex],
+            tokens[OutputVoltageRatioTokenIndex]);
+
+        int rawLoad = tokens[LoadPercentageTokenIndex].Length > 0
+            ? tokens[LoadPercentageTokenIndex][0]
+            : MinimumLoadPercentage;
+        int loadPercentage = Math.Clamp(rawLoad, MinimumLoadPercentage, MaximumLoadPercentage);
+
         int activeLoadWatts = (int)Math.Round(
-            (double)loadPercentage * VoltronicProtocolConstants.DefaultRatedWatts / 100.0,
+            (double)loadPercentage * VoltronicProtocolConstants.DefaultRatedWatts / PercentageScaleDivisor,
             MidpointRounding.AwayFromZero);
 
-        double frequencyHz = tokens.Count >= 7
-            ? DecodeFrequencyHz(tokens[5], tokens[6])
+        double frequencyHz = tokens.Count >= MinimumFrequencyTokenCount
+            ? DecodeFrequencyHz(
+                tokens[FrequencyPeriodTicksTokenIndex],
+                tokens[FrequencyTimerClockTokenIndex])
             : VoltronicProtocolConstants.DefaultNominalFrequencyHz;
 
-        int batteryHighByte = tokens[7].Length > 0 ? tokens[7][0] : 0;
-        int batteryLowByte = tokens[8].Length > 0 ? tokens[8][0] : 0;
+        int batteryVoltageHighByte = tokens[BatteryVoltageHighTokenIndex].Length > 0
+            ? tokens[BatteryVoltageHighTokenIndex][0]
+            : 0;
+        int batteryVoltageLowByte = tokens[BatteryVoltageLowTokenIndex].Length > 0
+            ? tokens[BatteryVoltageLowTokenIndex][0]
+            : 0;
         double batteryVoltageDc = Math.Round(
-            (batteryHighByte * batteryLowByte) / VoltronicProtocolConstants.BatteryVoltageDivisor,
-            2);
-        double cellVoltageDc = Math.Round(batteryVoltageDc / 2.0, 2);
+            (batteryVoltageHighByte * batteryVoltageLowByte) / VoltronicProtocolConstants.BatteryVoltageDivisor,
+            BatteryVoltageDecimalPrecision);
+        double cellVoltageDc = Math.Round(batteryVoltageDc / BatteryCellCount, BatteryVoltageDecimalPrecision);
 
-        byte statusByte1 = tokens.Count >= 10 && tokens[9].Length > 0 ? tokens[9][0] : (byte)0;
+        byte statusByte1 = tokens.Count >= MinimumStatusByte1TokenCount && tokens[StatusByte1TokenIndex].Length > 0
+            ? tokens[StatusByte1TokenIndex][0]
+            : (byte)0;
         DateTimeOffset timestamp = now ?? DateTimeOffset.UtcNow;
         bool isTestInProgress = UpdateSelfTestLatch(statusByte1, timestamp);
 
@@ -185,26 +234,44 @@ public sealed class VoltronicParser
     }
 
     /// <summary>
-    /// Decodes grid frequency (Hz) from arbitrary-width T5 period ticks and T6 timer clock Hz.
+    /// Decodes grid frequency (Hz) from T5 period ticks and T6 timer clock Hz, returning null if empty, zero, or out of range.
+    /// </summary>
+    public static double? TryDecodeFrequencyHz(
+        ReadOnlySpan<byte> periodTicksToken,
+        ReadOnlySpan<byte> timerClockToken)
+    {
+        if (periodTicksToken.IsEmpty || timerClockToken.IsEmpty)
+        {
+            return null;
+        }
+
+        ulong decodedPeriodTicks = DecodeBigEndianUInt64(periodTicksToken);
+        ulong decodedTimerClockHz = DecodeBigEndianUInt64(timerClockToken);
+        if (decodedPeriodTicks == 0 || decodedTimerClockHz == 0)
+        {
+            return null;
+        }
+
+        double frequencyHz = Math.Round(
+            (double)decodedTimerClockHz / decodedPeriodTicks,
+            FrequencyDecimalPrecision);
+
+        bool isWithinValidRange =
+            frequencyHz >= VoltronicProtocolConstants.MinValidFrequencyHz &&
+            frequencyHz <= VoltronicProtocolConstants.MaxValidFrequencyHz;
+
+        return isWithinValidRange ? frequencyHz : null;
+    }
+
+    /// <summary>
+    /// Decodes grid frequency (Hz) from arbitrary-width T5 period ticks and T6 timer clock Hz, falling back on invalid tokens.
     /// </summary>
     public static double DecodeFrequencyHz(
         ReadOnlySpan<byte> periodTicks,
         ReadOnlySpan<byte> timerClockHz,
         double fallbackHz = VoltronicProtocolConstants.DefaultNominalFrequencyHz)
     {
-        ulong decodedPeriodTicks = DecodeBigEndianUInt64(periodTicks);
-        ulong decodedTimerClockHz = DecodeBigEndianUInt64(timerClockHz);
-        if (decodedPeriodTicks == 0 || decodedTimerClockHz == 0)
-        {
-            return fallbackHz;
-        }
-
-        double frequencyHz = Math.Round((double)decodedTimerClockHz / decodedPeriodTicks, 2);
-        bool isWithinValidRange =
-            frequencyHz >= VoltronicProtocolConstants.MinValidFrequencyHz &&
-            frequencyHz <= VoltronicProtocolConstants.MaxValidFrequencyHz;
-
-        return isWithinValidRange ? frequencyHz : fallbackHz;
+        return TryDecodeFrequencyHz(periodTicks, timerClockHz) ?? fallbackHz;
     }
 
     /// <summary>
@@ -222,11 +289,11 @@ public sealed class VoltronicParser
 
         double? nominalOutputVoltageAc = (statusByte2 & VoltronicProtocolConstants.StatusByte2NominalAcMask) switch
         {
-            0 => 110.0,
-            1 => 120.0,
-            2 => 220.0,
-            3 => 230.0,
-            4 => 240.0,
+            NominalAcCode110V => NominalAc110Volts,
+            NominalAcCode120V => NominalAc120Volts,
+            NominalAcCode220V => NominalAc220Volts,
+            NominalAcCode230V => NominalAc230Volts,
+            NominalAcCode240V => NominalAc240Volts,
             _ => null
         };
 
@@ -237,21 +304,23 @@ public sealed class VoltronicParser
             nominalOutputVoltageAc);
     }
 
-    public static double DecodeVoltage(byte[] hexVal, byte[] ratio)
+    public static double DecodeVoltage(byte[] decodedVoltageRawCount, byte[] ratio)
     {
-        if (hexVal == null || ratio == null || ratio.Length == 0)
+        if (decodedVoltageRawCount == null || ratio == null || ratio.Length == 0)
         {
             return 0.0;
         }
 
-        ulong rawValue = DecodeBigEndianUInt64(hexVal);
-        return Math.Round((double)rawValue * ratio[0] / VoltronicProtocolConstants.VoltageDivisor, 1);
+        ulong rawValue = DecodeBigEndianUInt64(decodedVoltageRawCount);
+        return Math.Round(
+            (double)rawValue * ratio[0] / VoltronicProtocolConstants.VoltageDivisor,
+            VoltageDecimalPrecision);
     }
 
     public static (UpsOperationalState State, bool IsBeeperMuted, bool IsTestInProgress) DecodeStatusBits(
         byte statusByte1,
-        double inV = 120.0,
-        double outV = 120.0)
+        double inV = DefaultFallbackVoltageAc,
+        double outV = DefaultFallbackVoltageAc)
     {
         UpsOperationalState state;
         if ((statusByte1 & VoltronicProtocolConstants.StatusFaultMask) != 0)
@@ -268,7 +337,8 @@ public sealed class VoltronicParser
             state = UpsOperationalState.OnBattery;
         }
         else if ((statusByte1 & VoltronicProtocolConstants.StatusAvrBoostBuckMask) != 0 ||
-                 (outV > 0 && Math.Abs(inV - outV) / outV > VoltronicProtocolConstants.MainsDivergenceThreshold))
+                 (outV > 0 &&
+                  Math.Abs(inV - outV) / outV > VoltronicProtocolConstants.MainsDivergenceThreshold))
         {
             state = UpsOperationalState.ChargingAvr;
         }
@@ -284,7 +354,7 @@ public sealed class VoltronicParser
 
     public void ResetSelfTest()
     {
-        _lastBit2 = false;
+        _wasSelfTestBitActive = false;
         _selfTestStartTime = null;
     }
 
@@ -293,20 +363,20 @@ public sealed class VoltronicParser
         bool isSelfTestBitActive = (statusByte1 & VoltronicProtocolConstants.StatusSelfTestActiveMask) != 0;
         if (!isSelfTestBitActive)
         {
-            _lastBit2 = false;
+            _wasSelfTestBitActive = false;
             _selfTestStartTime = null;
             return false;
         }
 
-        if (!_lastBit2)
+        if (!_wasSelfTestBitActive)
         {
             _selfTestStartTime = timestamp;
-            _lastBit2 = true;
+            _wasSelfTestBitActive = true;
             return true;
         }
 
         return _selfTestStartTime.HasValue &&
-               (timestamp - _selfTestStartTime.Value).TotalSeconds < VoltronicProtocolConstants.SelfTestDurationSeconds;
+               (timestamp - _selfTestStartTime.Value).TotalSeconds < VoltronicProtocolConstants.SelfTestMaxDurationSeconds;
     }
 
     private static byte DeescapeByte(byte escapeCode)

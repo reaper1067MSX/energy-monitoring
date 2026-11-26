@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using System.Text;
 using Microsoft.Win32.SafeHandles;
 using VoltTray.Infrastructure.Protocol;
@@ -43,6 +44,68 @@ public static class HidReportFramer
         }
 
         return true;
+    }
+
+    internal static byte[]? ReadFramedResponse(
+        IHidConnection connection,
+        string command,
+        CancellationToken cancellationToken)
+    {
+        List<byte> response = new();
+        bool requireFramingHeader = command.StartsWith(
+            VoltronicProtocolConstants.QueryCommandPrefix,
+            StringComparison.OrdinalIgnoreCase);
+
+        var stopwatch = Stopwatch.StartNew();
+        while (stopwatch.ElapsedMilliseconds < HidConstants.DefaultQueryTimeoutMs)
+        {
+            if (cancellationToken.IsCancellationRequested || !connection.IsOpen)
+            {
+                return null;
+            }
+
+            byte[] inputReport = new byte[HidConstants.ReportLength];
+            int bytesRead = connection.ReadReport(inputReport, HidConstants.DefaultReadTimeoutMs);
+            if (cancellationToken.IsCancellationRequested)
+            {
+                return null;
+            }
+
+            if (bytesRead <= HidConstants.ReportPayloadStartIndex)
+            {
+                continue;
+            }
+
+            int payloadLength = bytesRead - HidConstants.ReportPayloadStartIndex;
+            ReadOnlySpan<byte> payloadSlice = inputReport.AsSpan(
+                HidConstants.ReportPayloadStartIndex,
+                payloadLength);
+
+            if (AppendReportBytes(response, payloadSlice, requireFramingHeader))
+            {
+                return response.ToArray();
+            }
+        }
+
+        return response.Count > 0 ? response.ToArray() : null;
+    }
+
+    internal static bool ReadControlAcknowledgement(
+        IHidConnection connection,
+        CancellationToken cancellationToken)
+    {
+        byte[] inputReport = new byte[HidConstants.ReportLength];
+        int bytesRead = connection.ReadReport(inputReport, HidConstants.DefaultReadTimeoutMs);
+        if (cancellationToken.IsCancellationRequested)
+        {
+            return false;
+        }
+
+        bool isNak =
+            bytesRead > HidConstants.ReportPayloadStartIndex &&
+            inputReport[HidConstants.ReportPayloadStartIndex] == VoltronicProtocolConstants.NakHeader;
+
+        return !isNak;
     }
 
     /// <summary>

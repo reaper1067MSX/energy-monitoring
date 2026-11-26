@@ -285,7 +285,7 @@ public sealed class Win32HidUpsPort : IUpsDevicePort
             fallbackResult: (null, 0L),
             executeAfterWrite: (connection, linkedToken, generation) =>
             {
-                byte[]? response = ReadFramedResponse(connection, command, linkedToken);
+                byte[]? response = HidReportFramer.ReadFramedResponse(connection, command, linkedToken);
                 return (response, response != null ? generation : 0L);
             });
     }
@@ -297,20 +297,7 @@ public sealed class Win32HidUpsPort : IUpsDevicePort
             cancellationToken,
             fallbackResult: false,
             executeAfterWrite: (connection, linkedToken, _) =>
-            {
-                byte[] inputReport = new byte[HidConstants.ReportLength];
-                int bytesRead = connection.ReadReport(inputReport, HidConstants.DefaultReadTimeoutMs);
-                if (linkedToken.IsCancellationRequested)
-                {
-                    return false;
-                }
-
-                bool isNak =
-                    bytesRead > HidConstants.ReportPayloadStartIndex &&
-                    inputReport[HidConstants.ReportPayloadStartIndex] == VoltronicProtocolConstants.NakHeader;
-
-                return !isNak;
-            });
+                HidReportFramer.ReadControlAcknowledgement(connection, linkedToken));
     }
 
     private async Task<TResult> ExecuteSerializedCommandAsync<TResult>(
@@ -319,12 +306,7 @@ public sealed class Win32HidUpsPort : IUpsDevicePort
         TResult fallbackResult,
         Func<IHidConnection, CancellationToken, long, TResult> executeAfterWrite)
     {
-        if (cancellationToken.IsCancellationRequested)
-        {
-            return fallbackResult;
-        }
-
-        if (!IsConnected && !TryConnect())
+        if (cancellationToken.IsCancellationRequested || (!IsConnected && !TryConnect()))
         {
             return fallbackResult;
         }
@@ -344,12 +326,7 @@ public sealed class Win32HidUpsPort : IUpsDevicePort
         {
             await _ioGate.WaitAsync(linkedCts.Token).ConfigureAwait(false);
         }
-        catch (OperationCanceledException)
-        {
-            linkedCts.Dispose();
-            return fallbackResult;
-        }
-        catch (ObjectDisposedException)
+        catch (Exception exception) when (exception is OperationCanceledException or ObjectDisposedException)
         {
             linkedCts.Dispose();
             return fallbackResult;
@@ -399,50 +376,6 @@ public sealed class Win32HidUpsPort : IUpsDevicePort
             ReleaseIoGateSafely();
             linkedCts.Dispose();
         }
-    }
-
-    private static byte[]? ReadFramedResponse(
-        IHidConnection connection,
-        string command,
-        CancellationToken cancellationToken)
-    {
-        List<byte> response = new();
-        bool requireFramingHeader = command.StartsWith(
-            VoltronicProtocolConstants.QueryCommandPrefix,
-            StringComparison.OrdinalIgnoreCase);
-
-        var stopwatch = Stopwatch.StartNew();
-        while (stopwatch.ElapsedMilliseconds < HidConstants.DefaultQueryTimeoutMs)
-        {
-            if (cancellationToken.IsCancellationRequested || !connection.IsOpen)
-            {
-                return null;
-            }
-
-            byte[] inputReport = new byte[HidConstants.ReportLength];
-            int bytesRead = connection.ReadReport(inputReport, HidConstants.DefaultReadTimeoutMs);
-            if (cancellationToken.IsCancellationRequested)
-            {
-                return null;
-            }
-
-            if (bytesRead <= HidConstants.ReportPayloadStartIndex)
-            {
-                continue;
-            }
-
-            int payloadLength = bytesRead - HidConstants.ReportPayloadStartIndex;
-            ReadOnlySpan<byte> payloadSlice = inputReport.AsSpan(
-                HidConstants.ReportPayloadStartIndex,
-                payloadLength);
-
-            if (HidReportFramer.AppendReportBytes(response, payloadSlice, requireFramingHeader))
-            {
-                return response.ToArray();
-            }
-        }
-
-        return response.Count > 0 ? response.ToArray() : null;
     }
 
     private void ReleaseIoGateSafely()

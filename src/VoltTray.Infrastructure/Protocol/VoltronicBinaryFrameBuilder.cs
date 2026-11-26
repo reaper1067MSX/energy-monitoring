@@ -1,7 +1,7 @@
 namespace VoltTray.Infrastructure.Protocol;
 
 /// <summary>
-/// Builds and escapes binary Voltronic Protocol 'T' (QS-Hex) telemetry frames for testing and simulation.
+/// Builds and escapes binary Voltronic Protocol 'T' (QS-Hex) telemetry frames from a <see cref="VoltronicFrameSpecification"/>.
 /// </summary>
 public static class VoltronicBinaryFrameBuilder
 {
@@ -64,85 +64,56 @@ public static class VoltronicBinaryFrameBuilder
     }
 
     /// <summary>
-    /// Builds a Voltronic Taurus Protocol 'T' (QS-Hex) binary telemetry frame.
+    /// Builds a Voltronic Taurus Protocol 'T' (QS-Hex) binary telemetry frame from the provided specification.
     /// </summary>
-    public static byte[] Build(
-        byte statusByte1 = VoltronicProtocolConstants.StatusLineNormal,
-        byte statusByte2 = VoltronicProtocolConstants.StatusByte2Nominal,
-        byte loadPercentage = VoltronicProtocolConstants.NominalLoadPercentage,
-        byte inVHexHigh = VoltronicProtocolConstants.NominalInputVoltageHexHigh,
-        byte inVHexLow = VoltronicProtocolConstants.NominalInputVoltageHexLow,
-        byte inVRatio = VoltronicProtocolConstants.NominalInputVoltageRatio,
-        byte outVHexHigh = VoltronicProtocolConstants.NominalOutputVoltageHexHigh,
-        byte outVHexLow = VoltronicProtocolConstants.NominalOutputVoltageHexLow,
-        byte outVRatio = VoltronicProtocolConstants.NominalOutputVoltageRatio,
-        byte freq1High = VoltronicProtocolConstants.NominalFrequencyPart1High,
-        byte freq1Low = VoltronicProtocolConstants.NominalFrequencyPart1Low,
-        byte freq2High = VoltronicProtocolConstants.NominalFrequencyPart2High,
-        byte freq2Low = VoltronicProtocolConstants.NominalFrequencyPart2Low,
-        byte bat1 = VoltronicProtocolConstants.NominalBatteryVoltagePart1,
-        byte bat2 = VoltronicProtocolConstants.NominalBatteryVoltagePart2,
-        byte[]? freq1Bytes = null,
-        byte[]? freq2Bytes = null)
+    public static byte[] Build(VoltronicFrameSpecification specification)
     {
+        ArgumentNullException.ThrowIfNull(specification);
+
         var frame = new List<byte>(DefaultFrameBufferCapacity);
         frame.Add(VoltronicProtocolConstants.FrameHeaderHash);
 
-        AppendEscapedByte(frame, inVHexHigh);
-        AppendEscapedByte(frame, inVHexLow);
+        AppendEscapedToken(frame, specification.InputVoltageBytes);
         frame.Add(VoltronicProtocolConstants.SpaceDelimiter);
 
-        AppendEscapedByte(frame, inVRatio);
+        AppendEscapedByte(frame, specification.InputVoltageRatio);
         frame.Add(VoltronicProtocolConstants.SpaceDelimiter);
 
-        AppendEscapedByte(frame, outVHexHigh);
-        AppendEscapedByte(frame, outVHexLow);
+        AppendEscapedToken(frame, specification.OutputVoltageBytes);
         frame.Add(VoltronicProtocolConstants.SpaceDelimiter);
 
-        AppendEscapedByte(frame, outVRatio);
+        AppendEscapedByte(frame, specification.OutputVoltageRatio);
         frame.Add(VoltronicProtocolConstants.SpaceDelimiter);
 
-        AppendEscapedByte(frame, loadPercentage);
+        AppendEscapedByte(frame, specification.LoadPercentage);
         frame.Add(VoltronicProtocolConstants.SpaceDelimiter);
 
-        AppendFrequencyTokenBytes(frame, freq1Bytes, freq1High, freq1Low);
+        AppendEscapedToken(frame, specification.FrequencyPeriodTicksBytes);
         frame.Add(VoltronicProtocolConstants.SpaceDelimiter);
 
-        AppendFrequencyTokenBytes(frame, freq2Bytes, freq2High, freq2Low);
+        AppendEscapedToken(frame, specification.FrequencyTimerClockBytes);
         frame.Add(VoltronicProtocolConstants.SpaceDelimiter);
 
-        AppendEscapedByte(frame, bat1);
+        AppendEscapedByte(frame, specification.BatteryVoltageHighByte);
         frame.Add(VoltronicProtocolConstants.SpaceDelimiter);
 
-        AppendEscapedByte(frame, bat2);
+        AppendEscapedByte(frame, specification.BatteryVoltageLowByte);
         frame.Add(VoltronicProtocolConstants.SpaceDelimiter);
 
-        AppendEscapedByte(frame, statusByte1);
+        AppendEscapedByte(frame, specification.StatusByte1);
         frame.Add(VoltronicProtocolConstants.SpaceDelimiter);
 
-        AppendEscapedByte(frame, statusByte2);
+        AppendEscapedByte(frame, specification.StatusByte2);
         frame.Add(VoltronicProtocolConstants.CarriageReturn);
 
         return frame.ToArray();
     }
 
-    private static void AppendFrequencyTokenBytes(
-        List<byte> target,
-        byte[]? overrideBytes,
-        byte highByte,
-        byte lowByte)
+    private static void AppendEscapedToken(List<byte> target, byte[] tokenBytes)
     {
-        if (overrideBytes is { Length: > 0 })
+        foreach (byte tokenByte in tokenBytes)
         {
-            foreach (byte tokenByte in overrideBytes)
-            {
-                AppendEscapedByte(target, tokenByte);
-            }
-
-            return;
+            AppendEscapedByte(target, tokenByte);
         }
-
-        AppendEscapedByte(target, highByte);
-        AppendEscapedByte(target, lowByte);
     }
 }
