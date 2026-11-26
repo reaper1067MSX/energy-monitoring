@@ -1,3 +1,5 @@
+using VoltTray.Shared;
+
 namespace VoltTray.Hosting;
 
 /// <summary>
@@ -17,6 +19,6 @@ public sealed class InvalidLaunchModeStrategy : IApplicationModeStrategy
     public int Execute()
     {
         _output.WriteLine(_options.ErrorMessage);
-        return IApplicationModeStrategy.FailureExitCode;
+        return ApplicationExitCodes.Failure;
     }
 }

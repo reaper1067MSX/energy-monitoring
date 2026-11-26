@@ -1,4 +1,5 @@
 using VoltTray.UI.Models;
+using VoltTray.UI.Tokens;
 using VoltTray.UI.Views;
 
 namespace VoltTray.UI.Dialogs;
@@ -12,7 +13,7 @@ public sealed class ExitDialog : IExitDialogView
 {
     public const int DialogWidth = 380;
     public const int DialogHeight = 220;
-    public const int ActionButtonHeight = 44;
+    public static int ActionButtonHeight => DesignTokens.Sizes.ButtonHeight;
 
     public Func<UITheme, ExitDialogResult>? MockDialogHandler { get; set; }
 

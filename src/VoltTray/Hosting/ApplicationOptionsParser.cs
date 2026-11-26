@@ -1,6 +1,7 @@
 using System.Globalization;
 using VoltTray.Core.Models;
 using VoltTray.Infrastructure.Protocol;
+using VoltTray.Shared;
 
 namespace VoltTray.Hosting;
 
@@ -9,9 +10,6 @@ namespace VoltTray.Hosting;
 /// </summary>
 public static class ApplicationOptionsParser
 {
-    public const int DefaultPollingIntervalMs = 1500;
-    public const int MinimumPollingIntervalMs = 250;
-
     private const string FlagPrefix = "--";
     private const string InspectFlag = "--inspect";
     private const string SimulateFlag = "--simulate";
@@ -30,7 +28,7 @@ public static class ApplicationOptionsParser
         bool isInspectMode = false;
         bool isSimulation = false;
         bool isDryRun = false;
-        int pollingIntervalMs = DefaultPollingIntervalMs;
+        int pollingIntervalMs = ApplicationDefaults.DefaultPollingIntervalMs;
         bool includeAllHidDevices = false;
         UpsDiagnosticInquiry inquiry = UpsDiagnosticInquiry.QuickStatus;
         string? exportPath = null;
@@ -81,7 +79,7 @@ public static class ApplicationOptionsParser
                         $"Invalid value for {IntervalFlag}: '{rawInterval}'. Expected a positive integer.");
                 }
 
-                pollingIntervalMs = Math.Max(MinimumPollingIntervalMs, parsedInterval);
+                pollingIntervalMs = Math.Max(ApplicationDefaults.MinimumPollingIntervalMs, parsedInterval);
                 continue;
             }
 

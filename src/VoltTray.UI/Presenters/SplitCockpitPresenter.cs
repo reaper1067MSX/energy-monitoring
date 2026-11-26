@@ -1,14 +1,13 @@
 using VoltTray.Core.Models;
+using VoltTray.Shared;
 using VoltTray.UI.Models;
+using VoltTray.UI.Tokens;
 using VoltTray.UI.Views;
 
 namespace VoltTray.UI.Presenters;
 
 public class SplitCockpitPresenter
 {
-    public const string DefaultUpsDisplayName = "VoltTray UPS";
-    private const int DefaultDpi = 96;
-
     private readonly ITrayIconView _trayIcon;
     private readonly IPopoverView _popover;
     private readonly Func<bool> _toggleBeeper;
@@ -28,7 +27,7 @@ public class SplitCockpitPresenter
         _triggerSelfTest = triggerSelfTest ?? throw new ArgumentNullException(nameof(triggerSelfTest));
     }
 
-    public void UpdateTelemetry(UpsTelemetry telemetry, int dpi = DefaultDpi, string? modelName = null)
+    public void UpdateTelemetry(UpsTelemetry telemetry, int dpi = DesignTokens.Sizes.DefaultDpi, string? modelName = null)
     {
         CurrentTelemetry = telemetry;
 
@@ -82,7 +81,7 @@ public class SplitCockpitPresenter
         string? modelName = null)
     {
         string displayTitle = string.IsNullOrWhiteSpace(modelName)
-            ? DefaultUpsDisplayName
+            ? ApplicationDefaults.DefaultUpsDisplayName
             : modelName;
         string? runtimeSegment = RuntimeDisplayFormatter.FormatRuntimeString(runtimeMinutes);
         string metricsSegment = runtimeSegment is null

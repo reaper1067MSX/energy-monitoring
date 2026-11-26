@@ -3,20 +3,18 @@ using VoltTray.Core.Ports;
 using VoltTray.Core.Services;
 using VoltTray.Infrastructure.Diagnostics;
 using VoltTray.Infrastructure.OS;
+using VoltTray.Shared;
 using VoltTray.UI.Dialogs;
 using VoltTray.UI.Models;
 using VoltTray.UI.Presenters;
 using VoltTray.UI.Rendering;
+using VoltTray.UI.Tokens;
 using VoltTray.UI.Views;
 
 namespace VoltTray;
 
 public sealed class HostLifecycle : IDisposable
 {
-    public const int DefaultPollingIntervalMs = 1500;
-    public const int DefaultPauseMinutes = 15;
-
-    private const int DefaultDpi = 96;
     private const int ConsecutiveErrorsBeforeCommLost = 3;
     private const int PollingStopTimeoutMs = 500;
     private const int MinimumPauseTimerMs = 1;
@@ -85,14 +83,14 @@ public sealed class HostLifecycle : IDisposable
     {
     }
 
-    public void Start(int intervalMs = DefaultPollingIntervalMs)
+    public void Start(int intervalMs = ApplicationDefaults.DefaultPollingIntervalMs)
     {
         if (_pollingTask != null)
         {
             return;
         }
 
-        _trayRenderer.UpdateIcon(OperationalState, 0, DefaultDpi);
+        _trayRenderer.UpdateIcon(OperationalState, 0, DesignTokens.Sizes.DefaultDpi);
         _trayRenderer.SetTooltip(SplitCockpitPresenter.FormatTooltip(OperationalState, 0, null));
 
         _cts = new CancellationTokenSource();
@@ -130,7 +128,7 @@ public sealed class HostLifecycle : IDisposable
             else
             {
                 OperationalState = UpsOperationalState.Paused;
-                _trayRenderer.UpdateIcon(UpsOperationalState.Paused, 0, DefaultDpi);
+                _trayRenderer.UpdateIcon(UpsOperationalState.Paused, 0, DesignTokens.Sizes.DefaultDpi);
                 _trayRenderer.SetTooltip(SplitCockpitPresenter.FormatTooltip(UpsOperationalState.Paused, 0, null));
                 return CurrentTelemetry;
             }
@@ -152,7 +150,7 @@ public sealed class HostLifecycle : IDisposable
             if (_consecutiveErrors >= ConsecutiveErrorsBeforeCommLost || CurrentTelemetry == null)
             {
                 OperationalState = UpsOperationalState.CommunicationsLost;
-                _trayRenderer.UpdateIcon(UpsOperationalState.CommunicationsLost, 0, DefaultDpi);
+                _trayRenderer.UpdateIcon(UpsOperationalState.CommunicationsLost, 0, DesignTokens.Sizes.DefaultDpi);
                 _trayRenderer.SetTooltip(
                     SplitCockpitPresenter.FormatTooltip(UpsOperationalState.CommunicationsLost, 0, null));
             }
@@ -194,11 +192,11 @@ public sealed class HostLifecycle : IDisposable
 
     public void Pause(TimeSpan? duration = null, DateTimeOffset? now = null)
     {
-        TimeSpan span = duration ?? TimeSpan.FromMinutes(DefaultPauseMinutes);
+        TimeSpan span = duration ?? TimeSpan.FromMinutes(ApplicationDefaults.DefaultPauseMinutes);
         _pausedUntil = (now ?? DateTimeOffset.UtcNow) + span;
         OperationalState = UpsOperationalState.Paused;
         _upsPort.Disconnect();
-        _trayRenderer.UpdateIcon(UpsOperationalState.Paused, 0, DefaultDpi);
+        _trayRenderer.UpdateIcon(UpsOperationalState.Paused, 0, DesignTokens.Sizes.DefaultDpi);
         _trayRenderer.SetTooltip(SplitCockpitPresenter.FormatTooltip(UpsOperationalState.Paused, 0, null));
         _pauseTimer?.Dispose();
         int timerDueMs = (int)Math.Min(Math.Max(MinimumPauseTimerMs, span.TotalMilliseconds), int.MaxValue);

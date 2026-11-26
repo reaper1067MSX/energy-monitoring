@@ -1,5 +1,6 @@
 using VoltTray.Core.Models;
 using VoltTray.Infrastructure.Protocol;
+using VoltTray.Shared;
 
 namespace VoltTray.Infrastructure.Diagnostics;
 
@@ -9,8 +10,6 @@ namespace VoltTray.Infrastructure.Diagnostics;
 /// </summary>
 public static class TelemetryPlausibilityGuard
 {
-    public const double MinPlausibleFrequencyHz = 40.0;
-    public const double MaxPlausibleFrequencyHz = 70.0;
     public const double MinMainsInputVoltageAc = 10.0;
     public const double MaxStaticBatteryVoltageDriftDc = 0.25;
     public const double MaxSingleCycleBatteryJumpDc = 6.0;
@@ -67,8 +66,8 @@ public static class TelemetryPlausibilityGuard
     {
         ArgumentNullException.ThrowIfNull(candidate);
 
-        if (candidate.FrequencyHz < MinPlausibleFrequencyHz ||
-            candidate.FrequencyHz > MaxPlausibleFrequencyHz)
+        if (candidate.FrequencyHz < ElectricalConstants.MinPlausibleFrequencyHz ||
+            candidate.FrequencyHz > ElectricalConstants.MaxPlausibleFrequencyHz)
         {
             return TelemetryAnomalyKind.PhysicsImplausible;
         }

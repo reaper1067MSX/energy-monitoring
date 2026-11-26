@@ -6,6 +6,7 @@ using VoltTray.Core.Models;
 using VoltTray.Hosting;
 using VoltTray.Infrastructure.Hid;
 using VoltTray.Infrastructure.Protocol;
+using VoltTray.Shared;
 using VoltTray.Tests.ObjectMothers;
 using Xunit;
 
@@ -20,13 +21,13 @@ public class ApplicationStartupTests
         TrayMonitorLaunchOptions trayDefaults = Assert.IsType<TrayMonitorLaunchOptions>(defaults);
         Assert.False(trayDefaults.IsSimulation);
         Assert.False(trayDefaults.IsDryRun);
-        Assert.Equal(ApplicationOptionsParser.DefaultPollingIntervalMs, trayDefaults.PollingIntervalMs);
+        Assert.Equal(ApplicationDefaults.DefaultPollingIntervalMs, trayDefaults.PollingIntervalMs);
 
         ApplicationLaunchOptions custom = ApplicationOptionsParser.Parse(["--sim", "--dry-run", "--interval", "100"]);
         TrayMonitorLaunchOptions trayCustom = Assert.IsType<TrayMonitorLaunchOptions>(custom);
         Assert.True(trayCustom.IsSimulation);
         Assert.True(trayCustom.IsDryRun);
-        Assert.Equal(ApplicationOptionsParser.MinimumPollingIntervalMs, trayCustom.PollingIntervalMs);
+        Assert.Equal(ApplicationDefaults.MinimumPollingIntervalMs, trayCustom.PollingIntervalMs);
     }
 
     [Fact]

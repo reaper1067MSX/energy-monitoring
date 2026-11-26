@@ -2,6 +2,7 @@ using VoltTray.Core.Models;
 using VoltTray.UI.Dialogs;
 using VoltTray.UI.Models;
 using VoltTray.UI.Rendering;
+using VoltTray.UI.Tokens;
 
 namespace VoltTray.Tests;
 
@@ -39,7 +40,7 @@ public class UIRenderersTests
 
         var bounds = PopoverPainter.CalculatePlacement(iconRect, TaskbarEdge.Bottom, workArea, cardHeight: 320);
 
-        Assert.Equal(PopoverPainter.PopoverWidth, bounds.Width);
+        Assert.Equal(DesignTokens.Sizes.PopoverWidth, bounds.Width);
         Assert.Equal(372, bounds.Width);
         Assert.Equal(320, bounds.Height);
         Assert.True(bounds.Right <= workArea.Right);
