@@ -1,3 +1,5 @@
+using VoltTray.Shared;
+
 namespace VoltTray.Infrastructure.Protocol;
 
 /// <summary>
@@ -26,7 +28,7 @@ internal sealed class SelfTestLatch
         }
 
         return _startedAt.HasValue &&
-               (timestamp - _startedAt.Value).TotalSeconds < VoltronicProtocolConstants.SelfTestMaxDurationSeconds;
+               (timestamp - _startedAt.Value).TotalSeconds < ElectricalConstants.MaxSelfTestDurationSeconds;
     }
 
     public void Reset()

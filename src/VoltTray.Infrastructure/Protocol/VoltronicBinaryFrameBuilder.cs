@@ -7,9 +7,6 @@ namespace VoltTray.Infrastructure.Protocol;
 /// </summary>
 public static class VoltronicBinaryFrameBuilder
 {
-    private const byte LowByteMask = 0xFF;
-    private const int DefaultFrameBufferCapacity = 32;
-
     /// <summary>
     /// Appends a byte, applying Voltronic Protocol 'T' escaping if it matches a delimiter or control character.
     /// </summary>
@@ -56,7 +53,7 @@ public static class VoltronicBinaryFrameBuilder
         byte[] encoded = new byte[byteWidth];
         for (int index = byteWidth - 1; index >= 0; index--)
         {
-            encoded[index] = (byte)(value & LowByteMask);
+            encoded[index] = (byte)(value & VoltronicProtocolConstants.LowByteMask);
             value >>= ElectricalConstants.BitsPerByte;
         }
 
@@ -70,7 +67,7 @@ public static class VoltronicBinaryFrameBuilder
     {
         ArgumentNullException.ThrowIfNull(specification);
 
-        var frame = new List<byte>(DefaultFrameBufferCapacity);
+        var frame = new List<byte>(VoltronicProtocolConstants.DefaultFrameBufferCapacity);
         frame.Add(VoltronicProtocolConstants.FrameHeaderHash);
 
         AppendEscapedToken(frame, specification.InputVoltageBytes);

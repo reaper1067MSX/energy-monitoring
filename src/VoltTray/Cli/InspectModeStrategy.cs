@@ -26,7 +26,7 @@ public sealed class InspectModeStrategy : IApplicationModeStrategy
 
     public int Execute()
     {
-        _output.WriteLine(UpsProbeCaptureFormatter.SafeCaptureGuidance);
+        _output.WriteLine(CliConstants.SafeCaptureGuidance);
 
         IReadOnlyList<HidDeviceDescriptor> devices = _probe.DiscoverDevices(_options.IncludeAllHidDevices);
         UpsProbeCaptureFormatter.WriteDeviceDescriptors(devices, _output);

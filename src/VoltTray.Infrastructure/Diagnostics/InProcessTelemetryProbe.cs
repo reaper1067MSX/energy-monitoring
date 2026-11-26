@@ -12,16 +12,9 @@ namespace VoltTray.Infrastructure.Diagnostics;
 /// </summary>
 public sealed class InProcessTelemetryProbe : ITelemetryDiagnosticSink
 {
-    public const int RingBufferCapacity = 256;
-    public const int DefaultDumpCount = 16;
-    public const int MaxLastKnownGoodHoldCycles = 3;
-
-    private const string DiagnosticsFolderName = "diagnostics";
-    private const string ApplicationFolderName = "VoltTray";
-    private const string DumpTimestampFormat = "yyyyMMdd-HHmmss-fff";
-
     private readonly object _syncLock = new();
-    private readonly TelemetryFlightRecorderEntry?[] _entries = new TelemetryFlightRecorderEntry?[RingBufferCapacity];
+    private readonly TelemetryFlightRecorderEntry?[] _entries =
+        new TelemetryFlightRecorderEntry?[DiagnosticsConstants.RingBufferCapacity];
     private readonly string _diagnosticsDirectory;
 
     private int _nextWriteIndex;
@@ -35,8 +28,8 @@ public sealed class InProcessTelemetryProbe : ITelemetryDiagnosticSink
         _diagnosticsDirectory = string.IsNullOrWhiteSpace(diagnosticsDirectory)
             ? Path.Combine(
                 Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
-                ApplicationFolderName,
-                DiagnosticsFolderName)
+                DiagnosticsConstants.ApplicationFolderName,
+                DiagnosticsConstants.DiagnosticsFolderName)
             : diagnosticsDirectory;
     }
 
@@ -123,9 +116,11 @@ public sealed class InProcessTelemetryProbe : ITelemetryDiagnosticSink
             }
 
             _consecutiveAnomalyCount++;
-            canHoldLastKnownGood = _consecutiveAnomalyCount <= MaxLastKnownGoodHoldCycles && _lastKnownGood != null;
+            canHoldLastKnownGood =
+                _consecutiveAnomalyCount <= DiagnosticsConstants.MaxLastKnownGoodHoldCycles &&
+                _lastKnownGood != null;
             effectiveTelemetry = canHoldLastKnownGood ? _lastKnownGood : null;
-            snapshotToDump = SnapshotRecentEntriesUnsafe(DefaultDumpCount);
+            snapshotToDump = SnapshotRecentEntriesUnsafe(DiagnosticsConstants.DefaultDumpCount);
             dumpSequence = ++_dumpSequence;
         }
 
@@ -138,7 +133,7 @@ public sealed class InProcessTelemetryProbe : ITelemetryDiagnosticSink
             DiagnosticDumpPath: dumpPath);
     }
 
-    public string? DumpRecent(int count = DefaultDumpCount)
+    public string? DumpRecent(int count = DiagnosticsConstants.DefaultDumpCount)
     {
         List<TelemetryFlightRecorderEntry> snapshot;
         long dumpSequence;
@@ -150,7 +145,7 @@ public sealed class InProcessTelemetryProbe : ITelemetryDiagnosticSink
                 return null;
             }
 
-            int clampedCount = Math.Clamp(count, 1, RingBufferCapacity);
+            int clampedCount = Math.Clamp(count, 1, DiagnosticsConstants.RingBufferCapacity);
             snapshot = SnapshotRecentEntriesUnsafe(clampedCount);
             dumpSequence = ++_dumpSequence;
         }
@@ -161,8 +156,8 @@ public sealed class InProcessTelemetryProbe : ITelemetryDiagnosticSink
     private void AppendEntryUnsafe(TelemetryFlightRecorderEntry entry)
     {
         _entries[_nextWriteIndex] = entry;
-        _nextWriteIndex = (_nextWriteIndex + 1) % RingBufferCapacity;
-        if (_count < RingBufferCapacity)
+        _nextWriteIndex = (_nextWriteIndex + 1) % DiagnosticsConstants.RingBufferCapacity;
+        if (_count < DiagnosticsConstants.RingBufferCapacity)
         {
             _count++;
         }
@@ -172,11 +167,14 @@ public sealed class InProcessTelemetryProbe : ITelemetryDiagnosticSink
     {
         int actualCount = Math.Min(requestedCount, _count);
         var entries = new List<TelemetryFlightRecorderEntry>(actualCount);
-        int oldestIndex = (_nextWriteIndex - actualCount + RingBufferCapacity) % RingBufferCapacity;
+        int oldestIndex =
+            (_nextWriteIndex - actualCount + DiagnosticsConstants.RingBufferCapacity) %
+            DiagnosticsConstants.RingBufferCapacity;
 
         for (int offset = 0; offset < actualCount; offset++)
         {
-            TelemetryFlightRecorderEntry? entry = _entries[(oldestIndex + offset) % RingBufferCapacity];
+            TelemetryFlightRecorderEntry? entry =
+                _entries[(oldestIndex + offset) % DiagnosticsConstants.RingBufferCapacity];
             if (entry != null)
             {
                 entries.Add(entry);
@@ -197,7 +195,8 @@ public sealed class InProcessTelemetryProbe : ITelemetryDiagnosticSink
         }
 
         Directory.CreateDirectory(_diagnosticsDirectory);
-        string formattedTimestamp = timestamp.UtcDateTime.ToString(DumpTimestampFormat, CultureInfo.InvariantCulture);
+        string formattedTimestamp =
+            timestamp.UtcDateTime.ToString(DiagnosticsConstants.DumpTimestampFormat, CultureInfo.InvariantCulture);
         string fileName = $"anomaly-{formattedTimestamp}-{sequence}.jsonl";
         string fullPath = Path.Combine(_diagnosticsDirectory, fileName);
 

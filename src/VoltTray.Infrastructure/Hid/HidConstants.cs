@@ -16,9 +16,13 @@ public static class HidConstants
     public const ushort ProductId = 0x5161;
     public const string SimulatedDevicePath = @"\\?\SIMULATED_UPS_FORZA_FX2200";
 
-    // Communication Timeouts (Milliseconds)
+    // Communication Timeouts (Milliseconds) & Simulation Defaults
+    public const int MinimumTimeoutMs = 0;
     public const int DefaultDrainTimeoutMs = 25;
     public const int DefaultReadTimeoutMs = 400;
     public const int DefaultWriteTimeoutMs = 1000;
     public const int DefaultQueryTimeoutMs = 1500;
+    public const int DefaultRandomSeed = 42;
+    public const int MinimumLoadJitterOffset = -1;
+    public const int MaximumLoadJitterExclusiveOffset = 2;
 }

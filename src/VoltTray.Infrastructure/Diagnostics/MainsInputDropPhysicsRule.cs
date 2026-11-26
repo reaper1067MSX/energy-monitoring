@@ -11,10 +11,10 @@ public sealed class MainsInputDropPhysicsRule : ITelemetryPhysicsRule
             : candidate.State is UpsOperationalState.OnBattery or UpsOperationalState.BatteryLow;
 
         if (!isOnBattery &&
-            candidate.InputVoltageAc < TelemetryPlausibilityGuard.MinMainsInputVoltageAc &&
+            candidate.InputVoltageAc < DiagnosticsConstants.MinMainsInputVoltageAc &&
             lastKnownGood != null &&
             Math.Abs(candidate.BatteryVoltageDc - lastKnownGood.BatteryVoltageDc) <=
-            TelemetryPlausibilityGuard.MaxStaticBatteryVoltageDriftDc)
+            DiagnosticsConstants.MaxStaticBatteryVoltageDriftDc)
         {
             return TelemetryAnomalyKind.PhysicsImplausible;
         }

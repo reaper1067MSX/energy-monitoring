@@ -1,6 +1,7 @@
 using System.Runtime.InteropServices;
 using VoltTray.UI.Interop;
 using VoltTray.UI.Models;
+using VoltTray.UI.Tokens;
 using VoltTray.UI.Views;
 
 namespace VoltTray.UI.Rendering;
@@ -10,9 +11,6 @@ namespace VoltTray.UI.Rendering;
 /// </summary>
 public sealed class Win32ScreenPlacementProvider : IScreenPlacementProvider
 {
-    private const int FallbackScreenWidthPx = 1920;
-    private const int FallbackScreenHeightPx = 1080;
-
     public (ViewRect WorkArea, TaskbarEdge Edge) GetWorkAreaForAnchor(ViewRect anchorRect)
     {
         try
@@ -56,8 +54,8 @@ public sealed class Win32ScreenPlacementProvider : IScreenPlacementProvider
 
         int screenWidth = GdiNative.GetSystemMetrics(GdiNative.SM_CXSCREEN);
         int screenHeight = GdiNative.GetSystemMetrics(GdiNative.SM_CYSCREEN);
-        int resolvedWidth = screenWidth > 0 ? screenWidth : FallbackScreenWidthPx;
-        int resolvedHeight = screenHeight > 0 ? screenHeight : FallbackScreenHeightPx;
+        int resolvedWidth = screenWidth > 0 ? screenWidth : DesignTokens.Sizes.FallbackScreenWidthPx;
+        int resolvedHeight = screenHeight > 0 ? screenHeight : DesignTokens.Sizes.FallbackScreenHeightPx;
         return (new ViewRect(0, 0, resolvedWidth, resolvedHeight), TaskbarEdge.Bottom);
     }
 

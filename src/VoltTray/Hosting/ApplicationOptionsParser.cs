@@ -11,12 +11,6 @@ namespace VoltTray.Hosting;
 /// </summary>
 public static class ApplicationOptionsParser
 {
-    private const string FlagPrefix = "--";
-    private const string InspectFlag = "--inspect";
-    private const string IntervalFlag = "--interval";
-    private const string CommandFlag = "--cmd";
-    private const string ExportFlag = "--export";
-
     private static readonly IReadOnlyDictionary<string, CliFlagRule> FlagRules = BuildFlagRuleRegistry();
 
     public static ApplicationLaunchOptions Parse(string[] args)
@@ -55,12 +49,12 @@ public static class ApplicationOptionsParser
 
         if (state.IsInspectMode && state.FirstTrayOnlyFlag != null)
         {
-            return new InvalidLaunchOptions($"Flag '{state.FirstTrayOnlyFlag}' cannot be combined with {InspectFlag}.");
+            return new InvalidLaunchOptions($"Flag '{state.FirstTrayOnlyFlag}' cannot be combined with {CliConstants.InspectFlag}.");
         }
 
         if (!state.IsInspectMode && state.FirstInspectOnlyFlag != null)
         {
-            return new InvalidLaunchOptions($"Flag '{state.FirstInspectOnlyFlag}' is only valid with {InspectFlag}.");
+            return new InvalidLaunchOptions($"Flag '{state.FirstInspectOnlyFlag}' is only valid with {CliConstants.InspectFlag}.");
         }
 
         return state.IsInspectMode
@@ -73,7 +67,7 @@ public static class ApplicationOptionsParser
         CliFlagRule[] rules =
         [
             new(
-                Aliases: [InspectFlag],
+                Aliases: [CliConstants.InspectFlag],
                 Scope: CliOptionScope.ModeSelector,
                 RequiresValue: false,
                 Apply: (state, _) =>
@@ -82,7 +76,7 @@ public static class ApplicationOptionsParser
                     return null;
                 }),
             new(
-                Aliases: ["--simulate", "--sim", "--mock"],
+                Aliases: [CliConstants.SimulateFlag, CliConstants.SimFlag, CliConstants.MockFlag],
                 Scope: CliOptionScope.TrayOnly,
                 RequiresValue: false,
                 Apply: (state, _) =>
@@ -91,7 +85,7 @@ public static class ApplicationOptionsParser
                     return null;
                 }),
             new(
-                Aliases: ["--dry-run"],
+                Aliases: [CliConstants.DryRunFlag],
                 Scope: CliOptionScope.TrayOnly,
                 RequiresValue: false,
                 Apply: (state, _) =>
@@ -100,12 +94,12 @@ public static class ApplicationOptionsParser
                     return null;
                 }),
             new(
-                Aliases: [IntervalFlag],
+                Aliases: [CliConstants.IntervalFlag],
                 Scope: CliOptionScope.TrayOnly,
                 RequiresValue: true,
                 Apply: ApplyInterval),
             new(
-                Aliases: ["--all-hid"],
+                Aliases: [CliConstants.AllHidFlag],
                 Scope: CliOptionScope.InspectOnly,
                 RequiresValue: false,
                 Apply: (state, _) =>
@@ -114,12 +108,12 @@ public static class ApplicationOptionsParser
                     return null;
                 }),
             new(
-                Aliases: [CommandFlag],
+                Aliases: [CliConstants.CommandFlag],
                 Scope: CliOptionScope.InspectOnly,
                 RequiresValue: true,
                 Apply: ApplyCommand),
             new(
-                Aliases: [ExportFlag],
+                Aliases: [CliConstants.ExportFlag],
                 Scope: CliOptionScope.InspectOnly,
                 RequiresValue: true,
                 Apply: (state, value) =>
@@ -149,7 +143,7 @@ public static class ApplicationOptionsParser
 
         if (!isValidPositiveInteger)
         {
-            return $"Invalid value for {IntervalFlag}: '{rawInterval}'. Expected a positive integer.";
+            return $"Invalid value for {CliConstants.IntervalFlag}: '{rawInterval}'. Expected a positive integer.";
         }
 
         state.PollingIntervalMs = Math.Max(ApplicationDefaults.MinimumPollingIntervalMs, parsedInterval);
@@ -176,7 +170,7 @@ public static class ApplicationOptionsParser
         out string value,
         out string? errorMessage)
     {
-        if (index + 1 >= args.Length || args[index + 1].StartsWith(FlagPrefix, StringComparison.Ordinal))
+        if (index + 1 >= args.Length || args[index + 1].StartsWith(CliConstants.FlagPrefix, StringComparison.Ordinal))
         {
             value = string.Empty;
             errorMessage = $"Missing value for {flagName}.";

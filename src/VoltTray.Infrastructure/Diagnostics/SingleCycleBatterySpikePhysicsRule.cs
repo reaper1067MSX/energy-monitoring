@@ -8,7 +8,7 @@ public sealed class SingleCycleBatterySpikePhysicsRule : ITelemetryPhysicsRule
     {
         if (lastKnownGood != null &&
             Math.Abs(candidate.BatteryVoltageDc - lastKnownGood.BatteryVoltageDc) >
-            TelemetryPlausibilityGuard.MaxSingleCycleBatteryJumpDc &&
+            DiagnosticsConstants.MaxSingleCycleBatteryJumpDc &&
             candidate.State == lastKnownGood.State)
         {
             return TelemetryAnomalyKind.PhysicsImplausible;

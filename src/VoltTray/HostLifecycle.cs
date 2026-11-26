@@ -1,6 +1,7 @@
 using VoltTray.Core.Models;
 using VoltTray.Core.Ports;
 using VoltTray.Core.Services;
+using VoltTray.Hosting;
 using VoltTray.Infrastructure.Diagnostics;
 using VoltTray.Infrastructure.OS;
 using VoltTray.Shared;
@@ -15,12 +16,6 @@ namespace VoltTray;
 
 public sealed class HostLifecycle : IDisposable
 {
-    private const int ConsecutiveErrorsBeforeCommLost = 3;
-    private const int PollingStopTimeoutMs = 500;
-    private const int MinimumPauseTimerMs = 1;
-    private const int FallbackAnchorSizePx = 32;
-    private const int FallbackAnchorOffsetPx = 40;
-
     private readonly IUpsDevicePort _upsPort;
     private readonly ShutdownCoordinator _shutdownCoordinator;
     private readonly ITrayIconView _trayRenderer;
@@ -147,7 +142,7 @@ public sealed class HostLifecycle : IDisposable
         if (telemetry == null)
         {
             _consecutiveErrors++;
-            if (_consecutiveErrors >= ConsecutiveErrorsBeforeCommLost || CurrentTelemetry == null)
+            if (_consecutiveErrors >= HostConstants.ConsecutiveErrorsBeforeCommLost || CurrentTelemetry == null)
             {
                 OperationalState = UpsOperationalState.CommunicationsLost;
                 _trayRenderer.UpdateIcon(UpsOperationalState.CommunicationsLost, 0, DesignTokens.Sizes.DefaultDpi);
@@ -199,7 +194,7 @@ public sealed class HostLifecycle : IDisposable
         _trayRenderer.UpdateIcon(UpsOperationalState.Paused, 0, DesignTokens.Sizes.DefaultDpi);
         _trayRenderer.SetTooltip(SplitCockpitPresenter.FormatTooltip(UpsOperationalState.Paused, 0, null));
         _pauseTimer?.Dispose();
-        int timerDueMs = (int)Math.Min(Math.Max(MinimumPauseTimerMs, span.TotalMilliseconds), int.MaxValue);
+        int timerDueMs = (int)Math.Min(Math.Max(HostConstants.MinimumPauseTimerMs, span.TotalMilliseconds), int.MaxValue);
         _pauseTimer = new Timer(_ => Resume(), null, timerDueMs, Timeout.Infinite);
     }
 
@@ -247,7 +242,7 @@ public sealed class HostLifecycle : IDisposable
         _cts?.Cancel();
         try
         {
-            _pollingTask?.Wait(PollingStopTimeoutMs);
+            _pollingTask?.Wait(HostConstants.PollingStopTimeoutMs);
         }
         catch
         {
@@ -321,15 +316,15 @@ public sealed class HostLifecycle : IDisposable
         (ViewRect fallbackWorkArea, TaskbarEdge fallbackEdge) = _screenPlacementProvider.GetWorkAreaForAnchor(default);
         int anchorLeft = fallbackEdge == TaskbarEdge.Left
             ? fallbackWorkArea.Left
-            : Math.Max(fallbackWorkArea.Left, fallbackWorkArea.Right - FallbackAnchorOffsetPx);
+            : Math.Max(fallbackWorkArea.Left, fallbackWorkArea.Right - HostConstants.FallbackAnchorOffsetPx);
         int anchorTop = fallbackEdge == TaskbarEdge.Top
             ? fallbackWorkArea.Top
-            : Math.Max(fallbackWorkArea.Top, fallbackWorkArea.Bottom - FallbackAnchorSizePx);
+            : Math.Max(fallbackWorkArea.Top, fallbackWorkArea.Bottom - HostConstants.FallbackAnchorSizePx);
         var fallbackAnchor = new ViewRect(
             anchorLeft,
             anchorTop,
-            anchorLeft + FallbackAnchorSizePx,
-            anchorTop + FallbackAnchorSizePx);
+            anchorLeft + HostConstants.FallbackAnchorSizePx,
+            anchorTop + HostConstants.FallbackAnchorSizePx);
 
         return (fallbackAnchor, fallbackWorkArea, fallbackEdge);
     }

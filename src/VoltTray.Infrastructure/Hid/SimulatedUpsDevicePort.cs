@@ -1,6 +1,7 @@
 using VoltTray.Core.Models;
 using VoltTray.Core.Ports;
 using VoltTray.Infrastructure.Protocol;
+using VoltTray.Shared;
 
 namespace VoltTray.Infrastructure.Hid;
 
@@ -10,11 +11,7 @@ namespace VoltTray.Infrastructure.Hid;
 /// </summary>
 public sealed class SimulatedUpsDevicePort : IUpsDevicePort
 {
-    private const int DefaultRandomSeed = 42;
-    private const int MinimumLoadJitterOffset = -1;
-    private const int MaximumLoadJitterExclusiveOffset = 2;
-
-    private readonly Random _random = new(DefaultRandomSeed);
+    private readonly Random _random = new(HidConstants.DefaultRandomSeed);
     private readonly object _lock = new();
     private readonly VoltronicParser _parser = new();
     private UpsTelemetry? _lastTelemetry;
@@ -72,7 +69,7 @@ public sealed class SimulatedUpsDevicePort : IUpsDevicePort
 
             int loadPercentage =
                 VoltronicProtocolConstants.NominalLoadPercentage +
-                _random.Next(MinimumLoadJitterOffset, MaximumLoadJitterExclusiveOffset);
+                _random.Next(HidConstants.MinimumLoadJitterOffset, HidConstants.MaximumLoadJitterExclusiveOffset);
 
             byte statusByte1 = VoltronicProtocolConstants.StatusLineNormal;
             if (_beeperActive)
@@ -126,7 +123,7 @@ public sealed class SimulatedUpsDevicePort : IUpsDevicePort
             }
 
             _selfTestActive = true;
-            _selfTestExpires = DateTime.UtcNow.AddSeconds(VoltronicProtocolConstants.SelfTestMaxDurationSeconds);
+            _selfTestExpires = DateTime.UtcNow.AddSeconds(ElectricalConstants.MaxSelfTestDurationSeconds);
             return Task.FromResult(true);
         }
     }

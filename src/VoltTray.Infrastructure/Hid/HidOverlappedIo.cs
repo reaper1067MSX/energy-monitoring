@@ -9,8 +9,6 @@ namespace VoltTray.Infrastructure.Hid;
 /// </summary>
 internal static class HidOverlappedIo
 {
-    private const int MinimumTimeoutMs = 0;
-
     public static SafeFileHandle OpenDeviceHandle(
         string devicePath,
         uint desiredAccess = HidNativeMethods.GenericRead | HidNativeMethods.GenericWrite,
@@ -62,7 +60,7 @@ internal static class HidOverlappedIo
 
     public static int ClampTimeoutMs(int timeoutMs)
     {
-        return Math.Max(MinimumTimeoutMs, timeoutMs);
+        return Math.Max(HidConstants.MinimumTimeoutMs, timeoutMs);
     }
 
     public static int ReadReport(SafeFileHandle handle, byte[] buffer, int timeoutMs)

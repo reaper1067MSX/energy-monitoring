@@ -1,3 +1,4 @@
+using VoltTray.Core.Constants;
 using VoltTray.Core.Models;
 using VoltTray.Shared;
 
@@ -5,8 +6,6 @@ namespace VoltTray.Core.Services;
 
 public sealed class BatteryBankInference
 {
-    public const int RequiredConsecutiveReadings = 3;
-
     private static readonly BatteryVoltageBand[] SupportedBands =
     [
         new(SeriesCount: 1, MinVoltageDc: 9.5, MaxVoltageDc: 15.5),
@@ -36,7 +35,7 @@ public sealed class BatteryBankInference
 
             LatchedBank = hardwareBank;
             PendingSeriesCount = hardwareSeriesCount;
-            ConsecutiveMatchCount = RequiredConsecutiveReadings;
+            ConsecutiveMatchCount = BatteryConstants.RequiredConsecutiveReadings;
             return hardwareBank;
         }
 
@@ -58,7 +57,7 @@ public sealed class BatteryBankInference
             ConsecutiveMatchCount = 1;
         }
 
-        if (ConsecutiveMatchCount >= RequiredConsecutiveReadings)
+        if (ConsecutiveMatchCount >= BatteryConstants.RequiredConsecutiveReadings)
         {
             LatchedBank = new BatteryBankSpec(
                 SeriesBatteryCount: detectedSeriesCount.Value,

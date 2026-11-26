@@ -18,4 +18,6 @@ public static class ElectricalConstants
     public const int BitsPerByte = 8;
     public const int MaxBigEndianByteWidth = 8;
     public const double DefaultFallbackVoltageAc = 120.0;
+    public const double MaxSelfTestDurationSeconds = 15.0;
+    public const double MinutesPerHour = 60.0;
 }

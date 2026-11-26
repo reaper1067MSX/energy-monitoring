@@ -58,6 +58,11 @@ public static class VoltronicProtocolConstants
     public const string DialectP = "P";
     public const string DialectV = "V";
     public const string DialectQ1 = "Q1";
+    public const char DialectCharT = 'T';
+    public const char DialectCharP = 'P';
+    public const char DialectCharV = 'V';
+    public const byte LowByteMask = 0xFF;
+    public const int DefaultFrameBufferCapacity = 32;
 
     // Megatec ASCII Constants
     public const int MegatecStatusTokenCount = 8;
@@ -101,7 +106,6 @@ public static class VoltronicProtocolConstants
     public const double VoltageDivisor = 51.0 * 256.0;
     public const double BatteryVoltageDivisor = 510.0;
     public const double DefaultRatedWatts = 900.0;
-    public const double SelfTestMaxDurationSeconds = 15.0;
     public const double MainsDivergenceThreshold = 0.05;
 
     // Default Simulation Baseline Frame Bytes (Forza FX-2200 Profile)

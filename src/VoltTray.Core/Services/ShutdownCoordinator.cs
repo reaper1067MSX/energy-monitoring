@@ -1,4 +1,5 @@
 using System;
+using VoltTray.Core.Constants;
 using VoltTray.Core.Models;
 using VoltTray.Core.Ports;
 
@@ -6,12 +7,6 @@ namespace VoltTray.Core.Services;
 
 public sealed class ShutdownCoordinator
 {
-    public const int DefaultRuntimeThresholdMinutes = 5;
-    public const int ConfirmationReadingThreshold = 2;
-    public const double SelfTestImmunitySeconds = 15.0;
-    public const double SelfTestCooldownSeconds = 3.0;
-    public const double CriticalBlockVoltageCutoffDc = 10.8;
-
     private static readonly IReadOnlyList<IShutdownTriggerRule> DefaultTriggerRules =
     [
         new ImmediateHardwareLowTriggerRule(),
@@ -29,7 +24,7 @@ public sealed class ShutdownCoordinator
     private bool _shutdownInitiated;
 
     public bool DryRun { get; set; } = true;
-    public int RuntimeThresholdMinutes { get; set; } = DefaultRuntimeThresholdMinutes;
+    public int RuntimeThresholdMinutes { get; set; } = SafetyConstants.DefaultRuntimeThresholdMinutes;
 
     public bool IsShutdownInitiated => _shutdownInitiated;
     public int OutageCycleCount => _outageCycleCount;
@@ -92,7 +87,7 @@ public sealed class ShutdownCoordinator
 
         _outageCycleCount++;
 
-        if (_outageCycleCount < ConfirmationReadingThreshold || _shutdownInitiated)
+        if (_outageCycleCount < SafetyConstants.ConfirmationReadingThreshold || _shutdownInitiated)
         {
             return;
         }
@@ -165,7 +160,7 @@ public sealed class ShutdownCoordinator
         if (isConditionMet)
         {
             _lowRuntimeCycleCount++;
-            if (_lowRuntimeCycleCount >= ConfirmationReadingThreshold)
+            if (_lowRuntimeCycleCount >= SafetyConstants.ConfirmationReadingThreshold)
             {
                 TriggerShutdown(triggerReason);
             }

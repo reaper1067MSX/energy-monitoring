@@ -16,13 +16,13 @@ public sealed class VoltronicIdentityDialectProbe : IProtocolDialectProbe
                 char,
                 Func<Func<string, byte[]?>, UpsCapabilities, IBatteryAutonomyEstimator, NegotiatedUpsProtocol>>
             {
-                ['T'] = (_, capabilities, estimator) => new NegotiatedUpsProtocol(
+                [VoltronicProtocolConstants.DialectCharT] = (_, capabilities, estimator) => new NegotiatedUpsProtocol(
                     new VoltronicQsHexProtocol(VoltronicProtocolConstants.DialectT, estimator),
                     capabilities with { DialectVerified = true }),
-                ['P'] = (_, capabilities, estimator) => new NegotiatedUpsProtocol(
+                [VoltronicProtocolConstants.DialectCharP] = (_, capabilities, estimator) => new NegotiatedUpsProtocol(
                     new VoltronicQsHexProtocol(VoltronicProtocolConstants.DialectP, estimator),
                     capabilities with { DialectVerified = true }),
-                ['V'] = (queryRaw, capabilities, estimator) =>
+                [VoltronicProtocolConstants.DialectCharV] = (queryRaw, capabilities, estimator) =>
                 {
                     UpsCapabilities enriched = MegatecAsciiProtocol.ProbeCapabilities(
                         queryRaw,

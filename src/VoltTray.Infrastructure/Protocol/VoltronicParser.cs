@@ -9,16 +9,7 @@ namespace VoltTray.Infrastructure.Protocol;
 
 public sealed class VoltronicParser
 {
-    private const int NominalAcCode110V = 0;
-    private const int NominalAcCode120V = 1;
-    private const int NominalAcCode220V = 2;
-    private const int NominalAcCode230V = 3;
-    private const int NominalAcCode240V = 4;
-    private const double NominalAc110Volts = 110.0;
-    private const double NominalAc120Volts = 120.0;
-    private const double NominalAc220Volts = 220.0;
-    private const double NominalAc230Volts = 230.0;
-    private const double NominalAc240Volts = 240.0;
+    private static readonly double[] NominalAcVoltagesByCode = [110.0, 120.0, 220.0, 230.0, 240.0];
 
     private readonly IBatteryAutonomyEstimator _estimator;
     private readonly double _capacityFactor;
@@ -301,15 +292,11 @@ public sealed class VoltronicParser
             ((statusByte2 & VoltronicProtocolConstants.StatusByte2BatteryBankMask) >>
              VoltronicProtocolConstants.StatusByte2BatteryBankShift) + 1;
 
-        double? nominalOutputVoltageAc = (statusByte2 & VoltronicProtocolConstants.StatusByte2NominalAcMask) switch
-        {
-            NominalAcCode110V => NominalAc110Volts,
-            NominalAcCode120V => NominalAc120Volts,
-            NominalAcCode220V => NominalAc220Volts,
-            NominalAcCode230V => NominalAc230Volts,
-            NominalAcCode240V => NominalAc240Volts,
-            _ => null
-        };
+        int nominalAcCode = statusByte2 & VoltronicProtocolConstants.StatusByte2NominalAcMask;
+        double? nominalOutputVoltageAc =
+            nominalAcCode >= 0 && nominalAcCode < NominalAcVoltagesByCode.Length
+                ? NominalAcVoltagesByCode[nominalAcCode]
+                : null;
 
         return new UpsStatusByte2Ratings(
             nominalFrequencyHz,

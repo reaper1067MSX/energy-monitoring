@@ -1,3 +1,5 @@
+using VoltTray.Hosting;
+
 namespace VoltTray;
 
 /// <summary>
@@ -5,10 +7,7 @@ namespace VoltTray;
 /// </summary>
 public static class SingleInstanceManager
 {
-    public const string DefaultMutexName = @"Global\VoltTray_SingleInstance_Mutex";
-    private const string GlobalPrefix = @"Global\";
-
-    public static Mutex? TryAcquire(string name = DefaultMutexName)
+    public static Mutex? TryAcquire(string name = HostConstants.DefaultMutexName)
     {
         try
         {
@@ -35,8 +34,8 @@ public static class SingleInstanceManager
     {
         try
         {
-            string localName = name.StartsWith(GlobalPrefix, StringComparison.OrdinalIgnoreCase)
-                ? name[GlobalPrefix.Length..]
+            string localName = name.StartsWith(HostConstants.GlobalMutexPrefix, StringComparison.OrdinalIgnoreCase)
+                ? name[HostConstants.GlobalMutexPrefix.Length..]
                 : name;
 
             var mutex = new Mutex(initiallyOwned: true, localName, out bool createdNew);

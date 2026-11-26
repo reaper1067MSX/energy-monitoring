@@ -35,6 +35,10 @@ public static class DesignTokens
         public const int MenuWidth = 268;
         public const int ButtonHeight = 44;
         public const int MenuItemHeight = 36;
+        public const int ExitDialogWidth = 380;
+        public const int ExitDialogHeight = 220;
+        public const int FallbackScreenWidthPx = 1920;
+        public const int FallbackScreenHeightPx = 1080;
         public static readonly int[] TrayIconPx = [16, 20, 24, 32];
     }
 

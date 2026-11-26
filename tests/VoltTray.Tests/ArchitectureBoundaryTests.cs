@@ -1,5 +1,9 @@
+using System.Reflection;
+using System.Text.Json.Serialization;
 using VoltTray.Core.Models;
+using VoltTray.Infrastructure.Protocol;
 using VoltTray.Shared;
+using VoltTray.UI.Tokens;
 
 namespace VoltTray.Tests;
 
@@ -82,5 +86,65 @@ public class ArchitectureBoundaryTests
                     (type.Namespace.Contains("Hid", StringComparison.OrdinalIgnoreCase) ||
                      type.Namespace.Contains("UI", StringComparison.OrdinalIgnoreCase) ||
                      type.Namespace.Contains("Protocol", StringComparison.OrdinalIgnoreCase)));
+    }
+
+    [Fact]
+    public void BehavioralClasses_DoNotDeclareLooseConstants_OutsideDedicatedCatalogsOrInterop()
+    {
+        Assembly[] productionAssemblies =
+        [
+            typeof(ElectricalConstants).Assembly,
+            typeof(UpsTelemetry).Assembly,
+            typeof(VoltronicParser).Assembly,
+            typeof(DesignTokens).Assembly,
+            typeof(HostLifecycle).Assembly
+        ];
+
+        string[] allowedSuffixes =
+        [
+            "Constants",
+            "Defaults",
+            "ExitCodes",
+            "DesignTokens",
+            "NativeMethods",
+            "GdiNative"
+        ];
+
+        var violations = new List<string>();
+
+        foreach (Assembly assembly in productionAssemblies)
+        {
+            foreach (Type type in assembly.GetTypes())
+            {
+                if (type.IsEnum ||
+                    type.Name.StartsWith("<", StringComparison.Ordinal) ||
+                    typeof(JsonSerializerContext).IsAssignableFrom(type))
+                {
+                    continue;
+                }
+
+                bool isAllowedCatalog =
+                    allowedSuffixes.Any(suffix => type.Name.EndsWith(suffix, StringComparison.Ordinal)) ||
+                    (type.DeclaringType != null && type.DeclaringType.Name == nameof(DesignTokens));
+
+                if (isAllowedCatalog)
+                {
+                    continue;
+                }
+
+                FieldInfo[] literalFields = type
+                    .GetFields(BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Static | BindingFlags.DeclaredOnly)
+                    .Where(field => field.IsLiteral && !field.IsInitOnly)
+                    .ToArray();
+
+                if (literalFields.Length > 0)
+                {
+                    string fieldNames = string.Join(", ", literalFields.Select(field => field.Name));
+                    violations.Add($"{type.FullName}: [{fieldNames}]");
+                }
+            }
+        }
+
+        Assert.Empty(violations);
     }
 }

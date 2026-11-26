@@ -1,3 +1,6 @@
+using VoltTray.Core.Constants;
+using VoltTray.Shared;
+
 namespace VoltTray.Core.Services;
 
 /// <summary>
@@ -30,9 +33,9 @@ internal sealed class SelfTestImmunityTracker
         if (_lastTestState && _selfTestStartTime.HasValue)
         {
             double elapsedSeconds = (timestamp - _selfTestStartTime.Value).TotalSeconds;
-            if (elapsedSeconds >= ShutdownCoordinator.SelfTestImmunitySeconds)
+            if (elapsedSeconds >= ElectricalConstants.MaxSelfTestDurationSeconds)
             {
-                _selfTestCooldownUntil = timestamp.AddSeconds(ShutdownCoordinator.SelfTestCooldownSeconds);
+                _selfTestCooldownUntil = timestamp.AddSeconds(SafetyConstants.SelfTestCooldownSeconds);
             }
         }
 
@@ -44,6 +47,6 @@ internal sealed class SelfTestImmunityTracker
     {
         return isTestInProgress &&
                _selfTestStartTime.HasValue &&
-               (timestamp - _selfTestStartTime.Value).TotalSeconds < ShutdownCoordinator.SelfTestImmunitySeconds;
+               (timestamp - _selfTestStartTime.Value).TotalSeconds < ElectricalConstants.MaxSelfTestDurationSeconds;
     }
 }

@@ -9,10 +9,6 @@ namespace VoltTray.Infrastructure.Diagnostics;
 /// </summary>
 public static class TelemetryPlausibilityGuard
 {
-    public const double MinMainsInputVoltageAc = 10.0;
-    public const double MaxStaticBatteryVoltageDriftDc = 0.25;
-    public const double MaxSingleCycleBatteryJumpDc = 6.0;
-
     private static readonly IReadOnlyList<ITelemetryPhysicsRule> DefaultPhysicsRules =
     [
         new FrequencyBoundsPhysicsRule(),
