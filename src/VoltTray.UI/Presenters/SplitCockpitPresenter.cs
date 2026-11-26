@@ -10,16 +10,16 @@ public class SplitCockpitPresenter
 {
     private readonly ITrayIconView _trayIcon;
     private readonly IPopoverView _popover;
-    private readonly Func<bool> _toggleBeeper;
-    private readonly Func<bool> _triggerSelfTest;
+    private readonly Func<Task<bool>> _toggleBeeper;
+    private readonly Func<Task<bool>> _triggerSelfTest;
 
     public UpsTelemetry? CurrentTelemetry { get; private set; }
 
     public SplitCockpitPresenter(
         ITrayIconView trayIcon,
         IPopoverView popover,
-        Func<bool> toggleBeeper,
-        Func<bool> triggerSelfTest)
+        Func<Task<bool>> toggleBeeper,
+        Func<Task<bool>> triggerSelfTest)
     {
         _trayIcon = trayIcon ?? throw new ArgumentNullException(nameof(trayIcon));
         _popover = popover ?? throw new ArgumentNullException(nameof(popover));
@@ -55,9 +55,9 @@ public class SplitCockpitPresenter
         }
     }
 
-    public bool ToggleBeeper() => _toggleBeeper();
+    public Task<bool> ToggleBeeperAsync() => _toggleBeeper();
 
-    public bool TriggerSelfTest() => _triggerSelfTest();
+    public Task<bool> TriggerSelfTestAsync() => _triggerSelfTest();
 
     public static (double Cell1, double Cell2) DeriveSymmetricCells(double totalVoltageDc)
     {

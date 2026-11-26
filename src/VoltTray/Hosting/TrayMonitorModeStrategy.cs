@@ -1,10 +1,6 @@
 using VoltTray.Core.Ports;
-using VoltTray.Infrastructure.Diagnostics;
 using VoltTray.Infrastructure.Hid;
-using VoltTray.Infrastructure.OS;
 using VoltTray.Shared;
-using VoltTray.UI.Dialogs;
-using VoltTray.UI.Rendering;
 
 namespace VoltTray.Hosting;
 
@@ -30,32 +26,8 @@ public sealed class TrayMonitorModeStrategy : IApplicationModeStrategy
 
         try
         {
-            var telemetryProbe = new InProcessTelemetryProbe();
-            IExecutionBoundary executionBoundary = new SafeExecutionMiddleware(telemetryProbe);
-            using IUpsDevicePort rawPort = CreateUpsDevicePort(_options);
-            using IUpsDevicePort upsPort = new DiagnosticUpsPortDecorator(rawPort, telemetryProbe);
-            var shutdownPort = new WindowsShutdownPort();
-            var notificationPort = new WindowsNotificationPort();
-            using var trayRenderer = new TrayRenderer();
-            using var popoverPainter = new PopoverPainter();
-            var exitDialog = new ExitDialog();
-
-            using var lifecycle = new HostLifecycle(
-                upsPort,
-                shutdownPort,
-                notificationPort,
-                trayRenderer,
-                popoverPainter,
-                exitDialog,
-                screenPlacementProvider: null,
-                telemetryProbe,
-                executionBoundary,
-                delegateDiagnosticsToPort: true);
-
-            if (_options.IsDryRun)
-            {
-                lifecycle.ShutdownCoordinator.DryRun = true;
-            }
+            using var bootstrapper = new TrayMonitorBootstrapper(_options, () => CreateUpsDevicePort(_options));
+            HostLifecycle lifecycle = bootstrapper.Lifecycle;
 
             lifecycle.ExitAction = () => Win32MessagePump.PostQuit(ApplicationExitCodes.Success);
             lifecycle.Start(_options.PollingIntervalMs);
