@@ -3,6 +3,7 @@ using System.Runtime.InteropServices;
 using VoltTray.Core.Models;
 using VoltTray.Core.Ports;
 using VoltTray.Infrastructure.Diagnostics;
+using VoltTray.Shared;
 using VoltTray.Tests.ObjectMothers;
 using VoltTray.UI.Models;
 using VoltTray.UI.Views;
@@ -25,6 +26,11 @@ public class HostLifecycleTests
         public bool ToggleBeeperResult { get; set; } = true;
         public bool TriggerSelfTestResult { get; set; } = true;
         public bool TryConnect(string? p = null) { TryConnectCalls++; IsConnected = true; return true; }
+        public Task<Result<string>> ConnectAsync(string? p = null, CancellationToken ct = default)
+        {
+            TryConnect(p);
+            return Task.FromResult(Result<string>.Success("MockPath"));
+        }
         public void Disconnect() { DisconnectCalls++; IsConnected = false; }
         public Task<UpsTelemetry?> ReadTelemetryAsync(DateTimeOffset? now = null, CancellationToken ct = default) => Task.FromResult(NextTelemetry);
         public Task<bool> ToggleBeeperAsync(CancellationToken ct = default) { ToggleBeeperCalls++; return Task.FromResult(ToggleBeeperResult); }

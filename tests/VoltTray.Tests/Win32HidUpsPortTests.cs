@@ -237,6 +237,11 @@ public class Win32HidUpsPortTests
         {
             return _connection;
         }
+
+        public VoltTray.Shared.Result<IHidConnection> Open(string devicePath)
+        {
+            return VoltTray.Shared.Result<IHidConnection>.Success(_connection);
+        }
     }
 
     private sealed class BlockingFakeHidConnection : IHidConnection

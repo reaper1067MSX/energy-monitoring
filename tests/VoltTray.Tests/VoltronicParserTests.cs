@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Text;
 using VoltTray.Core.Models;
 using VoltTray.Infrastructure.Protocol;
 using VoltTray.Tests.ObjectMothers;
@@ -103,6 +104,19 @@ public class VoltronicParserTests
 
         UpsTelemetry? resultNull = _parser.Parse(null, previous: initialTelemetry);
         Assert.Same(initialTelemetry, resultNull);
+
+        byte[][] malformedVectors =
+        [
+            [],
+            [VoltronicProtocolConstants.FrameHeaderHash, VoltronicProtocolConstants.CarriageReturn],
+            [VoltronicProtocolConstants.NullByte, VoltronicProtocolConstants.NullByte, VoltronicProtocolConstants.NullByte],
+            Encoding.ASCII.GetBytes("# 1 2 3 4 5 6 7 8\r")
+        ];
+
+        foreach (byte[] vector in malformedVectors)
+        {
+            Assert.Same(initialTelemetry, _parser.Parse(vector, previous: initialTelemetry));
+        }
     }
 
     [Theory]
@@ -315,5 +329,31 @@ public class VoltronicParserTests
         Assert.Equal(UpsOperationalState.ChargingAvr, telemetry.State);
         Assert.Equal(expectedInputVoltageAc, telemetry.InputVoltageAc);
         Assert.Equal(expectedOutputVoltageAc, telemetry.OutputVoltageAc);
+    }
+
+    [Fact]
+    public void Parse_EscapedCarriageReturnInsidePayload_DoesNotPrematurelyTerminateFrame()
+    {
+        byte[] frameWithEscapedCr =
+        [
+            0x23,
+            0x73, 0x01, 0x20,
+            0x34, 0x28, 0x00, 0x20,
+            0x73, 0x01, 0x20,
+            0x34, 0x20,
+            0x0E, 0x20,
+            0x50, 0x0C, 0x20,
+            0x12, 0xC0, 0x20,
+            0xE9, 0x20,
+            0x3C, 0x20,
+            0x08, 0x20,
+            0xA1, 0x0D
+        ];
+
+        UpsTelemetry? telemetry = _parser.Parse(frameWithEscapedCr);
+
+        Assert.NotNull(telemetry);
+        Assert.Equal(ExpectedGoldenLoadPercentage, telemetry.LoadPercentage);
+        Assert.Equal(ExpectedGoldenBatteryVoltageDc, telemetry.BatteryVoltageDc);
     }
 }

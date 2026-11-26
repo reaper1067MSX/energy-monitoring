@@ -4,6 +4,8 @@ public static class HostConstants
 {
     public const int ConsecutiveErrorsBeforeCommLost = 3;
     public const int PollingStopTimeoutMs = 500;
+    public const int MaxReconnectBackoffMs = 5000;
+    public const int BackoffMultiplier = 2;
     public const int MinimumPauseTimerMs = 1;
     public const int FallbackAnchorSizePx = 32;
     public const int FallbackAnchorOffsetPx = 40;

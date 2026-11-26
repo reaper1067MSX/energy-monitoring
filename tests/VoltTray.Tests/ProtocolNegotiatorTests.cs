@@ -241,6 +241,9 @@ public class ProtocolNegotiatorTests
     private sealed class SingleConnectionTransport(IHidConnection connection) : IHidTransport
     {
         public IHidConnection? TryOpen(string devicePath) => connection;
+
+        public VoltTray.Shared.Result<IHidConnection> Open(string devicePath) =>
+            VoltTray.Shared.Result<IHidConnection>.Success(connection);
     }
 
     private sealed class ScriptedHidConnection(IReadOnlyDictionary<string, byte[]> responses) : IHidConnection
