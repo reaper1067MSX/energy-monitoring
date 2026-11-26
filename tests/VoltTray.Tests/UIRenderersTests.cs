@@ -186,17 +186,19 @@ public class UIRenderersTests
     [Fact]
     public void TrayIconRasterizer_Renders32BppArgbWithTransparentBackground_DistinctStateShapes_AndTaskbarThemeColors()
     {
-        Assert.Equal(16, TrayIconRasterizer.ResolvePhysicalSize(96));
-        Assert.Equal(20, TrayIconRasterizer.ResolvePhysicalSize(120));
-        Assert.Equal(24, TrayIconRasterizer.ResolvePhysicalSize(144));
-        Assert.Equal(32, TrayIconRasterizer.ResolvePhysicalSize(192));
+        ITrayIconRasterizer rasterizer = TrayIconRasterizer.CreateDefault();
 
-        uint[] darkOnline = TrayIconRasterizer.RenderArgbPixels(UpsOperationalState.LineNormal, 100, 20, isLightTaskbar: false);
-        uint[] lightOnline = TrayIconRasterizer.RenderArgbPixels(UpsOperationalState.LineNormal, 100, 20, isLightTaskbar: true);
-        uint[] onBattery = TrayIconRasterizer.RenderArgbPixels(UpsOperationalState.OnBattery, 50, 20, isLightTaskbar: false);
-        uint[] fault = TrayIconRasterizer.RenderArgbPixels(UpsOperationalState.Fault, 0, 20, isLightTaskbar: false);
-        uint[] paused = TrayIconRasterizer.RenderArgbPixels(UpsOperationalState.Paused, 0, 20, isLightTaskbar: false);
-        uint[] noComm = TrayIconRasterizer.RenderArgbPixels(UpsOperationalState.CommunicationsLost, 0, 20, isLightTaskbar: false);
+        Assert.Equal(16, rasterizer.ResolvePhysicalSize(96));
+        Assert.Equal(20, rasterizer.ResolvePhysicalSize(120));
+        Assert.Equal(24, rasterizer.ResolvePhysicalSize(144));
+        Assert.Equal(32, rasterizer.ResolvePhysicalSize(192));
+
+        uint[] darkOnline = rasterizer.RenderArgbPixels(UpsOperationalState.LineNormal, 100, 20, isLightTaskbar: false);
+        uint[] lightOnline = rasterizer.RenderArgbPixels(UpsOperationalState.LineNormal, 100, 20, isLightTaskbar: true);
+        uint[] onBattery = rasterizer.RenderArgbPixels(UpsOperationalState.OnBattery, 50, 20, isLightTaskbar: false);
+        uint[] fault = rasterizer.RenderArgbPixels(UpsOperationalState.Fault, 0, 20, isLightTaskbar: false);
+        uint[] paused = rasterizer.RenderArgbPixels(UpsOperationalState.Paused, 0, 20, isLightTaskbar: false);
+        uint[] noComm = rasterizer.RenderArgbPixels(UpsOperationalState.CommunicationsLost, 0, 20, isLightTaskbar: false);
 
         Assert.Equal(0x00u, darkOnline[0] >> 24);
         Assert.Contains(darkOnline, px => (px >> 24) == 0xFF);
@@ -210,7 +212,7 @@ public class UIRenderersTests
     [Fact]
     public void TrayRenderer_HandlesTaskbarCreatedMessage_WithoutLeakingIconHandle()
     {
-        using var renderer = new TrayRenderer(() => true);
+        using var renderer = new TrayRenderer(isLightTaskbarProvider: () => true);
         renderer.UpdateIcon(UpsOperationalState.LineNormal, 100, dpi: 192);
         IntPtr iconBefore = renderer.CurrentHIcon;
         Assert.NotEqual(IntPtr.Zero, iconBefore);

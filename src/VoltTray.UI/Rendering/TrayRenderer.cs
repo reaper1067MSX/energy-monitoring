@@ -14,6 +14,7 @@ namespace VoltTray.UI.Rendering;
 /// </summary>
 public sealed class TrayRenderer : ITrayIconView
 {
+    private readonly ITrayIconRasterizer _rasterizer;
     private readonly Func<bool> _isLightTaskbarProvider;
     private readonly object _lock = new();
     private IntPtr _currentHIcon = IntPtr.Zero;
@@ -36,8 +37,11 @@ public sealed class TrayRenderer : ITrayIconView
     public string? CurrentTooltip { get; private set; }
     public uint TaskbarCreatedMessageId => _taskbarCreatedMessage;
 
-    public TrayRenderer(Func<bool>? isLightTaskbarProvider = null)
+    public TrayRenderer(
+        ITrayIconRasterizer? rasterizer = null,
+        Func<bool>? isLightTaskbarProvider = null)
     {
+        _rasterizer = rasterizer ?? TrayIconRasterizer.CreateDefault();
         _isLightTaskbarProvider = isLightTaskbarProvider ?? WindowsThemeDetector.IsLightTaskbar;
         InitializeHostWindow();
     }
@@ -119,7 +123,7 @@ public sealed class TrayRenderer : ITrayIconView
 
     public unsafe void UpdateIcon(UpsOperationalState state, int batteryPct, int dpi = LayoutTokens.DefaultDpi)
     {
-        int size = TrayIconRasterizer.ResolvePhysicalSize(dpi);
+        int size = _rasterizer.ResolvePhysicalSize(dpi);
         bool isLightTaskbar = _isLightTaskbarProvider();
         IntPtr hNew = CreateArgbIcon(state, batteryPct, size, isLightTaskbar);
 
@@ -216,12 +220,12 @@ public sealed class TrayRenderer : ITrayIconView
         }
     }
 
-    private static unsafe IntPtr CreateArgbIcon(UpsOperationalState state, int batteryPct, int size, bool isLightTaskbar)
+    private unsafe IntPtr CreateArgbIcon(UpsOperationalState state, int batteryPct, int size, bool isLightTaskbar)
     {
-        uint[] pixels = TrayIconRasterizer.RenderArgbPixels(state, batteryPct, size, isLightTaskbar);
-        var header = new GdiNative.BitmapInfoHeader
+        uint[] pixels = _rasterizer.RenderArgbPixels(state, batteryPct, size, isLightTaskbar);
+        var header = new BitmapInfoHeader
         {
-            Size = (uint)sizeof(GdiNative.BitmapInfoHeader),
+            Size = (uint)sizeof(BitmapInfoHeader),
             Width = size,
             Height = -size,
             Planes = Win32UiConstants.ColorPlanesSingle,

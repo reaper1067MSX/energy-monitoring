@@ -30,7 +30,8 @@ public sealed class TrayMonitorBootstrapper : IDisposable
         IExecutionBoundary executionBoundary = new SafeExecutionMiddleware(telemetryProbe);
         _rawPort = upsPortFactory();
         _decoratedPort = new DiagnosticUpsPortDecorator(_rawPort, telemetryProbe);
-        _trayRenderer = new TrayRenderer();
+        ITrayIconRasterizer trayIconRasterizer = TrayIconRasterizer.CreateDefault();
+        _trayRenderer = new TrayRenderer(trayIconRasterizer, WindowsThemeDetector.IsLightTaskbar);
         _popoverPainter = new PopoverPainter(enableNativeWindow: true);
 
         Lifecycle = new HostLifecycle(
