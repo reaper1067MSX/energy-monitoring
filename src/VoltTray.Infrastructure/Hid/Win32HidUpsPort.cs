@@ -159,6 +159,9 @@ public sealed class Win32HidUpsPort : IUpsDevicePort
         }
     }
 
+    internal static SafeFileHandle OpenOverlapped(string path, uint desiredAccess = GENERIC_READ | GENERIC_WRITE, uint flags = FILE_FLAG_OVERLAPPED) =>
+        CreateFile(path, desiredAccess, FILE_SHARE_READ | FILE_SHARE_WRITE, IntPtr.Zero, OPEN_EXISTING, flags, IntPtr.Zero);
+
     private bool TryOpenHandle(string path)
     {
         var handle = CreateFile(
@@ -318,7 +321,7 @@ public sealed class Win32HidUpsPort : IUpsDevicePort
         }, cancellationToken);
     }
 
-    private static bool WriteCommandChunksInternal(SafeFileHandle handle, string command)
+    internal static bool WriteCommandChunksInternal(SafeFileHandle handle, string command)
     {
         byte[] cmdBytes = Encoding.ASCII.GetBytes(command);
         int chunkLen = HidConstants.PayloadChunkLength;
@@ -334,7 +337,7 @@ public sealed class Win32HidUpsPort : IUpsDevicePort
         return true;
     }
 
-    private static int ReadOverlapped(SafeFileHandle handle, byte[] buffer, int timeoutMs)
+    internal static int ReadOverlapped(SafeFileHandle handle, byte[] buffer, int timeoutMs)
     {
         IntPtr hEvent = CreateEvent(IntPtr.Zero, true, false, null);
         IntPtr pOv = Marshal.AllocHGlobal(Marshal.SizeOf<OVERLAPPED>());

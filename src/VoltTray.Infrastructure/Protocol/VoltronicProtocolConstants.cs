@@ -46,8 +46,12 @@ public static class VoltronicProtocolConstants
     public const byte StatusBatteryLow = StatusOnBatteryMask | StatusBatteryLowMask; // 0xC0
     public const byte StatusAvr = StatusLineInteractiveMask | StatusAvrBoostBuckMask; // 0x28
 
-    // Status Byte 2 Values
+    // Status Byte 2 Values & Masks
     public const byte StatusByte2Nominal = 0xA1; // 0xA1 (bit 7=1, bit 5=1, bit 0=1)
+    public const byte StatusByte2Freq60HzMask = 0x80; // Bit 7: 1=60Hz, 0=50Hz
+    public const byte StatusByte2BatteryBankMask = 0x60; // Bits 6..5: 00=12V, 01=24V, 10=36V, 11=48V
+    public const int StatusByte2BatteryBankShift = 5;
+    public const byte StatusByte2NominalAcMask = 0x07; // Bits 2..0: 000=110V..100=240V
 
     // Standard Protocol Commands
     public const string QueryStatusCommand = "QS\r";
@@ -138,9 +142,11 @@ public static class VoltronicProtocolConstants
         byte freq2High = NominalFrequencyPart2High,
         byte freq2Low = NominalFrequencyPart2Low,
         byte bat1 = NominalBatteryVoltagePart1,
-        byte bat2 = NominalBatteryVoltagePart2)
+        byte bat2 = NominalBatteryVoltagePart2,
+        byte[]? freq1Bytes = null,
+        byte[]? freq2Bytes = null)
     {
-        var list = new List<byte>(28);
+        var list = new List<byte>(32);
         list.Add(FrameHeaderHash);
 
         AppendEscapedByte(list, inVHexHigh);
@@ -160,12 +166,12 @@ public static class VoltronicProtocolConstants
         AppendEscapedByte(list, loadPercentage);
         list.Add(SpaceDelimiter);
 
-        AppendEscapedByte(list, freq1High);
-        AppendEscapedByte(list, freq1Low);
+        if (freq1Bytes is { Length: > 0 }) foreach (byte b in freq1Bytes) AppendEscapedByte(list, b);
+        else { AppendEscapedByte(list, freq1High); AppendEscapedByte(list, freq1Low); }
         list.Add(SpaceDelimiter);
 
-        AppendEscapedByte(list, freq2High);
-        AppendEscapedByte(list, freq2Low);
+        if (freq2Bytes is { Length: > 0 }) foreach (byte b in freq2Bytes) AppendEscapedByte(list, b);
+        else { AppendEscapedByte(list, freq2High); AppendEscapedByte(list, freq2Low); }
         list.Add(SpaceDelimiter);
 
         AppendEscapedByte(list, bat1);

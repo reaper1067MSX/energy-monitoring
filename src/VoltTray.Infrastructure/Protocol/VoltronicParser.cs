@@ -6,6 +6,13 @@ using VoltTray.Core.Services;
 
 namespace VoltTray.Infrastructure.Protocol;
 
+/// <summary>Decoded hardware nominal ratings from Protocol 'T' Status Byte 2 (T10).</summary>
+public readonly record struct UpsStatusByte2Ratings(
+    double NominalFrequencyHz,
+    int BatteryBankSeriesCount,
+    double NominalBatteryVoltageDc,
+    double? NominalOutputVoltageAc);
+
 public sealed class VoltronicParser
 {
     private readonly IBatteryAutonomyEstimator _estimator;
@@ -64,15 +71,9 @@ public sealed class VoltronicParser
         int loadPct = Math.Clamp(tokens[4].Length > 0 ? tokens[4][0] : 0, 0, 100);
         int activeWatts = (int)Math.Round((double)loadPct * VoltronicProtocolConstants.DefaultRatedWatts / 100.0, MidpointRounding.AwayFromZero);
 
-        double freq = VoltronicProtocolConstants.DefaultNominalFrequencyHz;
-        if (tokens.Count >= 7 && tokens[6].Length >= 2)
-        {
-            int f1 = (tokens[5][0] << 8) | (tokens[5].Length > 1 ? tokens[5][1] : 0);
-            int f2 = (tokens[6][0] << 8) | (tokens[6].Length > 1 ? tokens[6][1] : 0);
-            if (f2 > 0) freq = Math.Round((double)f1 / (f2 / 1000.0) / 1000.0, 1);
-            if (freq < VoltronicProtocolConstants.MinValidFrequencyHz || freq > VoltronicProtocolConstants.MaxValidFrequencyHz)
-                freq = VoltronicProtocolConstants.DefaultNominalFrequencyHz;
-        }
+        double freq = tokens.Count >= 7
+            ? DecodeFrequencyHz(tokens[5], tokens[6])
+            : VoltronicProtocolConstants.DefaultNominalFrequencyHz;
 
         int b1 = tokens[7].Length > 0 ? tokens[7][0] : 0;
         int b2 = tokens[8].Length > 0 ? tokens[8][0] : 0;
@@ -155,12 +156,38 @@ public sealed class VoltronicParser
         return result.ToArray();
     }
 
+    /// <summary>Decodes an arbitrary-width (1..8 byte) big-endian unsigned integer token.</summary>
+    public static ulong DecodeBigEndianUInt64(ReadOnlySpan<byte> bytes)
+    {
+        if (bytes.IsEmpty || bytes.Length > 8) return 0;
+        ulong value = 0;
+        foreach (byte b in bytes) value = (value << 8) | b;
+        return value;
+    }
+
+    /// <summary>Decodes grid frequency (Hz) from arbitrary-width T5 period ticks and T6 timer clock Hz.</summary>
+    public static double DecodeFrequencyHz(ReadOnlySpan<byte> periodTicks, ReadOnlySpan<byte> timerClockHz, double fallbackHz = VoltronicProtocolConstants.DefaultNominalFrequencyHz)
+    {
+        ulong val1 = DecodeBigEndianUInt64(periodTicks), val2 = DecodeBigEndianUInt64(timerClockHz);
+        if (val1 == 0 || val2 == 0) return fallbackHz;
+        double hz = Math.Round((double)val2 / val1, 2);
+        return hz >= VoltronicProtocolConstants.MinValidFrequencyHz && hz <= VoltronicProtocolConstants.MaxValidFrequencyHz ? hz : fallbackHz;
+    }
+
+    /// <summary>Decodes nominal ratings bitmask from Protocol 'T' Status Byte 2 (T10).</summary>
+    public static UpsStatusByte2Ratings DecodeStatusByte2Ratings(byte statusByte2)
+    {
+        double nominalHz = (statusByte2 & VoltronicProtocolConstants.StatusByte2Freq60HzMask) != 0 ? 60.0 : 50.0;
+        int banks = ((statusByte2 & VoltronicProtocolConstants.StatusByte2BatteryBankMask) >> VoltronicProtocolConstants.StatusByte2BatteryBankShift) + 1;
+        double? nominalAc = (statusByte2 & VoltronicProtocolConstants.StatusByte2NominalAcMask) switch { 0 => 110.0, 1 => 120.0, 2 => 220.0, 3 => 230.0, 4 => 240.0, _ => null };
+        return new UpsStatusByte2Ratings(nominalHz, banks, banks * 12.0, nominalAc);
+    }
+
     public static double DecodeVoltage(byte[] hexVal, byte[] ratio)
     {
         if (hexVal == null || ratio == null || ratio.Length == 0) return 0.0;
-        int r = ratio[0];
-        int val = hexVal.Length >= 2 ? (hexVal[0] << 8) | hexVal[1] : hexVal.Length == 1 ? hexVal[0] : 0;
-        return Math.Round((double)(val * r) / VoltronicProtocolConstants.VoltageDivisor, 1);
+        ulong val = DecodeBigEndianUInt64(hexVal);
+        return Math.Round((double)val * ratio[0] / VoltronicProtocolConstants.VoltageDivisor, 1);
     }
 
     public static (UpsOperationalState State, bool IsBeeperMuted, bool IsTestInProgress) DecodeStatusBits(byte statusByte1, double inV = 120.0, double outV = 120.0)

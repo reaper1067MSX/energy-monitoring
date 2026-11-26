@@ -32,6 +32,11 @@ public static class Program
     [STAThread]
     public static int Main(string[] args)
     {
+        if (args.Any(a => a.Equals("--inspect", StringComparison.OrdinalIgnoreCase)))
+        {
+            return UpsHidInspector.RunCli(args, Console.Out);
+        }
+
         bool isSimulation = args.Any(a => a.Equals("--simulate", StringComparison.OrdinalIgnoreCase) ||
                                           a.Equals("--sim", StringComparison.OrdinalIgnoreCase) ||
                                           a.Equals("--mock", StringComparison.OrdinalIgnoreCase));

@@ -124,4 +124,40 @@ public class VoltronicParserTests
         var t6 = parser.Parse(frameTesting, now: startTime.AddSeconds(30));
         Assert.True(t6!.IsTestInProgress);
     }
+
+    [Theory]
+    [InlineData(new byte[] { 0x34 }, 0x34UL)]
+    [InlineData(new byte[] { 0x50, 0x0B }, 0x500BUL)]
+    [InlineData(new byte[] { 0x12, 0xC0, 0x00 }, 0x12C000UL)]
+    [InlineData(new byte[] { 0x05, 0xDC, 0x00, 0x00 }, 0x05DC0000UL)]
+    [InlineData(new byte[] { 0x01, 0x02, 0x03, 0x04, 0x05 }, 0x0102030405UL)]
+    [InlineData(new byte[] { 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08 }, 0x0102030405060708UL)]
+    [InlineData(new byte[0], 0UL)]
+    [InlineData(new byte[] { 1, 2, 3, 4, 5, 6, 7, 8, 9 }, 0UL)]
+    public void DecodeBigEndianUInt64_HandlesOneToEightBytesAndBounds(byte[] input, ulong expected) =>
+        Assert.Equal(expected, VoltronicParser.DecodeBigEndianUInt64(input));
+
+    [Fact]
+    public void Parse_ArbitraryWidthFrequencyFrames_DecodesExpectedHz()
+    {
+        var nt2401 = _parser.Parse(VoltronicFrameMother.Nt2401ProLiveFrame)!;
+        Assert.Equal(116.2, nt2401.InputVoltageAc);
+        Assert.Equal(59.97, nt2401.FrequencyHz);
+        Assert.False(nt2401.IsBeeperMuted);
+        Assert.Equal(50.08, _parser.Parse(VoltronicFrameMother.Upstream50HzFrame)!.FrequencyHz);
+        Assert.Equal(60.0, _parser.Parse(VoltronicFrameMother.Dsp4ByteTimerFrame)!.FrequencyHz);
+        Assert.Equal(59.97, VoltronicParser.DecodeFrequencyHz([0x50, 0x0B], [0x12, 0xC0, 0x00]));
+        Assert.Equal(60.0, VoltronicParser.DecodeFrequencyHz([0x50, 0x0C], [0x12, 0xC0]));
+    }
+
+    [Theory]
+    [InlineData((byte)0xA1, 60.0, 2, 24.0, 120.0)]
+    [InlineData((byte)0x02, 50.0, 1, 12.0, 220.0)]
+    [InlineData((byte)0x63, 50.0, 4, 48.0, 230.0)]
+    [InlineData((byte)0x47, 50.0, 3, 36.0, null)]
+    public void DecodeStatusByte2Ratings_ExtractsFrequencyBankAndNominalAc(byte status2, double hz, int banks, double dc, double? ac)
+    {
+        var ratings = VoltronicParser.DecodeStatusByte2Ratings(status2);
+        Assert.Equal((hz, banks, dc, ac), (ratings.NominalFrequencyHz, ratings.BatteryBankSeriesCount, ratings.NominalBatteryVoltageDc, ratings.NominalOutputVoltageAc));
+    }
 }
