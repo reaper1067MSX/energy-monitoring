@@ -10,6 +10,9 @@ public class SplitCockpitPresenterTests
 {
     private class MockTrayIconView : ITrayIconView
     {
+        public event Action? OnTrayIconClicked { add { } remove { } }
+        public event Action? OnContextMenuRequested { add { } remove { } }
+
         public UpsOperationalState? LastState { get; private set; }
         public int LastBatteryPct { get; private set; }
         public int LastDpi { get; private set; }
@@ -25,12 +28,17 @@ public class SplitCockpitPresenterTests
 
         public void SetTooltip(string text) => LastTooltip = text;
         public void Recreate() => RecreateCalled = true;
+        public ViewRect? TryGetIconRect() => null;
         public void Dispose() { }
     }
 
     private class MockPopoverView : IPopoverView
     {
+        public event Action? OnSelfTestRequested { add { } remove { } }
+        public event Action? OnToggleBeeperRequested { add { } remove { } }
+
         public bool IsVisible { get; set; }
+        public UITheme CurrentTheme { get; private set; } = UITheme.Dark;
         public UpsTelemetry? LastTelemetry { get; private set; }
         public UITheme? LastTheme { get; private set; }
         public ViewRect? LastIconRect { get; private set; }
@@ -41,6 +49,7 @@ public class SplitCockpitPresenterTests
         public void Show(UpsTelemetry telemetry, UITheme theme, ViewRect iconRect, TaskbarEdge edge, ViewRect workArea)
         {
             IsVisible = true;
+            CurrentTheme = theme;
             LastTelemetry = telemetry;
             LastTheme = theme;
             LastIconRect = iconRect;
@@ -99,17 +108,23 @@ public class SplitCockpitPresenterTests
     }
 
     [Theory]
-    [InlineData(UpsOperationalState.LineNormal, 100, 25, "Forza FX-2200 LCD · Online (100% · ≈ 25 min)")]
-    [InlineData(UpsOperationalState.LineNormal, 100, null, "Forza FX-2200 LCD · Online (100%)")]
-    [InlineData(UpsOperationalState.OnBattery, 82, 19, "Forza FX-2200 LCD · On Battery (82% · ≈ 19 min)")]
-    [InlineData(UpsOperationalState.BatteryLow, 15, 3, "Forza FX-2200 LCD · Battery Low (15% · ≈ 3 min)")]
-    [InlineData(UpsOperationalState.ChargingAvr, 100, 25, "Forza FX-2200 LCD · AVR Boost (100% · ≈ 25 min)")]
-    [InlineData(UpsOperationalState.Fault, 0, 0, "Forza FX-2200 LCD · Fault (Check Unit)")]
-    [InlineData(UpsOperationalState.Paused, 100, 25, "Forza FX-2200 LCD · Monitoring Paused")]
-    [InlineData(UpsOperationalState.CommunicationsLost, 0, 0, "Forza FX-2200 LCD · No Communication")]
-    public void FormatTooltip_GeneratesFormattedString(UpsOperationalState state, int battPct, int? runtimeMin, string expected)
+    [InlineData(UpsOperationalState.LineNormal, 100, 25, null, "VoltTray UPS · Online (100% · ≈ 25 min)")]
+    [InlineData(UpsOperationalState.LineNormal, 100, null, null, "VoltTray UPS · Online (100%)")]
+    [InlineData(UpsOperationalState.LineNormal, 100, 25, "Forza NT-2401PRO", "Forza NT-2401PRO · Online (100% · ≈ 25 min)")]
+    [InlineData(UpsOperationalState.OnBattery, 82, 19, null, "VoltTray UPS · On Battery (82% · ≈ 19 min)")]
+    [InlineData(UpsOperationalState.BatteryLow, 15, 3, null, "VoltTray UPS · Battery Low (15% · ≈ 3 min)")]
+    [InlineData(UpsOperationalState.ChargingAvr, 100, 25, null, "VoltTray UPS · AVR Boost (100% · ≈ 25 min)")]
+    [InlineData(UpsOperationalState.Fault, 0, 0, null, "VoltTray UPS · Fault (Check Unit)")]
+    [InlineData(UpsOperationalState.Paused, 100, 25, null, "VoltTray UPS · Monitoring Paused")]
+    [InlineData(UpsOperationalState.CommunicationsLost, 0, 0, null, "VoltTray UPS · No Communication")]
+    public void FormatTooltip_GeneratesFormattedString(
+        UpsOperationalState state,
+        int battPct,
+        int? runtimeMin,
+        string? modelName,
+        string expected)
     {
-        string actual = SplitCockpitPresenter.FormatTooltip(state, battPct, runtimeMin);
+        string actual = SplitCockpitPresenter.FormatTooltip(state, battPct, runtimeMin, modelName);
         Assert.Equal(expected, actual);
     }
 
@@ -134,7 +149,7 @@ public class SplitCockpitPresenterTests
         Assert.Equal(UpsOperationalState.LineNormal, mockTray.LastState);
         Assert.Equal(100, mockTray.LastBatteryPct);
         Assert.Equal(144, mockTray.LastDpi);
-        Assert.Equal("Forza FX-2200 LCD · Online (100% · ≈ 25 min)", mockTray.LastTooltip);
+        Assert.Equal("VoltTray UPS · Online (100% · ≈ 25 min)", mockTray.LastTooltip);
         Assert.Same(telemetry, presenter.CurrentTelemetry);
 
         // Action commands test

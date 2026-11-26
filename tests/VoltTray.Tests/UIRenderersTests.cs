@@ -76,4 +76,27 @@ public class UIRenderersTests
         var result = dialog.Show(UITheme.Dark);
         Assert.Equal(ExitDialogResult.Pause, result);
     }
+
+    [Theory]
+    [InlineData(0, 0, 2560, 1440, 0, 48, 2560, 1440, TaskbarEdge.Top)]
+    [InlineData(0, 0, 2560, 1440, 64, 0, 2560, 1440, TaskbarEdge.Left)]
+    [InlineData(0, 0, 2560, 1440, 0, 0, 2496, 1440, TaskbarEdge.Right)]
+    [InlineData(0, 0, 2560, 1440, 0, 0, 2560, 1392, TaskbarEdge.Bottom)]
+    public void Win32ScreenPlacementProvider_InferTaskbarEdge_DetectsAllFourMonitorEdges(
+        int monitorLeft,
+        int monitorTop,
+        int monitorRight,
+        int monitorBottom,
+        int workLeft,
+        int workTop,
+        int workRight,
+        int workBottom,
+        TaskbarEdge expectedEdge)
+    {
+        var monitorBounds = new ViewRect(monitorLeft, monitorTop, monitorRight, monitorBottom);
+        var workArea = new ViewRect(workLeft, workTop, workRight, workBottom);
+
+        TaskbarEdge edge = Win32ScreenPlacementProvider.InferTaskbarEdge(monitorBounds, workArea);
+        Assert.Equal(expectedEdge, edge);
+    }
 }

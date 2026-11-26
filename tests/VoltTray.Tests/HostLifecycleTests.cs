@@ -2,6 +2,7 @@ using System.Diagnostics;
 using System.Runtime.InteropServices;
 using VoltTray.Core.Models;
 using VoltTray.Core.Ports;
+using VoltTray.Infrastructure.Diagnostics;
 using VoltTray.Tests.ObjectMothers;
 using VoltTray.UI.Models;
 using VoltTray.UI.Views;
@@ -18,33 +19,76 @@ public class HostLifecycleTests
         public string? ActiveDevicePath => IsConnected ? "MockPath" : null;
         public int DisconnectCalls { get; private set; }
         public int TryConnectCalls { get; private set; }
+        public int ToggleBeeperCalls { get; private set; }
+        public int TriggerSelfTestCalls { get; private set; }
         public UpsTelemetry? NextTelemetry { get; set; }
         public bool ToggleBeeperResult { get; set; } = true;
         public bool TriggerSelfTestResult { get; set; } = true;
         public bool TryConnect(string? p = null) { TryConnectCalls++; IsConnected = true; return true; }
         public void Disconnect() { DisconnectCalls++; IsConnected = false; }
         public Task<UpsTelemetry?> ReadTelemetryAsync(DateTimeOffset? now = null, CancellationToken ct = default) => Task.FromResult(NextTelemetry);
-        public Task<bool> ToggleBeeperAsync(CancellationToken ct = default) => Task.FromResult(ToggleBeeperResult);
-        public Task<bool> TriggerSelfTestAsync(CancellationToken ct = default) => Task.FromResult(TriggerSelfTestResult);
+        public Task<bool> ToggleBeeperAsync(CancellationToken ct = default) { ToggleBeeperCalls++; return Task.FromResult(ToggleBeeperResult); }
+        public Task<bool> TriggerSelfTestAsync(CancellationToken ct = default) { TriggerSelfTestCalls++; return Task.FromResult(TriggerSelfTestResult); }
         public void Dispose() => Disconnect();
     }
     private sealed class MockTrayIcon : ITrayIconView
     {
+        public event Action? OnTrayIconClicked;
+        public event Action? OnContextMenuRequested;
+
         public UpsOperationalState? LastState { get; set; }
         public int LastBatteryPct { get; set; }
         public string? LastTooltip { get; set; }
-        public void UpdateIcon(UpsOperationalState s, int b, int dpi) { LastState = s; LastBatteryPct = b; }
+        public ViewRect? IconRect { get; set; }
+
+        public void UpdateIcon(UpsOperationalState s, int b, int dpi)
+        {
+            LastState = s;
+            LastBatteryPct = b;
+        }
+
         public void SetTooltip(string text) => LastTooltip = text;
         public void Recreate() { }
+        public ViewRect? TryGetIconRect() => IconRect;
+        public void RaiseTrayIconClicked() => OnTrayIconClicked?.Invoke();
+        public void RaiseContextMenuRequested() => OnContextMenuRequested?.Invoke();
         public void Dispose() { }
     }
+
     private sealed class MockPopover : IPopoverView
     {
+        public event Action? OnSelfTestRequested;
+        public event Action? OnToggleBeeperRequested;
+
         public bool IsVisible { get; set; }
+        public UITheme CurrentTheme { get; set; } = UITheme.Dark;
         public UpsTelemetry? LastTelemetry { get; set; }
-        public void Show(UpsTelemetry t, UITheme th, ViewRect r, TaskbarEdge e, ViewRect w) => LastTelemetry = t;
+        public ViewRect? LastIconRect { get; private set; }
+        public TaskbarEdge? LastEdge { get; private set; }
+        public ViewRect? LastWorkArea { get; private set; }
+
+        public void Show(UpsTelemetry t, UITheme th, ViewRect r, TaskbarEdge e, ViewRect w)
+        {
+            IsVisible = true;
+            LastTelemetry = t;
+            CurrentTheme = th;
+            LastIconRect = r;
+            LastEdge = e;
+            LastWorkArea = w;
+        }
+
         public void Hide() => IsVisible = false;
+        public void RaiseSelfTestRequested() => OnSelfTestRequested?.Invoke();
+        public void RaiseToggleBeeperRequested() => OnToggleBeeperRequested?.Invoke();
         public void Dispose() => Hide();
+    }
+
+    private sealed class FakeScreenPlacementProvider(ViewRect workArea, TaskbarEdge edge) : IScreenPlacementProvider
+    {
+        public (ViewRect WorkArea, TaskbarEdge Edge) GetWorkAreaForAnchor(ViewRect anchorRect)
+        {
+            return (workArea, edge);
+        }
     }
     private sealed class FakeShutdownPort : ISafetyShutdownPort { public int Calls { get; private set; } public bool InitiateShutdown(bool d, string r) { Calls++; return true; } public bool AbortShutdown() => true; }
     private sealed class FakeNotificationPort : INotificationPort { public void ShowNotification(string t, string m, NotificationSeverity s) { } }
@@ -187,5 +231,116 @@ public class HostLifecycleTests
         GC.WaitForPendingFinalizers();
         var proc = Process.GetCurrentProcess(); proc.Refresh();
         Assert.True(proc.WorkingSet64 < 80L * 1024 * 1024, $"WS: {proc.WorkingSet64 / (1024 * 1024)} MB");
+    }
+
+    [Fact]
+    public async Task EventedViewInterfaces_HandleTrayPopoverAndExitDialogActionsWithoutDowncasts()
+    {
+        using var port = new MockUpsPort { NextTelemetry = LineNormalTelemetry };
+        using var tray = new MockTrayIcon();
+        using var popover = new MockPopover();
+        var dialog = new MockExitDialog { Result = ExitDialogResult.Pause };
+        var placement = new FakeScreenPlacementProvider(new ViewRect(0, 48, 2560, 1440), TaskbarEdge.Top);
+
+        using var lifecycle = new HostLifecycle(
+            port,
+            null,
+            null,
+            tray,
+            popover,
+            dialog,
+            placement);
+
+        await lifecycle.StepAsync();
+        tray.RaiseTrayIconClicked();
+        Assert.True(popover.IsVisible);
+
+        tray.RaiseTrayIconClicked();
+        Assert.False(popover.IsVisible);
+
+        popover.RaiseToggleBeeperRequested();
+        popover.RaiseSelfTestRequested();
+        Assert.Equal(1, port.ToggleBeeperCalls);
+        Assert.Equal(1, port.TriggerSelfTestCalls);
+
+        tray.RaiseContextMenuRequested();
+        Assert.True(lifecycle.IsPaused);
+    }
+
+    [Fact]
+    public async Task Placement_UsesFakeScreenPlacementProviderWorkAreaAndTopTaskbarEdge()
+    {
+        var monitorWorkArea = new ViewRect(0, 48, 2560, 1440);
+        var liveTrayIconRect = new ViewRect(2410, 8, 2434, 32);
+        using var port = new MockUpsPort { NextTelemetry = LineNormalTelemetry };
+        using var tray = new MockTrayIcon { IconRect = liveTrayIconRect };
+        using var popover = new MockPopover();
+        var placement = new FakeScreenPlacementProvider(monitorWorkArea, TaskbarEdge.Top);
+
+        using var lifecycle = new HostLifecycle(
+            port,
+            null,
+            null,
+            tray,
+            popover,
+            null,
+            placement);
+
+        await lifecycle.StepAsync();
+        tray.RaiseTrayIconClicked();
+
+        Assert.True(popover.IsVisible);
+        Assert.Equal(liveTrayIconRect, popover.LastIconRect);
+        Assert.Equal(monitorWorkArea, popover.LastWorkArea);
+        Assert.Equal(TaskbarEdge.Top, popover.LastEdge);
+    }
+
+    [Fact]
+    public async Task PollOnceAsync_QuarantinesImplausibleFrequency_PreservingLastKnownGoodAndSuppressingShutdown()
+    {
+        string tempDiagnosticsDir = Path.Combine(Path.GetTempPath(), $"volttray-host-diag-{Guid.NewGuid():N}");
+        try
+        {
+            var probe = new InProcessTelemetryProbe(tempDiagnosticsDir);
+            var shutdown = new FakeShutdownPort();
+            var notifications = new FakeNotificationPort();
+            using var port = new MockUpsPort { NextTelemetry = LineNormalTelemetry };
+            using var tray = new MockTrayIcon();
+            using var popover = new MockPopover();
+
+            using var lifecycle = new HostLifecycle(
+                port,
+                shutdown,
+                notifications,
+                tray,
+                popover,
+                null,
+                null,
+                probe);
+
+            lifecycle.ShutdownCoordinator.DryRun = false;
+
+            UpsTelemetry? healthy = await lifecycle.StepAsync();
+            Assert.NotNull(healthy);
+            Assert.Same(healthy, lifecycle.CurrentTelemetry);
+            Assert.False(Directory.Exists(tempDiagnosticsDir));
+
+            // Inject implausible 4.27 Hz + critical low battery state -> must be quarantined before ShutdownCoordinator/UI
+            port.NextTelemetry = OutageLowTelemetry with { FrequencyHz = 4.27 };
+            UpsTelemetry? quarantinedResult1 = await lifecycle.StepAsync();
+            UpsTelemetry? quarantinedResult2 = await lifecycle.StepAsync();
+
+            Assert.Same(healthy, quarantinedResult1);
+            Assert.Same(healthy, quarantinedResult2);
+            Assert.Same(healthy, lifecycle.CurrentTelemetry);
+            Assert.Equal(0, shutdown.Calls);
+        }
+        finally
+        {
+            if (Directory.Exists(tempDiagnosticsDir))
+            {
+                Directory.Delete(tempDiagnosticsDir, recursive: true);
+            }
+        }
     }
 }
