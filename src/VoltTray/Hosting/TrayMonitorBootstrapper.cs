@@ -47,7 +47,7 @@ public sealed class TrayMonitorBootstrapper : IDisposable
             new WindowsNotificationPort(),
             _trayRenderer,
             _popoverPainter,
-            new ExitDialog(),
+            new ExitDialog(enableNativeDialog: true),
             screenPlacementProvider: null,
             telemetryProbe,
             executionBoundary,
@@ -67,14 +67,20 @@ public sealed class TrayMonitorBootstrapper : IDisposable
                 WindowsThemeDetector.IsLightTaskbar,
                 enableNativeWindow: true);
             _taskbarPillSubscriber = new TaskbarPillSubscriber(Lifecycle.EventBus, _taskbarPill, Lifecycle);
+            _trayRenderer.OnTaskbarCreated += _taskbarPill.HandleTaskbarCreated;
         }
     }
 
     public void Dispose()
     {
+        if (_taskbarPill != null)
+        {
+            _trayRenderer.OnTaskbarCreated -= _taskbarPill.HandleTaskbarCreated;
+        }
+
         _taskbarPillSubscriber?.Dispose();
-        _taskbarPill?.Dispose();
         Lifecycle.Dispose();
+        _taskbarPill?.Dispose();
         _popoverPainter.Dispose();
         _trayRenderer.Dispose();
         _decoratedPort.Dispose();

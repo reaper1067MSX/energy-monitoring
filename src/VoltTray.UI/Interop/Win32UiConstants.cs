@@ -89,4 +89,16 @@ internal static class Win32UiConstants
     public const string StartButtonClass = "Start";
     public const string TaskbarPillWindowClass = "VoltTray_TaskbarPill";
     public const string TaskbarPillWindowTitle = "VoltTray Taskbar Pill";
+    public const string ReBarWindowClass = "ReBarWindow32";
+    public const string TaskSwWindowClass = "MSTaskSwWClass";
+    public const uint WmPillRefresh = WmUser + 102;
+    public const uint WmPillHide = WmUser + 103;
+    public const byte PillBorderAlpha = 0xCC;
+    public const int PillBarHalfHeightPx = 3;
+    public const int PillBarHeightPx = 6;
+    public const uint MbYesNoCancel = 0x00000003;
+    public const uint MbIconQuestion = 0x00000020;
+    public const uint MbTopmost = 0x00040000;
+    public const int IdYes = 6;
+    public const int IdNo = 7;
 }

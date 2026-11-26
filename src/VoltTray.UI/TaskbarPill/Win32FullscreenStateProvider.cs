@@ -15,9 +15,9 @@ public sealed class Win32FullscreenStateProvider : IFullscreenStateProvider
                        state == Win32UiConstants.QunsPresentationMode;
             }
         }
-        catch
+        catch (Exception ex) when (ex is DllNotFoundException or EntryPointNotFoundException or PlatformNotSupportedException)
         {
-            // Headless / non-interactive environment fallback.
+            // Headless or unsupported OS environment fallback.
         }
 
         return false;

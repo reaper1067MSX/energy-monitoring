@@ -1,4 +1,5 @@
 using System.Globalization;
+using VoltTray.UI.Interop;
 using VoltTray.UI.Models;
 using VoltTray.UI.Tokens;
 
@@ -11,11 +12,18 @@ namespace VoltTray.UI.Dialogs;
 /// </summary>
 public sealed class ExitDialog : IExitDialogView
 {
+    private readonly bool _enableNativeDialog;
+
     public static int DialogWidth => DesignTokens.Sizes.ExitDialogWidth;
     public static int DialogHeight => DesignTokens.Sizes.ExitDialogHeight;
     public static int ActionButtonHeight => DesignTokens.Sizes.ButtonHeight;
 
     public Func<UITheme, ExitDialogResult>? MockDialogHandler { get; set; }
+
+    public ExitDialog(bool enableNativeDialog = false)
+    {
+        _enableNativeDialog = enableNativeDialog;
+    }
 
     public static ExitDialogCopy GetLocalizedCopy(CultureInfo? culture = null)
     {
@@ -49,7 +57,24 @@ public sealed class ExitDialog : IExitDialogView
             return MockDialogHandler(theme);
         }
 
-        // Default non-blocking safe result when running headless/tests
-        return ExitDialogResult.Cancel;
+        if (!_enableNativeDialog)
+        {
+            return ExitDialogResult.Cancel;
+        }
+
+        ExitDialogCopy copy = GetLocalizedCopy();
+        string prompt = $"{copy.Body}\n\n• Yes: {copy.PauseLabel} ({copy.PauseHelp})\n• No: {copy.CloseLabel} ({copy.CloseHelp})\n• Cancel: {copy.CancelLabel}";
+        int response = GdiNative.MessageBox(
+            ownerHandle,
+            prompt,
+            copy.Title,
+            Win32UiConstants.MbYesNoCancel | Win32UiConstants.MbIconQuestion | Win32UiConstants.MbTopmost);
+
+        return response switch
+        {
+            Win32UiConstants.IdYes => ExitDialogResult.Pause,
+            Win32UiConstants.IdNo => ExitDialogResult.Close,
+            _ => ExitDialogResult.Cancel
+        };
     }
 }

@@ -22,27 +22,37 @@ public class TaskbarPillTests
     }
 
     [Fact]
-    public void TaskbarPillPlacementCalculator_Win11ColdBootEmptyTrayNotify_UsesFallbackCentersToStartAndAvoidsOverlap()
+    public void TaskbarPillPlacementCalculator_Win11ColdBootEmptyTrayNotify_UsesFallbackCentersToStartAndClampsWidth()
     {
         var calculator = new TaskbarPillPlacementCalculator();
-        var snapshot = new TaskbarPillLayoutSnapshot(
+        var coldBootSnapshot = new TaskbarPillLayoutSnapshot(
             TaskbarRect: new ViewRect(0, 1032, 1920, 1080),
             TrayNotifyRect: new ViewRect(0, 0, 0, 0),
             StartButtonRect: new ViewRect(760, 1036, 800, 1076),
             WidgetRect: new ViewRect(8, 1036, 160, 1076),
             AppListRect: new ViewRect(800, 1036, 1120, 1076));
 
-        ViewRect bounds = calculator.Calculate(snapshot);
-
+        ViewRect bounds = calculator.Calculate(coldBootSnapshot);
         Assert.Equal(144, bounds.Width);
         Assert.Equal(48, bounds.Height);
         Assert.Equal(1920 - 220 - 144, bounds.Left);
         Assert.Equal(1032, bounds.Top);
-        Assert.True(bounds.Left >= snapshot.AppListRect!.Value.Right + 6);
+        Assert.True(bounds.Left >= coldBootSnapshot.AppListRect!.Value.Right + 6);
+
+        var tightSnapshot = new TaskbarPillLayoutSnapshot(
+            TaskbarRect: new ViewRect(0, 1032, 1920, 1080),
+            TrayNotifyRect: new ViewRect(1700, 1032, 1920, 1080),
+            StartButtonRect: new ViewRect(760, 1036, 800, 1076),
+            WidgetRect: null,
+            AppListRect: new ViewRect(800, 1036, 1600, 1076));
+
+        ViewRect clamped = calculator.Calculate(tightSnapshot);
+        Assert.True(clamped.Left >= 1606);
+        Assert.True(clamped.Right <= 1694);
     }
 
     [Fact]
-    public void TaskbarPillSurfaceRenderer_FillsInteriorWithMinAlpha1ForHitTesting_AndAdaptsToTaskbarTheme()
+    public void TaskbarPillSurfaceRenderer_FillsPremultipliedArgbWithMinAlpha1_AndAdaptsToTaskbarTheme()
     {
         var renderer = new TaskbarPillSurfaceRenderer(TrayIconRasterizer.CreateDefault());
         UpsTelemetry telemetry = UpsTelemetry.CreateDefault();
@@ -51,12 +61,29 @@ public class TaskbarPillTests
         uint[] lightPixels = renderer.RenderArgbPixels(telemetry, 144, 48, isLightTaskbar: true, dpi: 96);
 
         Assert.Equal(144 * 48, darkPixels.Length);
-        Assert.All(darkPixels, px => Assert.True((px >> 24) >= 1));
+        Assert.All(darkPixels, px =>
+        {
+            byte a = (byte)(px >> 24);
+            byte r = (byte)((px >> 16) & 0xFF);
+            byte g = (byte)((px >> 8) & 0xFF);
+            byte b = (byte)(px & 0xFF);
+            Assert.True(a >= 1);
+            Assert.True(r <= a && g <= a && b <= a);
+        });
+        Assert.All(lightPixels, px =>
+        {
+            byte a = (byte)(px >> 24);
+            byte r = (byte)((px >> 16) & 0xFF);
+            byte g = (byte)((px >> 8) & 0xFF);
+            byte b = (byte)(px & 0xFF);
+            Assert.True(a >= 1);
+            Assert.True(r <= a && g <= a && b <= a);
+        });
         Assert.NotEqual(darkPixels, lightPixels);
     }
 
     [Fact]
-    public void TaskbarPillWindow_HandlesClicksFullscreenAutoHideDpiChangeAndTaskbarCreated()
+    public void TaskbarPillWindow_HandlesClicksFullscreenAutoHideDpiScalingAndTaskbarCreated()
     {
         var fullscreen = new ToggleableFullscreenProvider();
         using var pill = new TaskbarPillWindow(
@@ -74,6 +101,8 @@ public class TaskbarPillTests
         UpsTelemetry telemetry = UpsTelemetry.CreateDefault();
         pill.Update(telemetry);
         Assert.True(pill.IsVisible);
+        Assert.Equal(144, pill.CurrentBounds.Width);
+        Assert.Equal(48, pill.CurrentBounds.Height);
 
         const uint wmLButtonUp = 0x0202;
         const uint wmRButtonUp = 0x0205;
@@ -86,6 +115,12 @@ public class TaskbarPillTests
 
         Assert.True(pill.HandleWindowMessage(wmDpiChanged, (IntPtr)144, IntPtr.Zero));
         Assert.Equal(144, pill.CurrentDpi);
+        Assert.Equal(216, pill.CurrentBounds.Width);
+        Assert.Equal(72, pill.CurrentBounds.Height);
+
+        pill.HandleTaskbarCreated();
+        Assert.Equal(1, pill.TaskbarRecoveryCount);
+        Assert.True(pill.IsVisible);
 
         fullscreen.IsFullscreen = true;
         pill.Update(telemetry);

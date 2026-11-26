@@ -1,5 +1,4 @@
 using VoltTray.Core.Telemetry;
-using VoltTray.UI.Atoms;
 using VoltTray.UI.Interop;
 using VoltTray.UI.Tokens;
 using VoltTray.UI.Tokens.Themes;
@@ -8,7 +7,7 @@ using VoltTray.UI.Tray;
 namespace VoltTray.UI.TaskbarPill;
 
 /// <summary>
-/// Renders a 32-bpp ARGB taskbar pill surface composing the atomic tray glyph
+/// Renders a 32-bpp premultiplied ARGB taskbar pill surface composing the atomic tray glyph
 /// over an alpha >= 1 hit-testable interior so mouse clicks never pass through.
 /// </summary>
 public sealed class TaskbarPillSurfaceRenderer : ITaskbarPillSurfaceRenderer
@@ -23,14 +22,15 @@ public sealed class TaskbarPillSurfaceRenderer : ITaskbarPillSurfaceRenderer
     public uint[] RenderArgbPixels(UpsTelemetry telemetry, int width, int height, bool isLightTaskbar, int dpi)
     {
         ArgumentNullException.ThrowIfNull(telemetry);
+        ArgumentOutOfRangeException.ThrowIfNegativeOrZero(width);
+        ArgumentOutOfRangeException.ThrowIfNegativeOrZero(height);
 
-        var buffer = new PixelBuffer(Math.Max(width, height));
         uint[] surface = new uint[width * height];
         Array.Fill(surface, Win32UiConstants.PillHitTestAlpha);
 
         ThemePalette palette = isLightTaskbar ? LightThemeTokens.Palette : DarkThemeTokens.Palette;
-        uint borderColor = ColorUtilities.ParseArgbColor(palette.Border, alpha: 0xCC);
-        uint accentColor = ColorUtilities.ParseArgbColor(DesignTokens.GetTrayStateColor(telemetry.State, isLightTaskbar));
+        uint borderColor = ColorUtilities.ParsePremultipliedArgbColor(palette.Border, Win32UiConstants.PillBorderAlpha);
+        uint accentColor = ColorUtilities.ParsePremultipliedArgbColor(DesignTokens.GetTrayStateColor(telemetry.State, isLightTaskbar));
 
         DrawPillBorder(surface, width, height, borderColor);
 
@@ -40,12 +40,12 @@ public sealed class TaskbarPillSurfaceRenderer : ITaskbarPillSurfaceRenderer
         int iconOffsetY = Math.Max(0, (height - iconSize) / 2);
         BlitOpaquePixels(surface, width, height, iconPixels, iconSize, iconOffsetX, iconOffsetY);
 
-        int barLeft = iconOffsetX + iconSize + Win32UiConstants.PillEdgeGapPx;
+        int barLeft = Math.Min(width - 1, iconOffsetX + iconSize + Win32UiConstants.PillEdgeGapPx);
         int barRight = Math.Max(barLeft, width - Win32UiConstants.PillEdgeGapPx - 1);
-        int barTop = Math.Max(0, (height / 2) - 3);
-        int barBottom = Math.Min(height - 1, barTop + 6);
+        int barTop = Math.Clamp((height / 2) - Win32UiConstants.PillBarHalfHeightPx, 0, height - 1);
+        int barBottom = Math.Clamp(barTop + Win32UiConstants.PillBarHeightPx, barTop, height - 1);
         int fillWidth = (int)Math.Round((barRight - barLeft + 1) * (Math.Clamp(telemetry.BatteryPercentage, 0, 100) / 100.0));
-        int fillRight = Math.Min(barRight, barLeft + Math.Max(1, fillWidth) - 1);
+        int fillRight = Math.Clamp(barLeft + Math.Max(1, fillWidth) - 1, barLeft, barRight);
 
         for (int y = barTop; y <= barBottom; y++)
         {
@@ -55,7 +55,6 @@ public sealed class TaskbarPillSurfaceRenderer : ITaskbarPillSurfaceRenderer
             }
         }
 
-        _ = buffer;
         return surface;
     }
 

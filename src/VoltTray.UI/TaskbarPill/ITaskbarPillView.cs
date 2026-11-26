@@ -14,4 +14,5 @@ public interface ITaskbarPillView : IDisposable
 
     void Update(UpsTelemetry telemetry);
     void Hide();
+    void HandleTaskbarCreated();
 }

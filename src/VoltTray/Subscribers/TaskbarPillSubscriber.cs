@@ -31,6 +31,6 @@ public sealed class TaskbarPillSubscriber : IDisposable
         _telemetrySubscription.Dispose();
     }
 
-    private void HandleLeftClick() => _lifecycle.TogglePopoverFromTray();
+    private void HandleLeftClick() => _lifecycle.TogglePopoverFromTray(_pillView.CurrentBounds);
     private void HandleRightClick() => _lifecycle.OpenContextMenuFromTray();
 }

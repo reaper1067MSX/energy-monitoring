@@ -300,7 +300,7 @@ public sealed class HostLifecycle : IDisposable
         _upsPort.Dispose();
     }
 
-    public void TogglePopoverFromTray() => HandleTrayIconClicked();
+    public void TogglePopoverFromTray(ViewRect? anchorOverride = null) => HandleTrayIconClicked(anchorOverride);
 
     public void OpenContextMenuFromTray() => HandleContextMenuRequested();
 
@@ -324,9 +324,11 @@ public sealed class HostLifecycle : IDisposable
         ShowExitDialog();
     }
 
-    private void HandleTrayIconClicked()
+    private void HandleTrayIconClicked() => HandleTrayIconClicked(anchorOverride: null);
+
+    private void HandleTrayIconClicked(ViewRect? anchorOverride)
     {
-        (ViewRect anchorRect, ViewRect workArea, TaskbarEdge edge) = ResolvePlacement();
+        (ViewRect anchorRect, ViewRect workArea, TaskbarEdge edge) = ResolvePlacement(anchorOverride);
         _lastAnchorRect = anchorRect;
 
         if (CurrentTelemetry != null)
@@ -344,9 +346,9 @@ public sealed class HostLifecycle : IDisposable
         _popoverPainter.Show(UpsTelemetry.CreateDefault(), _popoverPainter.CurrentTheme, anchorRect, edge, workArea);
     }
 
-    private (ViewRect AnchorRect, ViewRect WorkArea, TaskbarEdge Edge) ResolvePlacement()
+    private (ViewRect AnchorRect, ViewRect WorkArea, TaskbarEdge Edge) ResolvePlacement(ViewRect? anchorOverride = null)
     {
-        ViewRect? liveIconRect = _trayRenderer.TryGetIconRect() ?? _lastAnchorRect;
+        ViewRect? liveIconRect = anchorOverride ?? _trayRenderer.TryGetIconRect() ?? _lastAnchorRect;
         if (liveIconRect is ViewRect resolvedIconRect)
         {
             (ViewRect workArea, TaskbarEdge edge) = _screenPlacementProvider.GetWorkAreaForAnchor(resolvedIconRect);

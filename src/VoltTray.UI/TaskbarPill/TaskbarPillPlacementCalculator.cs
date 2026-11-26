@@ -5,7 +5,7 @@ namespace VoltTray.UI.TaskbarPill;
 
 /// <summary>
 /// Computes non-overlapping taskbar pill bounds anchored left of TrayNotifyWnd,
-/// with Win11 24H2 cold-boot fallback and Start-button vertical centering.
+/// with Win11 24H2 cold-boot fallback, width clamping, and Start-button vertical centering.
 /// </summary>
 public sealed class TaskbarPillPlacementCalculator : ITaskbarPillPlacementCalculator
 {
@@ -14,10 +14,6 @@ public sealed class TaskbarPillPlacementCalculator : ITaskbarPillPlacementCalcul
         ArgumentNullException.ThrowIfNull(snapshot);
 
         int gap = Win32UiConstants.PillEdgeGapPx;
-        int rawLeft = snapshot.TrayNotifyRect is ViewRect notify && notify.Width > 0
-            ? notify.Left - snapshot.PillWidth - gap
-            : snapshot.TaskbarRect.Right - snapshot.RightMarginFallbackPx - snapshot.PillWidth;
-
         int minLeft = snapshot.TaskbarRect.Left + gap;
         if (snapshot.WidgetRect is ViewRect widget && widget.Width > 0)
         {
@@ -29,7 +25,19 @@ public sealed class TaskbarPillPlacementCalculator : ITaskbarPillPlacementCalcul
             minLeft = Math.Max(minLeft, apps.Right + gap);
         }
 
-        int maxLeft = Math.Max(minLeft, snapshot.TaskbarRect.Right - snapshot.PillWidth - gap);
+        int rightLimit = snapshot.TrayNotifyRect is ViewRect notify && notify.Width > 0
+            ? notify.Left - gap
+            : snapshot.TaskbarRect.Right - gap;
+        rightLimit = Math.Max(minLeft + 1, rightLimit);
+
+        int availableWidth = Math.Max(1, rightLimit - minLeft);
+        int effectiveWidth = Math.Min(snapshot.PillWidth, availableWidth);
+
+        int rawLeft = snapshot.TrayNotifyRect is ViewRect validNotify && validNotify.Width > 0
+            ? validNotify.Left - effectiveWidth - gap
+            : snapshot.TaskbarRect.Right - snapshot.RightMarginFallbackPx - effectiveWidth;
+
+        int maxLeft = Math.Max(minLeft, rightLimit - effectiveWidth);
         int left = Math.Clamp(rawLeft, minLeft, maxLeft);
 
         int rawTop = snapshot.StartButtonRect is ViewRect start && start.Height > 0
@@ -40,6 +48,6 @@ public sealed class TaskbarPillPlacementCalculator : ITaskbarPillPlacementCalcul
         int maxTop = Math.Max(minTop, snapshot.TaskbarRect.Bottom - snapshot.PillHeight);
         int top = Math.Clamp(rawTop, minTop, maxTop);
 
-        return new ViewRect(left, top, left + snapshot.PillWidth, top + snapshot.PillHeight);
+        return new ViewRect(left, top, left + effectiveWidth, top + snapshot.PillHeight);
     }
 }
