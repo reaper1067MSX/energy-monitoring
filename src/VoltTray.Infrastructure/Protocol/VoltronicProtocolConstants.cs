@@ -166,12 +166,10 @@ public static class VoltronicProtocolConstants
         AppendEscapedByte(list, loadPercentage);
         list.Add(SpaceDelimiter);
 
-        if (freq1Bytes is { Length: > 0 }) foreach (byte b in freq1Bytes) AppendEscapedByte(list, b);
-        else { AppendEscapedByte(list, freq1High); AppendEscapedByte(list, freq1Low); }
+        AppendFrequencyTokenBytes(list, freq1Bytes, freq1High, freq1Low);
         list.Add(SpaceDelimiter);
 
-        if (freq2Bytes is { Length: > 0 }) foreach (byte b in freq2Bytes) AppendEscapedByte(list, b);
-        else { AppendEscapedByte(list, freq2High); AppendEscapedByte(list, freq2Low); }
+        AppendFrequencyTokenBytes(list, freq2Bytes, freq2High, freq2Low);
         list.Add(SpaceDelimiter);
 
         AppendEscapedByte(list, bat1);
@@ -187,5 +185,25 @@ public static class VoltronicProtocolConstants
         list.Add(CarriageReturn);
 
         return list.ToArray();
+    }
+
+    private static void AppendFrequencyTokenBytes(
+        List<byte> target,
+        byte[]? overrideBytes,
+        byte highByte,
+        byte lowByte)
+    {
+        if (overrideBytes is { Length: > 0 })
+        {
+            foreach (byte tokenByte in overrideBytes)
+            {
+                AppendEscapedByte(target, tokenByte);
+            }
+
+            return;
+        }
+
+        AppendEscapedByte(target, highByte);
+        AppendEscapedByte(target, lowByte);
     }
 }

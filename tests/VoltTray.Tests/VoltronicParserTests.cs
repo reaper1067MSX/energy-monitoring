@@ -134,18 +134,29 @@ public class VoltronicParserTests
     [InlineData(new byte[] { 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08 }, 0x0102030405060708UL)]
     [InlineData(new byte[0], 0UL)]
     [InlineData(new byte[] { 1, 2, 3, 4, 5, 6, 7, 8, 9 }, 0UL)]
-    public void DecodeBigEndianUInt64_HandlesOneToEightBytesAndBounds(byte[] input, ulong expected) =>
-        Assert.Equal(expected, VoltronicParser.DecodeBigEndianUInt64(input));
+    public void DecodeBigEndianUInt64_HandlesOneToEightBytesAndBounds(byte[] input, ulong expected)
+    {
+        ulong decodedValue = VoltronicParser.DecodeBigEndianUInt64(input);
+        Assert.Equal(expected, decodedValue);
+    }
 
     [Fact]
     public void Parse_ArbitraryWidthFrequencyFrames_DecodesExpectedHz()
     {
-        var nt2401 = _parser.Parse(VoltronicFrameMother.Nt2401ProLiveFrame)!;
-        Assert.Equal(116.2, nt2401.InputVoltageAc);
-        Assert.Equal(59.97, nt2401.FrequencyHz);
-        Assert.False(nt2401.IsBeeperMuted);
-        Assert.Equal(50.08, _parser.Parse(VoltronicFrameMother.Upstream50HzFrame)!.FrequencyHz);
-        Assert.Equal(60.0, _parser.Parse(VoltronicFrameMother.Dsp4ByteTimerFrame)!.FrequencyHz);
+        UpsTelemetry? nt2401Telemetry = _parser.Parse(VoltronicFrameMother.Nt2401ProLiveFrame);
+        Assert.NotNull(nt2401Telemetry);
+        Assert.Equal(116.2, nt2401Telemetry.InputVoltageAc);
+        Assert.Equal(59.97, nt2401Telemetry.FrequencyHz);
+        Assert.False(nt2401Telemetry.IsBeeperMuted);
+
+        UpsTelemetry? upstream50HzTelemetry = _parser.Parse(VoltronicFrameMother.Upstream50HzFrame);
+        Assert.NotNull(upstream50HzTelemetry);
+        Assert.Equal(50.08, upstream50HzTelemetry.FrequencyHz);
+
+        UpsTelemetry? dsp4ByteTelemetry = _parser.Parse(VoltronicFrameMother.Dsp4ByteTimerFrame);
+        Assert.NotNull(dsp4ByteTelemetry);
+        Assert.Equal(60.0, dsp4ByteTelemetry.FrequencyHz);
+
         Assert.Equal(59.97, VoltronicParser.DecodeFrequencyHz([0x50, 0x0B], [0x12, 0xC0, 0x00]));
         Assert.Equal(60.0, VoltronicParser.DecodeFrequencyHz([0x50, 0x0C], [0x12, 0xC0]));
     }
@@ -155,9 +166,39 @@ public class VoltronicParserTests
     [InlineData((byte)0x02, 50.0, 1, 12.0, 220.0)]
     [InlineData((byte)0x63, 50.0, 4, 48.0, 230.0)]
     [InlineData((byte)0x47, 50.0, 3, 36.0, null)]
-    public void DecodeStatusByte2Ratings_ExtractsFrequencyBankAndNominalAc(byte status2, double hz, int banks, double dc, double? ac)
+    public void DecodeStatusByte2Ratings_ExtractsFrequencyBankAndNominalAc(
+        byte statusByte2,
+        double expectedFrequencyHz,
+        int expectedBatteryBanks,
+        double expectedBatteryVoltageDc,
+        double? expectedOutputVoltageAc)
     {
-        var ratings = VoltronicParser.DecodeStatusByte2Ratings(status2);
-        Assert.Equal((hz, banks, dc, ac), (ratings.NominalFrequencyHz, ratings.BatteryBankSeriesCount, ratings.NominalBatteryVoltageDc, ratings.NominalOutputVoltageAc));
+        UpsStatusByte2Ratings ratings = VoltronicParser.DecodeStatusByte2Ratings(statusByte2);
+
+        Assert.Equal(expectedFrequencyHz, ratings.NominalFrequencyHz);
+        Assert.Equal(expectedBatteryBanks, ratings.BatteryBankSeriesCount);
+        Assert.Equal(expectedBatteryVoltageDc, ratings.NominalBatteryVoltageDc);
+        Assert.Equal(expectedOutputVoltageAc, ratings.NominalOutputVoltageAc);
+    }
+
+    [Fact]
+    public void TryTokenizeHashFrame_SplitsAndDeescapesValidFrameAndRejectsMalformed()
+    {
+        byte[] escapedFrame =
+        [
+            0x23, 0x73, 0x28, 0x04, 0x20, 0x34, 0x20, 0x28, 0x00, 0x0D
+        ];
+
+        bool validResult = VoltronicParser.TryTokenizeHashFrame(escapedFrame, out IReadOnlyList<byte[]> validTokens);
+        Assert.True(validResult);
+        Assert.Equal(3, validTokens.Count);
+        Assert.Equal([0x73, 0x20], validTokens[0]);
+        Assert.Equal([0x34], validTokens[1]);
+        Assert.Equal([0x0D], validTokens[2]);
+
+        bool invalidResult = VoltronicParser.TryTokenizeHashFrame(
+            VoltronicFrameMother.CreateCorruptedMissingCr(),
+            out IReadOnlyList<byte[]> _);
+        Assert.False(invalidResult);
     }
 }
