@@ -1,6 +1,7 @@
 using System.Diagnostics;
 using VoltTray.Core.Models;
 using VoltTray.Core.Ports;
+using VoltTray.Core.Services;
 using VoltTray.Infrastructure.Protocol;
 
 namespace VoltTray.Infrastructure.Hid;
@@ -13,13 +14,16 @@ namespace VoltTray.Infrastructure.Hid;
 public sealed class Win32HidUpsPort : IUpsDevicePort
 {
     private readonly object _stateLock = new();
-    private readonly SemaphoreSlim _ioGate = new(1, 1);
+    private readonly HidCommandExecutor _commandExecutor = new();
     private readonly string? _preferredDevicePath;
     private readonly bool _allowAutoDiscovery;
     private readonly IHidDeviceScanner _deviceScanner;
     private readonly IHidTransport _transport;
-    private readonly VoltronicParser _parser;
+    private readonly IBatteryAutonomyEstimator _estimator;
+    private readonly ProtocolNegotiator _protocolNegotiator = new();
+    private readonly bool _negotiateOnConnect;
 
+    private NegotiatedUpsProtocol _negotiatedProtocol;
     private UpsTelemetry? _lastTelemetry;
     private IHidConnection? _activeConnection;
     private CancellationTokenSource? _connectionCts;
@@ -32,7 +36,7 @@ public sealed class Win32HidUpsPort : IUpsDevicePort
         bool allowAutoDiscovery = true,
         IBatteryAutonomyEstimator? estimator = null,
         IHidDeviceScanner? deviceScanner = null)
-        : this(preferredDevicePath, allowAutoDiscovery, estimator, deviceScanner, new Win32HidTransport())
+        : this(preferredDevicePath, allowAutoDiscovery, estimator, deviceScanner, new Win32HidTransport(), negotiateOnConnect: true)
     {
     }
 
@@ -41,13 +45,27 @@ public sealed class Win32HidUpsPort : IUpsDevicePort
         bool allowAutoDiscovery,
         IBatteryAutonomyEstimator? estimator,
         IHidDeviceScanner? deviceScanner,
-        IHidTransport transport)
+        IHidTransport transport,
+        bool negotiateOnConnect = false)
     {
         _preferredDevicePath = preferredDevicePath;
         _allowAutoDiscovery = allowAutoDiscovery;
         _deviceScanner = deviceScanner ?? new HidDeviceScanner();
         _transport = transport;
-        _parser = new VoltronicParser(estimator);
+        _estimator = estimator ?? new PeukertEstimator();
+        _negotiateOnConnect = negotiateOnConnect;
+        _negotiatedProtocol = CreateDefaultNegotiatedProtocol();
+    }
+
+    public NegotiatedUpsProtocol NegotiatedProtocol
+    {
+        get
+        {
+            lock (_stateLock)
+            {
+                return _negotiatedProtocol;
+            }
+        }
     }
 
     public bool IsConnected
@@ -101,6 +119,12 @@ public sealed class Win32HidUpsPort : IUpsDevicePort
 
         openedConnection.DrainInputBuffer(HidConstants.DefaultDrainTimeoutMs);
 
+        NegotiatedUpsProtocol negotiatedProtocol = _negotiateOnConnect
+            ? _protocolNegotiator.Negotiate(
+                command => HidCommandExecutor.QuerySynchronously(openedConnection, command),
+                _estimator)
+            : CreateDefaultNegotiatedProtocol();
+
         lock (_stateLock)
         {
             if (_isDisposed)
@@ -119,6 +143,7 @@ public sealed class Win32HidUpsPort : IUpsDevicePort
             _activeConnection = openedConnection;
             _connectionCts = new CancellationTokenSource();
             _activeDevicePath = targetPath;
+            _negotiatedProtocol = negotiatedProtocol;
         }
 
         return true;
@@ -137,7 +162,7 @@ public sealed class Win32HidUpsPort : IUpsDevicePort
             ctsToCancel = _connectionCts;
             _connectionCts = null;
             _activeDevicePath = null;
-            _parser.ResetSelfTest();
+            _negotiatedProtocol.Strategy.ResetSelfTest();
         }
 
         if (ctsToCancel != null)
@@ -164,8 +189,14 @@ public sealed class Win32HidUpsPort : IUpsDevicePort
         DateTimeOffset? now = null,
         CancellationToken cancellationToken = default)
     {
+        string statusQueryCommand;
+        lock (_stateLock)
+        {
+            statusQueryCommand = _negotiatedProtocol.Strategy.StatusQueryCommand;
+        }
+
         var (rawBytes, capturedGeneration) = await QueryRawWithGenerationAsync(
-            VoltronicProtocolConstants.QueryStatusCommand,
+            statusQueryCommand,
             cancellationToken);
 
         if (rawBytes is null or { Length: 0 })
@@ -180,7 +211,13 @@ public sealed class Win32HidUpsPort : IUpsDevicePort
                 return null;
             }
 
-            UpsTelemetry? parsed = _parser.Parse(rawBytes, _lastTelemetry, now);
+            DateTimeOffset timestamp = now ?? DateTimeOffset.UtcNow;
+            UpsTelemetry? parsed = _negotiatedProtocol.Strategy.Parse(
+                rawBytes,
+                _negotiatedProtocol.Capabilities,
+                _lastTelemetry,
+                timestamp);
+
             if (parsed != null)
             {
                 _lastTelemetry = parsed;
@@ -219,7 +256,7 @@ public sealed class Win32HidUpsPort : IUpsDevicePort
         }
 
         Disconnect();
-        _ioGate.Dispose();
+        _commandExecutor.Dispose();
     }
 
     private bool IsConnectedUnsafe()
@@ -246,11 +283,22 @@ public sealed class Win32HidUpsPort : IUpsDevicePort
 
         HidDeviceDescriptor? discoveredDevice = _deviceScanner
             .DiscoverDevices(includeAllHidDevices: false)
-            .FirstOrDefault(descriptor =>
-                descriptor.VendorId == HidConstants.VendorId &&
-                descriptor.ProductId == HidConstants.ProductId);
+            .FirstOrDefault(descriptor => descriptor.IsSupportedVoltronicDevice);
 
         return discoveredDevice?.DevicePath;
+    }
+
+    private NegotiatedUpsProtocol CreateDefaultNegotiatedProtocol()
+    {
+        return new NegotiatedUpsProtocol(
+            new VoltronicQsHexProtocol(VoltronicProtocolConstants.DialectT, _estimator),
+            new UpsCapabilities(
+                ModelName: null,
+                NominalVoltageAc: null,
+                NominalFrequencyHz: null,
+                RatedWatts: null,
+                Bank: new BatteryBankSpec(),
+                DialectVerified: false));
     }
 
     private bool TrySnapshotActiveConnection(
@@ -325,68 +373,18 @@ public sealed class Win32HidUpsPort : IUpsDevicePort
 
         try
         {
-            await _ioGate.WaitAsync(linkedCts.Token).ConfigureAwait(false);
-        }
-        catch (Exception exception) when (exception is OperationCanceledException or ObjectDisposedException)
-        {
-            linkedCts.Dispose();
-            return fallbackResult;
-        }
-
-        try
-        {
-            return await Task.Run(() =>
-            {
-                if (linkedCts.IsCancellationRequested || !connection.IsOpen)
-                {
-                    return fallbackResult;
-                }
-
-                try
-                {
-                    connection.DrainInputBuffer(HidConstants.DefaultDrainTimeoutMs);
-                    if (linkedCts.IsCancellationRequested || !connection.WriteCommand(command))
-                    {
-                        if (!linkedCts.IsCancellationRequested)
-                        {
-                            Disconnect();
-                        }
-
-                        return fallbackResult;
-                    }
-
-                    return executeAfterWrite(connection, linkedCts.Token, generation);
-                }
-                catch
-                {
-                    if (!linkedCts.IsCancellationRequested)
-                    {
-                        Disconnect();
-                    }
-
-                    return fallbackResult;
-                }
-            }, linkedCts.Token).ConfigureAwait(false);
-        }
-        catch (OperationCanceledException)
-        {
-            return fallbackResult;
+            return await _commandExecutor.ExecuteSerializedAsync(
+                connection,
+                linkedCts.Token,
+                generation,
+                command,
+                fallbackResult,
+                Disconnect,
+                executeAfterWrite).ConfigureAwait(false);
         }
         finally
         {
-            ReleaseIoGateSafely();
             linkedCts.Dispose();
-        }
-    }
-
-    private void ReleaseIoGateSafely()
-    {
-        try
-        {
-            _ioGate.Release();
-        }
-        catch (ObjectDisposedException)
-        {
         }
     }
 }
