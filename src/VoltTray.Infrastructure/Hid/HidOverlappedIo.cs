@@ -28,9 +28,27 @@ internal static class HidOverlappedIo
 
     public static void CancelPendingIo(SafeFileHandle handle)
     {
-        if (!handle.IsInvalid && !handle.IsClosed)
+        if (handle.IsInvalid || handle.IsClosed)
         {
-            HidNativeMethods.CancelIoEx(handle, IntPtr.Zero);
+            return;
+        }
+
+        bool isHandleReferenceAdded = false;
+        try
+        {
+            handle.DangerousAddRef(ref isHandleReferenceAdded);
+            IntPtr nativeHandle = handle.DangerousGetHandle();
+            HidNativeMethods.CancelIoEx(nativeHandle, IntPtr.Zero);
+        }
+        catch (ObjectDisposedException)
+        {
+        }
+        finally
+        {
+            if (isHandleReferenceAdded)
+            {
+                handle.DangerousRelease();
+            }
         }
     }
 
@@ -54,12 +72,23 @@ internal static class HidOverlappedIo
             return 0;
         }
 
+        bool isHandleReferenceAdded = false;
         IntPtr eventHandle = IntPtr.Zero;
         IntPtr overlappedPointer = IntPtr.Zero;
         IntPtr nativeBuffer = IntPtr.Zero;
 
         try
         {
+            try
+            {
+                handle.DangerousAddRef(ref isHandleReferenceAdded);
+            }
+            catch (ObjectDisposedException)
+            {
+                return 0;
+            }
+
+            IntPtr nativeHandle = handle.DangerousGetHandle();
             eventHandle = HidNativeMethods.CreateEvent(IntPtr.Zero, manualReset: true, initialState: false, name: null);
             if (eventHandle == IntPtr.Zero)
             {
@@ -74,14 +103,14 @@ internal static class HidOverlappedIo
                 fDeleteOld: false);
 
             bool completedSynchronously = HidNativeMethods.ReadFile(
-                handle,
+                nativeHandle,
                 nativeBuffer,
                 (uint)buffer.Length,
                 out uint bytesRead,
                 overlappedPointer);
 
             if (!completedSynchronously &&
-                !WaitForOverlappedCompletion(handle, eventHandle, overlappedPointer, timeoutMs, out bytesRead))
+                !WaitForOverlappedCompletion(nativeHandle, eventHandle, overlappedPointer, timeoutMs, out bytesRead))
             {
                 return 0;
             }
@@ -97,6 +126,10 @@ internal static class HidOverlappedIo
         finally
         {
             ReleaseOverlappedResources(eventHandle, overlappedPointer, nativeBuffer);
+            if (isHandleReferenceAdded)
+            {
+                handle.DangerousRelease();
+            }
         }
     }
 
@@ -107,12 +140,23 @@ internal static class HidOverlappedIo
             return false;
         }
 
+        bool isHandleReferenceAdded = false;
         IntPtr eventHandle = IntPtr.Zero;
         IntPtr overlappedPointer = IntPtr.Zero;
         IntPtr nativeBuffer = IntPtr.Zero;
 
         try
         {
+            try
+            {
+                handle.DangerousAddRef(ref isHandleReferenceAdded);
+            }
+            catch (ObjectDisposedException)
+            {
+                return false;
+            }
+
+            IntPtr nativeHandle = handle.DangerousGetHandle();
             eventHandle = HidNativeMethods.CreateEvent(IntPtr.Zero, manualReset: true, initialState: false, name: null);
             if (eventHandle == IntPtr.Zero)
             {
@@ -128,14 +172,14 @@ internal static class HidOverlappedIo
             Marshal.Copy(buffer, 0, nativeBuffer, buffer.Length);
 
             bool completedSynchronously = HidNativeMethods.WriteFile(
-                handle,
+                nativeHandle,
                 nativeBuffer,
                 (uint)buffer.Length,
                 out uint bytesWritten,
                 overlappedPointer);
 
             if (!completedSynchronously &&
-                !WaitForOverlappedCompletion(handle, eventHandle, overlappedPointer, timeoutMs, out bytesWritten))
+                !WaitForOverlappedCompletion(nativeHandle, eventHandle, overlappedPointer, timeoutMs, out bytesWritten))
             {
                 return false;
             }
@@ -145,11 +189,15 @@ internal static class HidOverlappedIo
         finally
         {
             ReleaseOverlappedResources(eventHandle, overlappedPointer, nativeBuffer);
+            if (isHandleReferenceAdded)
+            {
+                handle.DangerousRelease();
+            }
         }
     }
 
     private static bool WaitForOverlappedCompletion(
-        SafeFileHandle handle,
+        IntPtr nativeHandle,
         IntPtr eventHandle,
         IntPtr overlappedPointer,
         int timeoutMs,
@@ -164,11 +212,11 @@ internal static class HidOverlappedIo
         uint clampedTimeoutMs = (uint)ClampTimeoutMs(timeoutMs);
         if (HidNativeMethods.WaitForSingleObject(eventHandle, clampedTimeoutMs) == HidNativeMethods.WaitObject0)
         {
-            return HidNativeMethods.GetOverlappedResult(handle, overlappedPointer, out bytesTransferred, wait: false);
+            return HidNativeMethods.GetOverlappedResult(nativeHandle, overlappedPointer, out bytesTransferred, wait: false);
         }
 
-        HidNativeMethods.CancelIoEx(handle, overlappedPointer);
-        HidNativeMethods.GetOverlappedResult(handle, overlappedPointer, out _, wait: true);
+        HidNativeMethods.CancelIoEx(nativeHandle, overlappedPointer);
+        HidNativeMethods.GetOverlappedResult(nativeHandle, overlappedPointer, out _, wait: true);
         return false;
     }
 

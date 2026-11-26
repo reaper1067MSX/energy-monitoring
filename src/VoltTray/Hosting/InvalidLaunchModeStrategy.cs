@@ -5,8 +5,6 @@ namespace VoltTray.Hosting;
 /// </summary>
 public sealed class InvalidLaunchModeStrategy : IApplicationModeStrategy
 {
-    private const int FailureExitCode = 1;
-
     private readonly InvalidLaunchOptions _options;
     private readonly TextWriter _output;
 
@@ -19,6 +17,6 @@ public sealed class InvalidLaunchModeStrategy : IApplicationModeStrategy
     public int Execute()
     {
         _output.WriteLine(_options.ErrorMessage);
-        return FailureExitCode;
+        return IApplicationModeStrategy.FailureExitCode;
     }
 }

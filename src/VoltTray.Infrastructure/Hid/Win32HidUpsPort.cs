@@ -99,6 +99,8 @@ public sealed class Win32HidUpsPort : IUpsDevicePort
             return false;
         }
 
+        openedConnection.DrainInputBuffer(HidConstants.DefaultDrainTimeoutMs);
+
         lock (_stateLock)
         {
             if (_isDisposed)
@@ -119,7 +121,6 @@ public sealed class Win32HidUpsPort : IUpsDevicePort
             _activeDevicePath = targetPath;
         }
 
-        openedConnection.DrainInputBuffer(HidConstants.DefaultDrainTimeoutMs);
         return true;
     }
 

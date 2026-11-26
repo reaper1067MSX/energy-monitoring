@@ -22,19 +22,6 @@ public sealed class VoltronicParser
     private const int VoltageDecimalPrecision = 1;
     private const int BatteryVoltageDecimalPrecision = 2;
 
-    private const int InputVoltageTokenIndex = 0;
-    private const int InputVoltageRatioTokenIndex = 1;
-    private const int OutputVoltageTokenIndex = 2;
-    private const int OutputVoltageRatioTokenIndex = 3;
-    private const int LoadPercentageTokenIndex = 4;
-    private const int FrequencyPeriodTicksTokenIndex = 5;
-    private const int FrequencyTimerClockTokenIndex = 6;
-    private const int MinimumFrequencyTokenCount = 7;
-    private const int BatteryVoltageHighTokenIndex = 7;
-    private const int BatteryVoltageLowTokenIndex = 8;
-    private const int StatusByte1TokenIndex = 9;
-    private const int MinimumStatusByte1TokenCount = 10;
-
     private const int NominalAcCode110V = 0;
     private const int NominalAcCode120V = 1;
     private const int NominalAcCode220V = 2;
@@ -71,14 +58,14 @@ public sealed class VoltronicParser
         }
 
         double inputVoltageAc = DecodeVoltage(
-            tokens[InputVoltageTokenIndex],
-            tokens[InputVoltageRatioTokenIndex]);
+            tokens[VoltronicProtocolConstants.InputVoltageTokenIndex],
+            tokens[VoltronicProtocolConstants.InputVoltageRatioTokenIndex]);
         double outputVoltageAc = DecodeVoltage(
-            tokens[OutputVoltageTokenIndex],
-            tokens[OutputVoltageRatioTokenIndex]);
+            tokens[VoltronicProtocolConstants.OutputVoltageTokenIndex],
+            tokens[VoltronicProtocolConstants.OutputVoltageRatioTokenIndex]);
 
-        int rawLoad = tokens[LoadPercentageTokenIndex].Length > 0
-            ? tokens[LoadPercentageTokenIndex][0]
+        int rawLoad = tokens[VoltronicProtocolConstants.LoadPercentageTokenIndex].Length > 0
+            ? tokens[VoltronicProtocolConstants.LoadPercentageTokenIndex][0]
             : MinimumLoadPercentage;
         int loadPercentage = Math.Clamp(rawLoad, MinimumLoadPercentage, MaximumLoadPercentage);
 
@@ -86,25 +73,26 @@ public sealed class VoltronicParser
             (double)loadPercentage * VoltronicProtocolConstants.DefaultRatedWatts / PercentageScaleDivisor,
             MidpointRounding.AwayFromZero);
 
-        double frequencyHz = tokens.Count >= MinimumFrequencyTokenCount
+        double frequencyHz = tokens.Count >= VoltronicProtocolConstants.MinFrequencyTokenCount
             ? DecodeFrequencyHz(
-                tokens[FrequencyPeriodTicksTokenIndex],
-                tokens[FrequencyTimerClockTokenIndex])
+                tokens[VoltronicProtocolConstants.FrequencyPeriodTokenIndex],
+                tokens[VoltronicProtocolConstants.FrequencyClockTokenIndex])
             : VoltronicProtocolConstants.DefaultNominalFrequencyHz;
 
-        int batteryVoltageHighByte = tokens[BatteryVoltageHighTokenIndex].Length > 0
-            ? tokens[BatteryVoltageHighTokenIndex][0]
+        int batteryVoltageHighByte = tokens[VoltronicProtocolConstants.BatteryVoltageHighTokenIndex].Length > 0
+            ? tokens[VoltronicProtocolConstants.BatteryVoltageHighTokenIndex][0]
             : 0;
-        int batteryVoltageLowByte = tokens[BatteryVoltageLowTokenIndex].Length > 0
-            ? tokens[BatteryVoltageLowTokenIndex][0]
+        int batteryVoltageLowByte = tokens[VoltronicProtocolConstants.BatteryVoltageLowTokenIndex].Length > 0
+            ? tokens[VoltronicProtocolConstants.BatteryVoltageLowTokenIndex][0]
             : 0;
         double batteryVoltageDc = Math.Round(
             (batteryVoltageHighByte * batteryVoltageLowByte) / VoltronicProtocolConstants.BatteryVoltageDivisor,
             BatteryVoltageDecimalPrecision);
         double cellVoltageDc = Math.Round(batteryVoltageDc / BatteryCellCount, BatteryVoltageDecimalPrecision);
 
-        byte statusByte1 = tokens.Count >= MinimumStatusByte1TokenCount && tokens[StatusByte1TokenIndex].Length > 0
-            ? tokens[StatusByte1TokenIndex][0]
+        byte statusByte1 = tokens.Count >= VoltronicProtocolConstants.MinStatusByte1TokenCount &&
+                           tokens[VoltronicProtocolConstants.StatusByte1TokenIndex].Length > 0
+            ? tokens[VoltronicProtocolConstants.StatusByte1TokenIndex][0]
             : (byte)0;
         DateTimeOffset timestamp = now ?? DateTimeOffset.UtcNow;
         bool isTestInProgress = UpdateSelfTestLatch(statusByte1, timestamp);
@@ -319,8 +307,8 @@ public sealed class VoltronicParser
 
     public static (UpsOperationalState State, bool IsBeeperMuted, bool IsTestInProgress) DecodeStatusBits(
         byte statusByte1,
-        double inV = DefaultFallbackVoltageAc,
-        double outV = DefaultFallbackVoltageAc)
+        double inputVoltageAc = DefaultFallbackVoltageAc,
+        double outputVoltageAc = DefaultFallbackVoltageAc)
     {
         UpsOperationalState state;
         if ((statusByte1 & VoltronicProtocolConstants.StatusFaultMask) != 0)
@@ -337,8 +325,8 @@ public sealed class VoltronicParser
             state = UpsOperationalState.OnBattery;
         }
         else if ((statusByte1 & VoltronicProtocolConstants.StatusAvrBoostBuckMask) != 0 ||
-                 (outV > 0 &&
-                  Math.Abs(inV - outV) / outV > VoltronicProtocolConstants.MainsDivergenceThreshold))
+                 (outputVoltageAc > 0 &&
+                  Math.Abs(inputVoltageAc - outputVoltageAc) / outputVoltageAc > VoltronicProtocolConstants.MainsDivergenceThreshold))
         {
             state = UpsOperationalState.ChargingAvr;
         }

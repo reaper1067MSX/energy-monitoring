@@ -115,8 +115,8 @@ public class VoltronicParserTests
     {
         var (state, _, _) = VoltronicParser.DecodeStatusBits(
             statusByte,
-            inV: 120.0,
-            outV: 120.0);
+            inputVoltageAc: 120.0,
+            outputVoltageAc: 120.0);
         Assert.Equal(expectedState, state);
     }
 
@@ -125,8 +125,8 @@ public class VoltronicParserTests
     {
         var (state, _, _) = VoltronicParser.DecodeStatusBits(
             VoltronicProtocolConstants.StatusLineNormal,
-            inV: 100.0,
-            outV: 118.0);
+            inputVoltageAc: 100.0,
+            outputVoltageAc: 118.0);
         Assert.Equal(UpsOperationalState.ChargingAvr, state);
     }
 

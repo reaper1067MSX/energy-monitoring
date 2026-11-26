@@ -1,6 +1,6 @@
 using System.Globalization;
-using VoltTray.Cli;
 using VoltTray.Core.Models;
+using VoltTray.Infrastructure.Protocol;
 
 namespace VoltTray.Hosting;
 
@@ -100,7 +100,7 @@ public static class ApplicationOptionsParser
                     return new InvalidLaunchOptions(missingError!);
                 }
 
-                if (!InspectInquiryArgumentParser.TryParse(rawCommand, out UpsDiagnosticInquiry parsedInquiry))
+                if (!VoltronicInquiryCodec.TryParseWireCommand(rawCommand, out UpsDiagnosticInquiry parsedInquiry))
                 {
                     string formattedCommand = rawCommand.Replace("\r", "\\r");
                     return new InvalidLaunchOptions(

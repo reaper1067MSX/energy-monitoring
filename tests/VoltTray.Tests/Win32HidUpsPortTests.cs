@@ -1,6 +1,8 @@
 using System;
 using System.Collections.Generic;
 using System.Diagnostics;
+using System.IO;
+using System.IO.Pipes;
 using System.Threading;
 using System.Threading.Tasks;
 using Microsoft.Win32.SafeHandles;
@@ -141,6 +143,56 @@ public class Win32HidUpsPortTests
 
         Assert.Equal(0, bytesRead);
         Assert.True(stopwatch.ElapsedMilliseconds < DisconnectSlaBudgetMs);
+    }
+
+    [Fact]
+    public void HidOverlappedIo_OnAlreadyDisposedHandle_ReturnsSafelyWithoutObjectDisposedException()
+    {
+        string tempFilePath = Path.Combine(Path.GetTempPath(), $"volttray-handle-test-{Guid.NewGuid():N}.tmp");
+        SafeFileHandle disposedHandle = File.OpenHandle(
+            tempFilePath,
+            FileMode.Create,
+            FileAccess.ReadWrite,
+            FileShare.ReadWrite,
+            FileOptions.Asynchronous | FileOptions.DeleteOnClose);
+        disposedHandle.Dispose();
+
+        byte[] reportBuffer = new byte[HidConstants.ReportLength];
+
+        Exception? cancelException = Record.Exception(() => HidOverlappedIo.CancelPendingIo(disposedHandle));
+        int bytesRead = HidOverlappedIo.ReadReport(disposedHandle, reportBuffer, HidConstants.DefaultReadTimeoutMs);
+        bool writeSucceeded = HidOverlappedIo.WriteReport(disposedHandle, reportBuffer, HidConstants.DefaultWriteTimeoutMs);
+
+        Assert.Null(cancelException);
+        Assert.Equal(0, bytesRead);
+        Assert.False(writeSucceeded);
+    }
+
+    [Fact]
+    public async Task HidOverlappedIo_ConcurrentHandleDisposalDuringRead_CompletesWithoutObjectDisposedException()
+    {
+        string pipeName = $"volttray-overlapped-test-{Guid.NewGuid():N}";
+        using var serverPipe = new NamedPipeServerStream(
+            pipeName,
+            PipeDirection.InOut,
+            maxNumberOfServerInstances: 1,
+            PipeTransmissionMode.Byte,
+            PipeOptions.Asynchronous);
+
+        Task waitForClientTask = serverPipe.WaitForConnectionAsync();
+        using SafeFileHandle clientHandle = HidOverlappedIo.OpenDeviceHandle($@"\\.\pipe\{pipeName}");
+        Assert.False(clientHandle.IsInvalid);
+        await waitForClientTask;
+
+        byte[] buffer = new byte[HidConstants.ReportLength];
+        Task<int> readTask = Task.Run(() => HidOverlappedIo.ReadReport(clientHandle, buffer, timeoutMs: 250));
+
+        await Task.Delay(30);
+        HidOverlappedIo.CancelPendingIo(clientHandle);
+        clientHandle.Dispose();
+
+        int bytesRead = await readTask;
+        Assert.Equal(0, bytesRead);
     }
 
     private static HidDeviceDescriptor CreateMatchingDescriptor(string devicePath)

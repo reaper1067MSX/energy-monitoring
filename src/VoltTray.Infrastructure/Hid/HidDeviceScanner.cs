@@ -102,7 +102,7 @@ public sealed class HidDeviceScanner : IHidDeviceScanner
         IntPtr detailBuffer = Marshal.AllocHGlobal(requiredSize);
         try
         {
-            int headerSize = IntPtr.Size == 8
+            int headerSize = Environment.Is64BitProcess
                 ? HidNativeMethods.DeviceInterfaceDetailHeaderSize64
                 : HidNativeMethods.DeviceInterfaceDetailHeaderSize32;
 

@@ -23,7 +23,7 @@ public sealed class TrayMonitorModeStrategy : IApplicationModeStrategy
         using Mutex? mutex = SingleInstanceManager.TryAcquire();
         if (mutex == null)
         {
-            return 0;
+            return IApplicationModeStrategy.SuccessExitCode;
         }
 
         try
@@ -48,7 +48,7 @@ public sealed class TrayMonitorModeStrategy : IApplicationModeStrategy
                 lifecycle.ShutdownCoordinator.DryRun = true;
             }
 
-            lifecycle.ExitAction = () => Win32MessagePump.PostQuit(0);
+            lifecycle.ExitAction = () => Win32MessagePump.PostQuit(IApplicationModeStrategy.SuccessExitCode);
             lifecycle.Start(_options.PollingIntervalMs);
 
             int exitCode = Win32MessagePump.Run();

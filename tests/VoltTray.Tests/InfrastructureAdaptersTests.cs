@@ -7,12 +7,18 @@ namespace VoltTray.Tests;
 
 public class InfrastructureAdaptersTests
 {
+    private const int HardwareQueryAttemptCount = 3;
+    private const int HardwareQueryDelayMs = 100;
+    private const double MinimumValidInputVoltageAc = 50.0;
+    private const double MinimumValidBatteryVoltageDc = 10.0;
+    private const int UnavailableDeviceTimeoutMs = 100;
+
     [Fact]
     public void WindowsShutdownPort_DryRun_DoesNotTerminateOS_AndFiresCallback()
     {
         var port = new WindowsShutdownPort();
         string? message = null;
-        port.OnDryRunExecuted = msg => message = msg;
+        port.OnDryRunExecuted = dryRunMessage => message = dryRunMessage;
 
         bool result = port.InitiateShutdown(dryRun: true, reason: "Power outage test");
 
@@ -46,16 +52,20 @@ public class InfrastructureAdaptersTests
         using var port = new Win32HidUpsPort();
         if (port.TryConnect())
         {
-            for (int i = 0; i < 3; i++)
+            for (int attemptIndex = 0; attemptIndex < HardwareQueryAttemptCount; attemptIndex++)
             {
-                if (i > 0) await Task.Delay(100);
+                if (attemptIndex > 0)
+                {
+                    await Task.Delay(HardwareQueryDelayMs);
+                }
+
                 var telemetry = await port.ReadTelemetryAsync();
                 Assert.NotNull(telemetry);
-                Assert.True(telemetry.InputVoltageAc > 50);
-                Assert.True(telemetry.BatteryVoltageDc > 10);
+                Assert.True(telemetry.InputVoltageAc > MinimumValidInputVoltageAc);
+                Assert.True(telemetry.BatteryVoltageDc > MinimumValidBatteryVoltageDc);
             }
 
-            await Task.Delay(100);
+            await Task.Delay(HardwareQueryDelayMs);
             byte[]? raw = await port.QueryRawAsync(VoltronicProtocolConstants.QueryStatusCommand);
             Assert.NotNull(raw);
             Assert.Equal(VoltronicProtocolConstants.FrameHeaderHash, raw[0]);
@@ -79,7 +89,7 @@ public class InfrastructureAdaptersTests
     public async Task Win32HidUpsPort_ReadTelemetryAsync_WhenDeviceUnavailable_ReturnsNullWithoutThrowing()
     {
         using var port = new Win32HidUpsPort(@"\\?\HID#NON_EXISTENT_UPS_DEVICE", allowAutoDiscovery: false);
-        using var cts = new CancellationTokenSource(100);
+        using var cts = new CancellationTokenSource(UnavailableDeviceTimeoutMs);
 
         var telemetry = await port.ReadTelemetryAsync(cancellationToken: cts.Token);
 

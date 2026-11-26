@@ -89,22 +89,22 @@ public static class VoltronicFrameMother
         byte statusByte1 = VoltronicProtocolConstants.StatusLineNormal,
         byte statusByte2 = VoltronicProtocolConstants.StatusByte2Nominal,
         byte loadPercentage = VoltronicProtocolConstants.NominalLoadPercentage,
-        byte inVHexHigh = VoltronicProtocolConstants.NominalInputVoltageHexHigh,
-        byte inVHexLow = VoltronicProtocolConstants.NominalInputVoltageHexLow,
-        byte inVRatio = VoltronicProtocolConstants.NominalInputVoltageRatio,
-        byte outVHexHigh = VoltronicProtocolConstants.NominalOutputVoltageHexHigh,
-        byte outVHexLow = VoltronicProtocolConstants.NominalOutputVoltageHexLow,
-        byte outVRatio = VoltronicProtocolConstants.NominalOutputVoltageRatio)
+        byte inputVoltageHighByte = VoltronicProtocolConstants.NominalInputVoltageHexHigh,
+        byte inputVoltageLowByte = VoltronicProtocolConstants.NominalInputVoltageHexLow,
+        byte inputVoltageRatio = VoltronicProtocolConstants.NominalInputVoltageRatio,
+        byte outputVoltageHighByte = VoltronicProtocolConstants.NominalOutputVoltageHexHigh,
+        byte outputVoltageLowByte = VoltronicProtocolConstants.NominalOutputVoltageHexLow,
+        byte outputVoltageRatio = VoltronicProtocolConstants.NominalOutputVoltageRatio)
     {
         var specification = new VoltronicFrameSpecification
         {
             StatusByte1 = statusByte1,
             StatusByte2 = statusByte2,
             LoadPercentage = loadPercentage,
-            InputVoltageBytes = [inVHexHigh, inVHexLow],
-            InputVoltageRatio = inVRatio,
-            OutputVoltageBytes = [outVHexHigh, outVHexLow],
-            OutputVoltageRatio = outVRatio
+            InputVoltageBytes = [inputVoltageHighByte, inputVoltageLowByte],
+            InputVoltageRatio = inputVoltageRatio,
+            OutputVoltageBytes = [outputVoltageHighByte, outputVoltageLowByte],
+            OutputVoltageRatio = outputVoltageRatio
         };
 
         return VoltronicBinaryFrameBuilder.Build(specification);
@@ -125,8 +125,8 @@ public static class VoltronicFrameMother
         return CreateFrame(
             statusByte1: VoltronicFixtureConstants.StatusOnBattery,
             loadPercentage: loadPercentage,
-            inVHexHigh: VoltronicFixtureConstants.FaultBatteryLowZeroVoltageByte,
-            inVHexLow: VoltronicFixtureConstants.FaultBatteryLowZeroVoltageByte);
+            inputVoltageHighByte: VoltronicFixtureConstants.FaultBatteryLowZeroVoltageByte,
+            inputVoltageLowByte: VoltronicFixtureConstants.FaultBatteryLowZeroVoltageByte);
     }
 
     public static byte[] CreateBatteryLowFrame()
@@ -134,8 +134,8 @@ public static class VoltronicFrameMother
         return CreateFrame(
             statusByte1: VoltronicFixtureConstants.StatusBatteryLow,
             loadPercentage: VoltronicFixtureConstants.BatteryLowLoadPercentage,
-            inVHexHigh: VoltronicFixtureConstants.FaultBatteryLowZeroVoltageByte,
-            inVHexLow: VoltronicFixtureConstants.FaultBatteryLowZeroVoltageByte);
+            inputVoltageHighByte: VoltronicFixtureConstants.FaultBatteryLowZeroVoltageByte,
+            inputVoltageLowByte: VoltronicFixtureConstants.FaultBatteryLowZeroVoltageByte);
     }
 
     public static byte[] CreateAvrFrame(

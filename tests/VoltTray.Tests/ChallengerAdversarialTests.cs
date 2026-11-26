@@ -245,21 +245,21 @@ public class ChallengerAdversarialTests
     public void Voltronic_RapidStatusBitTransitions_MapsStatesDeterministically()
     {
         // Line normal -> On battery -> Battery low -> Charging AVR -> Fault
-        var (s1, m1, _) = VoltronicParser.DecodeStatusBits(0x08, inV: 120, outV: 120);
+        var (s1, m1, _) = VoltronicParser.DecodeStatusBits(0x08, inputVoltageAc: 120, outputVoltageAc: 120);
         Assert.Equal(UpsOperationalState.LineNormal, s1);
         Assert.True(m1); // bit 0 is 0 -> muted
 
-        var (s2, _, _) = VoltronicParser.DecodeStatusBits(0x88, inV: 0, outV: 120);
+        var (s2, _, _) = VoltronicParser.DecodeStatusBits(0x88, inputVoltageAc: 0, outputVoltageAc: 120);
         Assert.Equal(UpsOperationalState.OnBattery, s2);
 
-        var (s3, _, _) = VoltronicParser.DecodeStatusBits(0xC8, inV: 0, outV: 120);
+        var (s3, _, _) = VoltronicParser.DecodeStatusBits(0xC8, inputVoltageAc: 0, outputVoltageAc: 120);
         Assert.Equal(UpsOperationalState.BatteryLow, s3);
 
-        var (s4, _, _) = VoltronicParser.DecodeStatusBits(0x28, inV: 100, outV: 120);
+        var (s4, _, _) = VoltronicParser.DecodeStatusBits(0x28, inputVoltageAc: 100, outputVoltageAc: 120);
         Assert.Equal(UpsOperationalState.ChargingAvr, s4);
 
         // Fault overrides everything (0x10)
-        var (s5, _, _) = VoltronicParser.DecodeStatusBits(0xF8, inV: 0, outV: 120);
+        var (s5, _, _) = VoltronicParser.DecodeStatusBits(0xF8, inputVoltageAc: 0, outputVoltageAc: 120);
         Assert.Equal(UpsOperationalState.Fault, s5);
     }
 

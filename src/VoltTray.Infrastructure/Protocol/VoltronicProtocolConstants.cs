@@ -15,13 +15,9 @@ public static class VoltronicProtocolConstants
     public const byte Dc3 = 0x13;
     public const byte NullByte = 0x00;
     public const byte NakHeader = 0x4E;
-    public const byte EscapePrefix = FrameHeaderParen;
 
     // Framing & Delimiter Characters
-    public const char FrameHeaderHashChar = '#';
-    public const char FrameHeaderParenChar = '(';
     public const char CarriageReturnChar = '\r';
-    public const char SpaceDelimiterChar = ' ';
 
     // Escape Codes (De-escape mapping following 0x28)
     public const byte EscapeCodeCr = 0x00;
@@ -29,6 +25,22 @@ public static class VoltronicProtocolConstants
     public const byte EscapeCodeDc3 = 0x02;
     public const byte EscapeCodeLf = 0x03;
     public const byte EscapeCodeSpace = 0x04;
+
+    // Protocol 'T' Token Indices & Minimum Token Counts
+    public const int InputVoltageTokenIndex = 0;
+    public const int InputVoltageRatioTokenIndex = 1;
+    public const int OutputVoltageTokenIndex = 2;
+    public const int OutputVoltageRatioTokenIndex = 3;
+    public const int LoadPercentageTokenIndex = 4;
+    public const int FrequencyPeriodTokenIndex = 5;
+    public const int FrequencyClockTokenIndex = 6;
+    public const int MinFrequencyTokenCount = 7;
+    public const int BatteryVoltageHighTokenIndex = 7;
+    public const int BatteryVoltageLowTokenIndex = 8;
+    public const int StatusByte1TokenIndex = 9;
+    public const int MinStatusByte1TokenCount = 10;
+    public const int StatusByte2TokenIndex = 10;
+    public const int MinStatusByte2TokenCount = 11;
 
     // Status Byte 1 Bit Masks (Bit 0..7)
     public const byte StatusBeeperActiveMask = 0x01;

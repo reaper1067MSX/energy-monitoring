@@ -5,5 +5,8 @@ namespace VoltTray.Hosting;
 /// </summary>
 public interface IApplicationModeStrategy
 {
+    const int SuccessExitCode = 0;
+    const int FailureExitCode = 1;
+
     int Execute();
 }

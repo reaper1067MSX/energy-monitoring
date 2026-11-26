@@ -197,6 +197,25 @@ public class ReadOnlyUpsProbeTests
     }
 
     [Fact]
+    public void ReadOnlyUpsProbe_BuildCapture_QuickStatusWithLeadingNullByteBeforeHash_DecodesBinaryFrame()
+    {
+        HidDeviceDescriptor descriptor = CreateTestDescriptor();
+        byte[] liveFrame = VoltronicFrameMother.Nt2401ProLiveFrame;
+        byte[] paddedPayload = [VoltronicProtocolConstants.NullByte, .. liveFrame];
+
+        UpsProbeCapture capture = ReadOnlyUpsProbe.BuildCapture(
+            descriptor,
+            UpsDiagnosticInquiry.QuickStatus,
+            ChunkFrameIntoNineByteReports(paddedPayload),
+            paddedPayload);
+
+        Assert.Equal(11, capture.Tokens.Count);
+        Assert.Equal(ExpectedNt2401ProFrequencyHz, capture.FrequencyHz);
+        Assert.NotNull(capture.StatusByte2Ratings);
+        Assert.Equal(ExpectedNominalFrequencyHz, capture.StatusByte2Ratings.Value.NominalFrequencyHz);
+    }
+
+    [Fact]
     public void UpsProbeCaptureFormatter_SerializeJson_ContainsDeviceRawHexTokensAndRatings()
     {
         HidDeviceDescriptor descriptor = CreateTestDescriptor();

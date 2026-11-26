@@ -10,12 +10,6 @@ namespace VoltTray.Infrastructure.Hid;
 /// </summary>
 public sealed class ReadOnlyUpsProbe : IUpsDiagnosticProbe
 {
-    private const int MinimumFrequencyTokenCount = 7;
-    private const int FrequencyPeriodTokenIndex = 5;
-    private const int FrequencyClockTokenIndex = 6;
-    private const int MinimumStatusByte2TokenCount = 11;
-    private const int StatusByte2TokenIndex = 10;
-
     private readonly IHidDeviceScanner _deviceScanner;
 
     public ReadOnlyUpsProbe(IHidDeviceScanner? deviceScanner = null)
@@ -97,7 +91,7 @@ public sealed class ReadOnlyUpsProbe : IUpsDiagnosticProbe
 
     /// <summary>
     /// Builds an immutable forensic capture from captured HID reports and assembled payload bytes.
-    /// Binary Protocol 'T' decoding is gated strictly to <see cref="UpsDiagnosticInquiry.QuickStatus"/> '#' frames.
+    /// Binary Protocol 'T' decoding is gated strictly to valid <see cref="UpsDiagnosticInquiry.QuickStatus"/> '#' frames.
     /// </summary>
     public static UpsProbeCapture BuildCapture(
         HidDeviceDescriptor device,
@@ -106,12 +100,9 @@ public sealed class ReadOnlyUpsProbe : IUpsDiagnosticProbe
         byte[] rawPayload)
     {
         string wireCommand = VoltronicInquiryCodec.ToWireCommand(inquiry);
-        bool isProtocolTQuickStatusFrame =
-            inquiry == UpsDiagnosticInquiry.QuickStatus &&
-            rawPayload.Length > 0 &&
-            rawPayload[0] == VoltronicProtocolConstants.FrameHeaderHash;
 
-        if (!isProtocolTQuickStatusFrame)
+        if (inquiry != UpsDiagnosticInquiry.QuickStatus ||
+            !VoltronicParser.TryTokenizeHashFrame(rawPayload, out IReadOnlyList<byte[]> tokens))
         {
             return new UpsProbeCapture(
                 device,
@@ -125,17 +116,17 @@ public sealed class ReadOnlyUpsProbe : IUpsDiagnosticProbe
                 statusByte2Ratings: null);
         }
 
-        IReadOnlyList<byte[]> tokens = VoltronicParser.TryTokenizeHashFrame(rawPayload, out IReadOnlyList<byte[]> parsedTokens)
-            ? parsedTokens
-            : Array.Empty<byte[]>();
-
-        double? frequencyHz = tokens.Count >= MinimumFrequencyTokenCount
-            ? VoltronicParser.TryDecodeFrequencyHz(tokens[FrequencyPeriodTokenIndex], tokens[FrequencyClockTokenIndex])
+        double? frequencyHz = tokens.Count >= VoltronicProtocolConstants.MinFrequencyTokenCount
+            ? VoltronicParser.TryDecodeFrequencyHz(
+                tokens[VoltronicProtocolConstants.FrequencyPeriodTokenIndex],
+                tokens[VoltronicProtocolConstants.FrequencyClockTokenIndex])
             : null;
 
         UpsStatusByte2Ratings? statusByte2Ratings =
-            tokens.Count >= MinimumStatusByte2TokenCount && tokens[StatusByte2TokenIndex].Length > 0
-                ? VoltronicParser.DecodeStatusByte2Ratings(tokens[StatusByte2TokenIndex][0])
+            tokens.Count >= VoltronicProtocolConstants.MinStatusByte2TokenCount &&
+            tokens[VoltronicProtocolConstants.StatusByte2TokenIndex].Length > 0
+                ? VoltronicParser.DecodeStatusByte2Ratings(
+                    tokens[VoltronicProtocolConstants.StatusByte2TokenIndex][0])
                 : null;
 
         byte[] deescapedPayload = VoltronicParser.Deescape(rawPayload);

@@ -40,7 +40,7 @@ internal static partial class HidNativeMethods
     [LibraryImport("kernel32.dll", SetLastError = true)]
     [return: MarshalAs(UnmanagedType.Bool)]
     internal static partial bool WriteFile(
-        SafeFileHandle fileHandle,
+        IntPtr fileHandle,
         IntPtr buffer,
         uint bytesToWrite,
         out uint bytesWritten,
@@ -49,7 +49,7 @@ internal static partial class HidNativeMethods
     [LibraryImport("kernel32.dll", SetLastError = true)]
     [return: MarshalAs(UnmanagedType.Bool)]
     internal static partial bool ReadFile(
-        SafeFileHandle fileHandle,
+        IntPtr fileHandle,
         IntPtr buffer,
         uint bytesToRead,
         out uint bytesRead,
@@ -68,7 +68,7 @@ internal static partial class HidNativeMethods
     [LibraryImport("kernel32.dll", SetLastError = true)]
     [return: MarshalAs(UnmanagedType.Bool)]
     internal static partial bool GetOverlappedResult(
-        SafeFileHandle fileHandle,
+        IntPtr fileHandle,
         IntPtr overlapped,
         out uint bytesTransferred,
         [MarshalAs(UnmanagedType.Bool)] bool wait);
@@ -79,7 +79,7 @@ internal static partial class HidNativeMethods
 
     [LibraryImport("kernel32.dll", SetLastError = true)]
     [return: MarshalAs(UnmanagedType.Bool)]
-    internal static partial bool CancelIoEx(SafeFileHandle fileHandle, IntPtr overlapped);
+    internal static partial bool CancelIoEx(IntPtr fileHandle, IntPtr overlapped);
 
     [LibraryImport("hid.dll")]
     internal static partial void HidD_GetHidGuid(out Guid hidGuid);

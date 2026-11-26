@@ -34,14 +34,14 @@ public sealed class InspectModeStrategy : IApplicationModeStrategy
         if (targetDevice == null)
         {
             _output.WriteLine("No matching UPS HID device found.");
-            return 1;
+            return IApplicationModeStrategy.FailureExitCode;
         }
 
         UpsProbeCapture? capture = _probe.QueryDevice(targetDevice, _options.Inquiry);
         if (capture == null)
         {
             _output.WriteLine("No response received from UPS HID device.");
-            return 1;
+            return IApplicationModeStrategy.FailureExitCode;
         }
 
         UpsProbeCaptureFormatter.WriteCaptureDetails(capture, _output);
@@ -51,6 +51,6 @@ public sealed class InspectModeStrategy : IApplicationModeStrategy
             File.WriteAllText(_options.ExportPath, UpsProbeCaptureFormatter.SerializeJson(capture), Encoding.UTF8);
         }
 
-        return 0;
+        return IApplicationModeStrategy.SuccessExitCode;
     }
 }
