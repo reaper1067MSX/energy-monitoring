@@ -228,13 +228,13 @@ public class ReadOnlyUpsProbeTests
     [InlineData("--inspect", "--cmd", "Q")]
     [InlineData("--inspect", "--cmd")]
     [InlineData("--inspect", "--export")]
-    public void InspectModeStrategy_BlockedOrMissingArguments_ReturnsOneWithoutThrowing(params string[] args)
+    public void InspectCommandDispatch_BlockedOrMissingArguments_ReturnsOneWithoutThrowing(params string[] args)
     {
-        ApplicationOptions options = ApplicationOptionsParser.Parse(args);
+        ApplicationLaunchOptions options = ApplicationOptionsParser.Parse(args);
         using var output = new StringWriter();
-        var strategy = new InspectModeStrategy(output);
+        var strategy = new ApplicationModeStrategyFactory(diagnosticOutput: output).Create(options);
 
-        int exitCode = strategy.Execute(options);
+        int exitCode = strategy.Execute();
 
         Assert.Equal(1, exitCode);
         Assert.False(string.IsNullOrWhiteSpace(output.ToString()));

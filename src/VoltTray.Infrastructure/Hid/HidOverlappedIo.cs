@@ -66,10 +66,10 @@ internal static class HidOverlappedIo
                 return 0;
             }
 
-            overlappedPointer = Marshal.AllocHGlobal(Marshal.SizeOf<HidNativeMethods.NativeOverlappedIo>());
+            overlappedPointer = Marshal.AllocHGlobal(Marshal.SizeOf<NativeOverlappedIo>());
             nativeBuffer = Marshal.AllocHGlobal(buffer.Length);
             Marshal.StructureToPtr(
-                new HidNativeMethods.NativeOverlappedIo { EventHandle = eventHandle },
+                new NativeOverlappedIo { EventHandle = eventHandle },
                 overlappedPointer,
                 fDeleteOld: false);
 
@@ -119,10 +119,10 @@ internal static class HidOverlappedIo
                 return false;
             }
 
-            overlappedPointer = Marshal.AllocHGlobal(Marshal.SizeOf<HidNativeMethods.NativeOverlappedIo>());
+            overlappedPointer = Marshal.AllocHGlobal(Marshal.SizeOf<NativeOverlappedIo>());
             nativeBuffer = Marshal.AllocHGlobal(buffer.Length);
             Marshal.StructureToPtr(
-                new HidNativeMethods.NativeOverlappedIo { EventHandle = eventHandle },
+                new NativeOverlappedIo { EventHandle = eventHandle },
                 overlappedPointer,
                 fDeleteOld: false);
             Marshal.Copy(buffer, 0, nativeBuffer, buffer.Length);

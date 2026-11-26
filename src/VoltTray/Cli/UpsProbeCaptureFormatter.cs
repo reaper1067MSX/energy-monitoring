@@ -1,6 +1,6 @@
+using System.Globalization;
 using System.Text.Json;
 using VoltTray.Infrastructure.Hid;
-using VoltTray.Infrastructure.Protocol;
 
 namespace VoltTray.Cli;
 
@@ -13,17 +13,20 @@ public static class UpsProbeCaptureFormatter
     private const char PrintableAsciiMax = '~';
 
     public const string SafeCaptureGuidance =
-        "Safe capture (--stream): wall-powered PC, uninterrupted PE, upstream Line (L) cut, 25-60W resistive load, <=10s outage window.";
+        "Safe capture: wall-powered PC, uninterrupted PE ground, upstream Line (L) cut only, 25-60W resistive load, <=10s outage window.";
 
     public static void WriteDeviceDescriptors(IReadOnlyList<HidDeviceDescriptor> devices, TextWriter output)
     {
         foreach (HidDeviceDescriptor descriptor in devices)
         {
             string serial = string.IsNullOrEmpty(descriptor.SerialNumber) ? "(none)" : descriptor.SerialNumber;
-            output.WriteLine(
+            string line = string.Create(
+                CultureInfo.InvariantCulture,
                 $"VID_{descriptor.VendorId:X4}&PID_{descriptor.ProductId:X4} v{descriptor.VersionNumber:X4} | " +
                 $"{descriptor.Manufacturer} {descriptor.Product} | Serial: {serial} | " +
                 $"In:{descriptor.InputReportByteLength} Out:{descriptor.OutputReportByteLength}");
+
+            output.WriteLine(line);
         }
     }
 
@@ -31,7 +34,10 @@ public static class UpsProbeCaptureFormatter
     {
         for (int index = 0; index < capture.RawReports.Count; index++)
         {
-            output.WriteLine($"R#{index}: {FormatHex(capture.RawReports[index])}");
+            string reportLine = string.Create(
+                CultureInfo.InvariantCulture,
+                $"R#{index}: {FormatHex(capture.RawReports[index])}");
+            output.WriteLine(reportLine);
         }
 
         output.WriteLine($"HEX: {FormatHex(capture.RawPayload)}");
@@ -45,35 +51,38 @@ public static class UpsProbeCaptureFormatter
 
         if (capture.FrequencyHz is { } frequencyHz)
         {
-            output.WriteLine($"Frequency: {frequencyHz:F2} Hz");
+            output.WriteLine(string.Create(CultureInfo.InvariantCulture, $"Frequency: {frequencyHz:F2} Hz"));
         }
 
         if (capture.StatusByte2Ratings is { } ratings)
         {
-            string nominalAcText = ratings.NominalOutputVoltageAc?.ToString() ?? "Unknown";
-            output.WriteLine(
+            string nominalAcText = ratings.NominalOutputVoltageAc.HasValue
+                ? ratings.NominalOutputVoltageAc.Value.ToString(CultureInfo.InvariantCulture)
+                : "Unknown";
+
+            string statusLine = string.Create(
+                CultureInfo.InvariantCulture,
                 $"Status2: {ratings.NominalFrequencyHz} Hz, {ratings.NominalBatteryVoltageDc} V " +
                 $"({ratings.BatteryBankSeriesCount}x12V), {nominalAcText} V");
+            output.WriteLine(statusLine);
         }
     }
 
     public static string SerializeJson(UpsProbeCapture capture)
     {
-        var payload = new
-        {
+        var document = new UpsProbeCaptureDocument(
             capture.Device,
-            Inquiry = capture.Inquiry.ToString(),
+            capture.Inquiry.ToString(),
             capture.WireCommand,
-            RawHex = FormatHex(capture.RawPayload),
-            DeescapedHex = FormatHex(capture.DeescapedPayload),
-            AsciiPreview = FormatAsciiPreview(capture.RawPayload),
-            TokenHexBreakdown = FormatTokenHexBreakdown(capture.Tokens),
+            FormatHex(capture.RawPayload),
+            FormatHex(capture.DeescapedPayload),
+            FormatAsciiPreview(capture.RawPayload),
+            FormatTokenHexBreakdown(capture.Tokens),
             capture.FrequencyHz,
             capture.StatusByte2Ratings,
-            SafeCaptureNotice = SafeCaptureGuidance
-        };
+            SafeCaptureGuidance);
 
-        return JsonSerializer.Serialize(payload, new JsonSerializerOptions { WriteIndented = true });
+        return JsonSerializer.Serialize(document, UpsProbeJsonContext.Default.UpsProbeCaptureDocument);
     }
 
     private static string FormatHex(byte[] bytes)
@@ -100,7 +109,9 @@ public static class UpsProbeCaptureFormatter
         string[] breakdown = new string[tokens.Count];
         for (int index = 0; index < tokens.Count; index++)
         {
-            breakdown[index] = $"T{index}: {FormatHex(tokens[index])}";
+            breakdown[index] = string.Create(
+                CultureInfo.InvariantCulture,
+                $"T{index}: {FormatHex(tokens[index])}");
         }
 
         return breakdown;

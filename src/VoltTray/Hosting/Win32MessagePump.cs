@@ -9,7 +9,7 @@ internal static class Win32MessagePump
 {
     public static int Run()
     {
-        User32MessageNativeMethods.NativeMessage message = default;
+        NativeMessage message = default;
         int status;
 
         while ((status = User32MessageNativeMethods.GetMessage(out message, IntPtr.Zero, 0, 0)) != 0)

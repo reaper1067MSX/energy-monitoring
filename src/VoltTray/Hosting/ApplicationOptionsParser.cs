@@ -1,15 +1,18 @@
-using VoltTray.Infrastructure.Protocol;
+using System.Globalization;
+using VoltTray.Cli;
+using VoltTray.Core.Models;
 
 namespace VoltTray.Hosting;
 
 /// <summary>
-/// Parses command-line arguments into an immutable <see cref="ApplicationOptions"/> instance.
+/// Strictly parses command-line arguments in a single sequential pass into discriminated <see cref="ApplicationLaunchOptions"/>.
 /// </summary>
 public static class ApplicationOptionsParser
 {
     public const int DefaultPollingIntervalMs = 1500;
     public const int MinimumPollingIntervalMs = 250;
 
+    private const string FlagPrefix = "--";
     private const string InspectFlag = "--inspect";
     private const string SimulateFlag = "--simulate";
     private const string SimFlag = "--sim";
@@ -20,85 +23,140 @@ public static class ApplicationOptionsParser
     private const string CommandFlag = "--cmd";
     private const string ExportFlag = "--export";
 
-    public static ApplicationOptions Parse(string[] args)
+    public static ApplicationLaunchOptions Parse(string[] args)
     {
-        bool isInspectMode = HasFlag(args, InspectFlag);
-        ApplicationRunMode runMode = isInspectMode
-            ? ApplicationRunMode.DiagnosticInspect
-            : ApplicationRunMode.TrayMonitor;
+        ArgumentNullException.ThrowIfNull(args);
 
-        bool isSimulation =
-            HasFlag(args, SimulateFlag) ||
-            HasFlag(args, SimFlag) ||
-            HasFlag(args, MockFlag);
-
-        bool isDryRun = HasFlag(args, DryRunFlag);
-        bool includeAllHidDevices = HasFlag(args, AllHidFlag);
-        int pollingIntervalMs = ParsePollingIntervalMs(args);
-
-        string rawInspectCommand = VoltronicProtocolConstants.QueryStatusCommand;
+        bool isInspectMode = false;
+        bool isSimulation = false;
+        bool isDryRun = false;
+        int pollingIntervalMs = DefaultPollingIntervalMs;
+        bool includeAllHidDevices = false;
+        UpsDiagnosticInquiry inquiry = UpsDiagnosticInquiry.QuickStatus;
         string? exportPath = null;
-        bool hasInspectCommandError = false;
-        string? errorMessage = null;
+        string? firstTrayOnlyFlag = null;
+        string? firstInspectOnlyFlag = null;
 
         for (int index = 0; index < args.Length; index++)
         {
-            if (args[index].Equals(CommandFlag, StringComparison.OrdinalIgnoreCase))
-            {
-                if (index + 1 >= args.Length)
-                {
-                    hasInspectCommandError = true;
-                    errorMessage = "Missing value for --cmd.";
-                    break;
-                }
+            string argument = args[index];
 
-                rawInspectCommand = args[++index];
+            if (argument.Equals(InspectFlag, StringComparison.OrdinalIgnoreCase))
+            {
+                isInspectMode = true;
                 continue;
             }
 
-            if (args[index].Equals(ExportFlag, StringComparison.OrdinalIgnoreCase))
+            if (argument.Equals(SimulateFlag, StringComparison.OrdinalIgnoreCase) ||
+                argument.Equals(SimFlag, StringComparison.OrdinalIgnoreCase) ||
+                argument.Equals(MockFlag, StringComparison.OrdinalIgnoreCase))
             {
-                if (index + 1 >= args.Length)
+                isSimulation = true;
+                firstTrayOnlyFlag ??= argument;
+                continue;
+            }
+
+            if (argument.Equals(DryRunFlag, StringComparison.OrdinalIgnoreCase))
+            {
+                isDryRun = true;
+                firstTrayOnlyFlag ??= argument;
+                continue;
+            }
+
+            if (argument.Equals(IntervalFlag, StringComparison.OrdinalIgnoreCase))
+            {
+                firstTrayOnlyFlag ??= argument;
+                if (!TryConsumeFlagValue(args, ref index, IntervalFlag, out string rawInterval, out string? missingError))
                 {
-                    hasInspectCommandError = true;
-                    errorMessage = "Missing value for --export.";
-                    break;
+                    return new InvalidLaunchOptions(missingError!);
                 }
 
-                exportPath = args[++index];
+                bool isValidPositiveInteger =
+                    int.TryParse(rawInterval, NumberStyles.Integer, CultureInfo.InvariantCulture, out int parsedInterval) &&
+                    parsedInterval > 0;
+
+                if (!isValidPositiveInteger)
+                {
+                    return new InvalidLaunchOptions(
+                        $"Invalid value for {IntervalFlag}: '{rawInterval}'. Expected a positive integer.");
+                }
+
+                pollingIntervalMs = Math.Max(MinimumPollingIntervalMs, parsedInterval);
+                continue;
             }
-        }
 
-        return new ApplicationOptions(
-            runMode,
-            isSimulation,
-            isDryRun,
-            pollingIntervalMs,
-            includeAllHidDevices,
-            rawInspectCommand,
-            exportPath,
-            hasInspectCommandError,
-            errorMessage);
-    }
-
-    private static bool HasFlag(string[] args, string flag)
-    {
-        return args.Any(argument => argument.Equals(flag, StringComparison.OrdinalIgnoreCase));
-    }
-
-    private static int ParsePollingIntervalMs(string[] args)
-    {
-        int intervalMs = DefaultPollingIntervalMs;
-
-        for (int index = 0; index < args.Length - 1; index++)
-        {
-            if (args[index].Equals(IntervalFlag, StringComparison.OrdinalIgnoreCase) &&
-                int.TryParse(args[index + 1], out int parsedInterval))
+            if (argument.Equals(AllHidFlag, StringComparison.OrdinalIgnoreCase))
             {
-                intervalMs = Math.Max(MinimumPollingIntervalMs, parsedInterval);
+                includeAllHidDevices = true;
+                firstInspectOnlyFlag ??= argument;
+                continue;
             }
+
+            if (argument.Equals(CommandFlag, StringComparison.OrdinalIgnoreCase))
+            {
+                firstInspectOnlyFlag ??= argument;
+                if (!TryConsumeFlagValue(args, ref index, CommandFlag, out string rawCommand, out string? missingError))
+                {
+                    return new InvalidLaunchOptions(missingError!);
+                }
+
+                if (!InspectInquiryArgumentParser.TryParse(rawCommand, out UpsDiagnosticInquiry parsedInquiry))
+                {
+                    string formattedCommand = rawCommand.Replace("\r", "\\r");
+                    return new InvalidLaunchOptions(
+                        $"Command '{formattedCommand}' is blocked by the read-only diagnostic inquiry policy.");
+                }
+
+                inquiry = parsedInquiry;
+                continue;
+            }
+
+            if (argument.Equals(ExportFlag, StringComparison.OrdinalIgnoreCase))
+            {
+                firstInspectOnlyFlag ??= argument;
+                if (!TryConsumeFlagValue(args, ref index, ExportFlag, out string rawExportPath, out string? missingError))
+                {
+                    return new InvalidLaunchOptions(missingError!);
+                }
+
+                exportPath = rawExportPath;
+                continue;
+            }
+
+            return new InvalidLaunchOptions($"Unknown argument '{argument}'.");
         }
 
-        return intervalMs;
+        if (isInspectMode && firstTrayOnlyFlag != null)
+        {
+            return new InvalidLaunchOptions($"Flag '{firstTrayOnlyFlag}' cannot be combined with {InspectFlag}.");
+        }
+
+        if (!isInspectMode && firstInspectOnlyFlag != null)
+        {
+            return new InvalidLaunchOptions($"Flag '{firstInspectOnlyFlag}' is only valid with {InspectFlag}.");
+        }
+
+        return isInspectMode
+            ? new InspectLaunchOptions(inquiry, includeAllHidDevices, exportPath)
+            : new TrayMonitorLaunchOptions(isSimulation, isDryRun, pollingIntervalMs);
+    }
+
+    private static bool TryConsumeFlagValue(
+        string[] args,
+        ref int index,
+        string flagName,
+        out string value,
+        out string? errorMessage)
+    {
+        if (index + 1 >= args.Length || args[index + 1].StartsWith(FlagPrefix, StringComparison.Ordinal))
+        {
+            value = string.Empty;
+            errorMessage = $"Missing value for {flagName}.";
+            return false;
+        }
+
+        value = args[++index];
+        errorMessage = null;
+        return true;
     }
 }

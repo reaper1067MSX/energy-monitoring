@@ -13,4 +13,7 @@
     <ProjectReference Include="..\VoltTray.Infrastructure\VoltTray.Infrastructure.csproj" />
     <ProjectReference Include="..\VoltTray.UI\VoltTray.UI.csproj" />
   </ItemGroup>
+  <ItemGroup>
+    <InternalsVisibleTo Include="VoltTray.Tests" />
+  </ItemGroup>
 </Project>

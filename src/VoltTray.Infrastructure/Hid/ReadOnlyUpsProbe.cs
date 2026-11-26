@@ -8,7 +8,7 @@ namespace VoltTray.Infrastructure.Hid;
 /// <summary>
 /// Executes read-only HID inquiry probes and builds decoded forensic captures.
 /// </summary>
-public sealed class ReadOnlyUpsProbe
+public sealed class ReadOnlyUpsProbe : IUpsDiagnosticProbe
 {
     private const int MinimumFrequencyTokenCount = 7;
     private const int FrequencyPeriodTokenIndex = 5;
@@ -23,31 +23,34 @@ public sealed class ReadOnlyUpsProbe
         _deviceScanner = deviceScanner ?? new HidDeviceScanner();
     }
 
-    /// <summary>
-    /// Discovers the first matching Voltronic/Forza HID device and executes one read-only inquiry.
-    /// </summary>
-    public UpsProbeCapture? InspectFirstMatchingDevice(
-        UpsDiagnosticInquiry inquiry = UpsDiagnosticInquiry.QuickStatus,
-        bool includeAllHidDevices = false)
+    public IReadOnlyList<HidDeviceDescriptor> DiscoverDevices(bool includeAllHidDevices = false)
     {
-        HidDeviceDescriptor? targetDevice = _deviceScanner
-            .DiscoverDevices(includeAllHidDevices)
-            .FirstOrDefault(descriptor =>
-                descriptor.VendorId == HidConstants.VendorId &&
-                descriptor.ProductId == HidConstants.ProductId);
+        return _deviceScanner.DiscoverDevices(includeAllHidDevices);
+    }
 
-        if (targetDevice == null)
-        {
-            return null;
-        }
+    public UpsProbeCapture? QueryDevice(HidDeviceDescriptor device, UpsDiagnosticInquiry inquiry)
+    {
+        ArgumentNullException.ThrowIfNull(device);
 
-        using SafeFileHandle handle = HidOverlappedIo.OpenDeviceHandle(targetDevice.DevicePath);
+        using SafeFileHandle handle = HidOverlappedIo.OpenDeviceHandle(device.DevicePath);
         if (handle.IsInvalid)
         {
             return null;
         }
 
-        return QueryReadOnly(handle, targetDevice, inquiry);
+        return QueryReadOnly(handle, device, inquiry);
+    }
+
+    /// <summary>
+    /// Discovers the first matching Voltronic/Forza HID device and executes one read-only inquiry.
+    /// </summary>
+    public UpsProbeCapture? InspectFirstMatchingDevice(
+        UpsDiagnosticInquiry inquiry = UpsDiagnosticInquiry.QuickStatus)
+    {
+        HidDeviceDescriptor? targetDevice = DiscoverDevices(includeAllHidDevices: false)
+            .FirstOrDefault(descriptor => descriptor.IsSupportedVoltronicDevice);
+
+        return targetDevice == null ? null : QueryDevice(targetDevice, inquiry);
     }
 
     /// <summary>

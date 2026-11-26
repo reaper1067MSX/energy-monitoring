@@ -1,4 +1,5 @@
 using VoltTray.Core.Ports;
+using VoltTray.Infrastructure.Hid;
 using VoltTray.Infrastructure.OS;
 using VoltTray.UI.Dialogs;
 using VoltTray.UI.Rendering;
@@ -10,7 +11,14 @@ namespace VoltTray.Hosting;
 /// </summary>
 public sealed class TrayMonitorModeStrategy : IApplicationModeStrategy
 {
-    public int Execute(ApplicationOptions options)
+    private readonly TrayMonitorLaunchOptions _options;
+
+    public TrayMonitorModeStrategy(TrayMonitorLaunchOptions options)
+    {
+        _options = options ?? throw new ArgumentNullException(nameof(options));
+    }
+
+    public int Execute()
     {
         using Mutex? mutex = SingleInstanceManager.TryAcquire();
         if (mutex == null)
@@ -20,11 +28,11 @@ public sealed class TrayMonitorModeStrategy : IApplicationModeStrategy
 
         try
         {
-            IUpsDevicePort upsPort = UpsDevicePortFactory.Create(options);
+            using IUpsDevicePort upsPort = CreateUpsDevicePort(_options);
             var shutdownPort = new WindowsShutdownPort();
             var notificationPort = new WindowsNotificationPort();
-            var trayRenderer = new TrayRenderer();
-            var popoverPainter = new PopoverPainter();
+            using var trayRenderer = new TrayRenderer();
+            using var popoverPainter = new PopoverPainter();
             var exitDialog = new ExitDialog();
 
             using var lifecycle = new HostLifecycle(
@@ -35,13 +43,13 @@ public sealed class TrayMonitorModeStrategy : IApplicationModeStrategy
                 popoverPainter,
                 exitDialog);
 
-            if (options.IsDryRun)
+            if (_options.IsDryRun)
             {
                 lifecycle.ShutdownCoordinator.DryRun = true;
             }
 
             lifecycle.ExitAction = () => Win32MessagePump.PostQuit(0);
-            lifecycle.Start(options.PollingIntervalMs);
+            lifecycle.Start(_options.PollingIntervalMs);
 
             int exitCode = Win32MessagePump.Run();
             lifecycle.Stop();
@@ -58,5 +66,12 @@ public sealed class TrayMonitorModeStrategy : IApplicationModeStrategy
                 // Ignore abandoned or non-owned mutex state on shutdown.
             }
         }
+    }
+
+    internal static IUpsDevicePort CreateUpsDevicePort(TrayMonitorLaunchOptions options)
+    {
+        return options.IsSimulation
+            ? new SimulatedUpsDevicePort()
+            : new Win32HidUpsPort();
     }
 }

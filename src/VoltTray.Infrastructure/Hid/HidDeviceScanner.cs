@@ -39,8 +39,7 @@ public sealed class HidDeviceScanner : IHidDeviceScanner
                 }
 
                 bool matchesTargetUps =
-                    descriptor.VendorId == HidConstants.VendorId &&
-                    descriptor.ProductId == HidConstants.ProductId;
+                    descriptor.IsSupportedVoltronicDevice;
 
                 if (includeAllHidDevices || matchesTargetUps)
                 {
@@ -59,9 +58,9 @@ public sealed class HidDeviceScanner : IHidDeviceScanner
     private static IReadOnlyList<string> EnumerateInterfacePaths(IntPtr deviceInfoSet, Guid hidGuid)
     {
         List<string> devicePaths = new();
-        var interfaceData = new HidNativeMethods.DeviceInterfaceData
+        var interfaceData = new DeviceInterfaceData
         {
-            Size = Marshal.SizeOf<HidNativeMethods.DeviceInterfaceData>()
+            Size = Marshal.SizeOf<DeviceInterfaceData>()
         };
 
         for (uint memberIndex = 0;
@@ -85,7 +84,7 @@ public sealed class HidDeviceScanner : IHidDeviceScanner
 
     private static string? TryGetInterfaceDevicePath(
         IntPtr deviceInfoSet,
-        ref HidNativeMethods.DeviceInterfaceData interfaceData)
+        ref DeviceInterfaceData interfaceData)
     {
         HidNativeMethods.SetupDiGetDeviceInterfaceDetailW(
             deviceInfoSet,
@@ -142,7 +141,7 @@ public sealed class HidDeviceScanner : IHidDeviceScanner
             return null;
         }
 
-        if (!ReadDescriptorAttributes(handle, out HidNativeMethods.HidDeviceAttributes attributes))
+        if (!ReadDescriptorAttributes(handle, out HidDeviceAttributes attributes))
         {
             return null;
         }
@@ -170,11 +169,11 @@ public sealed class HidDeviceScanner : IHidDeviceScanner
 
     private static bool ReadDescriptorAttributes(
         SafeFileHandle handle,
-        out HidNativeMethods.HidDeviceAttributes attributes)
+        out HidDeviceAttributes attributes)
     {
-        attributes = new HidNativeMethods.HidDeviceAttributes
+        attributes = new HidDeviceAttributes
         {
-            Size = Marshal.SizeOf<HidNativeMethods.HidDeviceAttributes>()
+            Size = Marshal.SizeOf<HidDeviceAttributes>()
         };
 
         return HidNativeMethods.HidD_GetAttributes(handle, ref attributes);
@@ -195,7 +194,7 @@ public sealed class HidDeviceScanner : IHidDeviceScanner
 
         try
         {
-            uint status = HidNativeMethods.HidP_GetCaps(preparsedData, out HidNativeMethods.HidCapabilities capabilities);
+            uint status = HidNativeMethods.HidP_GetCaps(preparsedData, out HidCapabilities capabilities);
             if (status == HidNativeMethods.HidpStatusSuccess)
             {
                 inputReportByteLength = capabilities.InputReportByteLength;

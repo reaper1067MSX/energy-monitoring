@@ -12,4 +12,9 @@ public sealed record HidDeviceDescriptor(
     string Product,
     string SerialNumber,
     ushort InputReportByteLength,
-    ushort OutputReportByteLength);
+    ushort OutputReportByteLength)
+{
+    public bool IsSupportedVoltronicDevice =>
+        VendorId == HidConstants.VendorId &&
+        ProductId == HidConstants.ProductId;
+}

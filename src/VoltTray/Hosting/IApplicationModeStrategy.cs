@@ -1,9 +1,9 @@
 namespace VoltTray.Hosting;
 
 /// <summary>
-/// Strategy contract for executing a top-level VoltTray application mode.
+/// Strategy contract for executing a configured VoltTray startup mode.
 /// </summary>
 public interface IApplicationModeStrategy
 {
-    int Execute(ApplicationOptions options);
+    int Execute();
 }
