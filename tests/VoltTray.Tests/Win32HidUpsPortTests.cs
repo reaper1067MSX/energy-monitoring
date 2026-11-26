@@ -1,3 +1,4 @@
+using VoltTray.Core.Telemetry;
 using System;
 using System.Collections.Generic;
 using System.Diagnostics;
@@ -6,7 +7,6 @@ using System.IO.Pipes;
 using System.Threading;
 using System.Threading.Tasks;
 using Microsoft.Win32.SafeHandles;
-using VoltTray.Core.Models;
 using VoltTray.Infrastructure.Hid;
 using VoltTray.Tests.ObjectMothers;
 using Xunit;

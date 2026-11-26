@@ -1,7 +1,7 @@
+using VoltTray.Core.Telemetry;
 using System;
 using System.Collections.Generic;
 using System.Text;
-using VoltTray.Core.Models;
 using VoltTray.Infrastructure.Protocol;
 using VoltTray.Tests.ObjectMothers;
 using Xunit;

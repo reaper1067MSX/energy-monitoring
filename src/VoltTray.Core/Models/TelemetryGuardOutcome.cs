@@ -1,8 +1,0 @@
-namespace VoltTray.Core.Models;
-
-public sealed record TelemetryGuardOutcome(
-    UpsTelemetry? EffectiveTelemetry,
-    TelemetryAnomalyKind? Anomaly,
-    bool IsQuarantined,
-    bool UsedLastKnownGood,
-    string? DiagnosticDumpPath);

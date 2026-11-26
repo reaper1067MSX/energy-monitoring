@@ -1,4 +1,4 @@
-using VoltTray.Core.Models;
+using VoltTray.Core.Diagnostics;
 
 namespace VoltTray.Hosting;
 

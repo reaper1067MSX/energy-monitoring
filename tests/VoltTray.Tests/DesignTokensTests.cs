@@ -1,4 +1,4 @@
-using VoltTray.Core.Models;
+using VoltTray.Core.Telemetry;
 using VoltTray.UI.Models;
 using VoltTray.UI.Tokens;
 

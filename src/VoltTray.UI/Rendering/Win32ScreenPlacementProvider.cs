@@ -1,4 +1,3 @@
-using System.Runtime.InteropServices;
 using VoltTray.UI.Interop;
 using VoltTray.UI.Models;
 using VoltTray.UI.Tokens;
@@ -11,11 +10,11 @@ namespace VoltTray.UI.Rendering;
 /// </summary>
 public sealed class Win32ScreenPlacementProvider : IScreenPlacementProvider
 {
-    public (ViewRect WorkArea, TaskbarEdge Edge) GetWorkAreaForAnchor(ViewRect anchorRect)
+    public unsafe (ViewRect WorkArea, TaskbarEdge Edge) GetWorkAreaForAnchor(ViewRect anchorRect)
     {
         try
         {
-            var nativeAnchor = new GdiNative.RECT(
+            var nativeAnchor = new GdiNative.NativeRect(
                 anchorRect.Left,
                 anchorRect.Top,
                 anchorRect.Right,
@@ -24,24 +23,24 @@ public sealed class Win32ScreenPlacementProvider : IScreenPlacementProvider
             IntPtr monitorHandle = GdiNative.MonitorFromRect(ref nativeAnchor, GdiNative.MONITOR_DEFAULTTONEAREST);
             if (monitorHandle != IntPtr.Zero)
             {
-                var monitorInfo = new GdiNative.MONITORINFO
+                var monitorInfo = new GdiNative.MonitorInfo
                 {
-                    cbSize = (uint)Marshal.SizeOf<GdiNative.MONITORINFO>()
+                    Size = (uint)sizeof(GdiNative.MonitorInfo)
                 };
 
                 if (GdiNative.GetMonitorInfo(monitorHandle, ref monitorInfo))
                 {
                     var monitorBounds = new ViewRect(
-                        monitorInfo.rcMonitor.Left,
-                        monitorInfo.rcMonitor.Top,
-                        monitorInfo.rcMonitor.Right,
-                        monitorInfo.rcMonitor.Bottom);
+                        monitorInfo.MonitorBounds.Left,
+                        monitorInfo.MonitorBounds.Top,
+                        monitorInfo.MonitorBounds.Right,
+                        monitorInfo.MonitorBounds.Bottom);
 
                     var workArea = new ViewRect(
-                        monitorInfo.rcWork.Left,
-                        monitorInfo.rcWork.Top,
-                        monitorInfo.rcWork.Right,
-                        monitorInfo.rcWork.Bottom);
+                        monitorInfo.WorkArea.Left,
+                        monitorInfo.WorkArea.Top,
+                        monitorInfo.WorkArea.Right,
+                        monitorInfo.WorkArea.Bottom);
 
                     return (workArea, InferTaskbarEdge(monitorBounds, workArea));
                 }

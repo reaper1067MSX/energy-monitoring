@@ -1,7 +1,7 @@
+using VoltTray.Core.Telemetry;
+using VoltTray.Core.Diagnostics;
 using System.Diagnostics;
 using System.Text.Json;
-using VoltTray.Core.Models;
-using VoltTray.Core.Ports;
 using VoltTray.Infrastructure.Diagnostics;
 using VoltTray.Infrastructure.Hid;
 using VoltTray.Infrastructure.Protocol;

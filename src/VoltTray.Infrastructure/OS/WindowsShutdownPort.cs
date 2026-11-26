@@ -1,5 +1,5 @@
 using System.Runtime.InteropServices;
-using VoltTray.Core.Ports;
+using VoltTray.Core.Safety;
 
 namespace VoltTray.Infrastructure.OS;
 
@@ -7,19 +7,21 @@ namespace VoltTray.Infrastructure.OS;
 /// Win32 advapi32.dll implementation of ISafetyShutdownPort.
 /// Supports dry-run simulation mode without terminating the host machine.
 /// </summary>
-public sealed class WindowsShutdownPort : ISafetyShutdownPort
+public sealed partial class WindowsShutdownPort : ISafetyShutdownPort
 {
-    [DllImport("advapi32.dll", EntryPoint = "InitiateSystemShutdownExW", SetLastError = true, CharSet = CharSet.Unicode)]
-    private static extern bool InitiateSystemShutdownEx(
+    [LibraryImport("advapi32.dll", EntryPoint = "InitiateSystemShutdownExW", SetLastError = true, StringMarshalling = StringMarshalling.Utf16)]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    private static partial bool InitiateSystemShutdownEx(
         string? lpMachineName,
         string? lpMessage,
         uint dwTimeout,
-        bool bForceAppsClosed,
-        bool bRebootAfterShutdown,
+        [MarshalAs(UnmanagedType.Bool)] bool bForceAppsClosed,
+        [MarshalAs(UnmanagedType.Bool)] bool bRebootAfterShutdown,
         uint dwReason);
 
-    [DllImport("advapi32.dll", EntryPoint = "AbortSystemShutdownW", SetLastError = true, CharSet = CharSet.Unicode)]
-    private static extern bool AbortSystemShutdown(string? lpMachineName);
+    [LibraryImport("advapi32.dll", EntryPoint = "AbortSystemShutdownW", SetLastError = true, StringMarshalling = StringMarshalling.Utf16)]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    private static partial bool AbortSystemShutdown(string? lpMachineName);
 
     public Action<string>? OnDryRunExecuted { get; set; }
 

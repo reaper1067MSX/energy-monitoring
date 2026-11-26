@@ -1,4 +1,5 @@
-using VoltTray.Core.Models;
+using VoltTray.Core.Battery;
+using VoltTray.Core.Telemetry;
 
 namespace VoltTray.Tests.ObjectMothers;
 

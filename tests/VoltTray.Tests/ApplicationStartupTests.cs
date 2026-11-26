@@ -1,8 +1,9 @@
+using VoltTray.Core.Diagnostics;
+using VoltTray.Infrastructure.Diagnostics;
 using System.Globalization;
 using System.IO;
 using System.Text.Json;
 using VoltTray.Cli;
-using VoltTray.Core.Models;
 using VoltTray.Hosting;
 using VoltTray.Infrastructure.Hid;
 using VoltTray.Infrastructure.Protocol;

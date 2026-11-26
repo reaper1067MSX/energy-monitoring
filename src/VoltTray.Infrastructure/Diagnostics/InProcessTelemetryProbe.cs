@@ -1,8 +1,8 @@
+using VoltTray.Core.Telemetry;
+using VoltTray.Core.Diagnostics;
 using System.Globalization;
 using System.Text;
 using System.Text.Json;
-using VoltTray.Core.Models;
-using VoltTray.Core.Ports;
 
 namespace VoltTray.Infrastructure.Diagnostics;
 

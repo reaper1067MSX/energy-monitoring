@@ -1,6 +1,5 @@
-using VoltTray.Core.Models;
-using VoltTray.Core.Ports;
-using VoltTray.Core.Services;
+using VoltTray.Core.Battery;
+using VoltTray.Core.Telemetry;
 using VoltTray.UI.Presenters;
 using Xunit;
 

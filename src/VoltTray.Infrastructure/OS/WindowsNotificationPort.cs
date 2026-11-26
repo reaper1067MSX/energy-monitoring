@@ -1,4 +1,4 @@
-using VoltTray.Core.Ports;
+using VoltTray.Core.Safety;
 
 namespace VoltTray.Infrastructure.OS;
 

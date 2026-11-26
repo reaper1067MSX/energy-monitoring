@@ -1,4 +1,5 @@
-using VoltTray.Core.Models;
+using VoltTray.Core.Telemetry;
+using VoltTray.Core.Safety;
 using VoltTray.Infrastructure.Protocol;
 
 namespace VoltTray.Infrastructure.Diagnostics;

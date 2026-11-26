@@ -1,5 +1,5 @@
 using System.Runtime.InteropServices;
-using VoltTray.Core.Models;
+using VoltTray.Core.Telemetry;
 using VoltTray.UI.Interop;
 using VoltTray.UI.Models;
 using VoltTray.UI.Views;
@@ -19,7 +19,7 @@ public sealed class TrayRenderer : ITrayIconView
 
     private IntPtr _hwnd = IntPtr.Zero;
     private GdiNative.WndProcDelegate? _wndProc;
-    private GdiNative.NOTIFYICONDATAW _nid;
+    private GdiNative.NotifyIconDataW _nid;
     private bool _iconAdded;
 
     public event Action? OnTrayIconClicked;
@@ -37,7 +37,7 @@ public sealed class TrayRenderer : ITrayIconView
         InitializeHostWindow();
     }
 
-    private void InitializeHostWindow()
+    private unsafe void InitializeHostWindow()
     {
         try
         {
@@ -45,20 +45,32 @@ public sealed class TrayRenderer : ITrayIconView
             string className = "VoltTray_TrayHostWindow";
             IntPtr hInstance = GdiNative.GetModuleHandle(null);
 
-            var wcx = new GdiNative.WNDCLASSEXW
+            fixed (char* classNamePtr = className)
             {
-                cbSize = (uint)Marshal.SizeOf<GdiNative.WNDCLASSEXW>(),
-                lpfnWndProc = Marshal.GetFunctionPointerForDelegate(_wndProc),
-                hInstance = hInstance,
-                lpszClassName = className
-            };
+                var wcx = new GdiNative.WindowClassExW
+                {
+                    Size = (uint)sizeof(GdiNative.WindowClassExW),
+                    WindowProc = Marshal.GetFunctionPointerForDelegate(_wndProc),
+                    Instance = hInstance,
+                    ClassName = classNamePtr
+                };
 
-            GdiNative.RegisterClassEx(ref wcx);
+                GdiNative.RegisterClassEx(ref wcx);
+            }
 
             _hwnd = GdiNative.CreateWindowEx(
-                0, className, "VoltTray Tray Host", 0,
-                0, 0, 0, 0,
-                IntPtr.Zero, IntPtr.Zero, hInstance, IntPtr.Zero);
+                0,
+                className,
+                "VoltTray Tray Host",
+                0,
+                0,
+                0,
+                0,
+                0,
+                IntPtr.Zero,
+                IntPtr.Zero,
+                hInstance,
+                IntPtr.Zero);
         }
         catch
         {
@@ -83,7 +95,7 @@ public sealed class TrayRenderer : ITrayIconView
         return GdiNative.DefWindowProc(hWnd, msg, wParam, lParam);
     }
 
-    public void UpdateIcon(UpsOperationalState state, int batteryPct, int dpi = 96)
+    public unsafe void UpdateIcon(UpsOperationalState state, int batteryPct, int dpi = 96)
     {
         int size = dpi > 144 ? 32 : (dpi > 120 ? 24 : 16);
         IntPtr hNew = CreateGlyphIcon(state, batteryPct, size);
@@ -100,22 +112,22 @@ public sealed class TrayRenderer : ITrayIconView
             {
                 if (!_iconAdded)
                 {
-                    _nid = new GdiNative.NOTIFYICONDATAW
+                    _nid = new GdiNative.NotifyIconDataW
                     {
-                        cbSize = (uint)Marshal.SizeOf<GdiNative.NOTIFYICONDATAW>(),
-                        hWnd = _hwnd,
-                        uID = 1001,
-                        uFlags = GdiNative.NIF_MESSAGE | GdiNative.NIF_ICON | GdiNative.NIF_TIP,
-                        uCallbackMessage = GdiNative.WM_TRAYICON,
-                        hIcon = _currentHIcon,
-                        szTip = CurrentTooltip ?? "VoltTray: Monitor de Energía"
+                        Size = (uint)sizeof(GdiNative.NotifyIconDataW),
+                        WindowHandle = _hwnd,
+                        Id = 1001,
+                        Flags = GdiNative.NIF_MESSAGE | GdiNative.NIF_ICON | GdiNative.NIF_TIP,
+                        CallbackMessage = GdiNative.WM_TRAYICON,
+                        IconHandle = _currentHIcon
                     };
+                    _nid.SetTip(CurrentTooltip ?? "VoltTray: Monitor de Energía");
                     _iconAdded = GdiNative.Shell_NotifyIcon(GdiNative.NIM_ADD, ref _nid);
                 }
                 else
                 {
-                    _nid.uFlags = GdiNative.NIF_ICON;
-                    _nid.hIcon = _currentHIcon;
+                    _nid.Flags = GdiNative.NIF_ICON;
+                    _nid.IconHandle = _currentHIcon;
                     GdiNative.Shell_NotifyIcon(GdiNative.NIM_MODIFY, ref _nid);
                 }
             }
@@ -129,8 +141,8 @@ public sealed class TrayRenderer : ITrayIconView
             CurrentTooltip = text;
             if (_iconAdded && _hwnd != IntPtr.Zero)
             {
-                _nid.uFlags = GdiNative.NIF_TIP;
-                _nid.szTip = text.Length > 127 ? text[..127] : text;
+                _nid.Flags = GdiNative.NIF_TIP;
+                _nid.SetTip(text);
                 GdiNative.Shell_NotifyIcon(GdiNative.NIM_MODIFY, ref _nid);
             }
         }
@@ -147,14 +159,14 @@ public sealed class TrayRenderer : ITrayIconView
             }
             if (_currentHIcon != IntPtr.Zero)
             {
-                _nid.uFlags = GdiNative.NIF_MESSAGE | GdiNative.NIF_ICON | GdiNative.NIF_TIP;
-                _nid.hIcon = _currentHIcon;
+                _nid.Flags = GdiNative.NIF_MESSAGE | GdiNative.NIF_ICON | GdiNative.NIF_TIP;
+                _nid.IconHandle = _currentHIcon;
                 _iconAdded = GdiNative.Shell_NotifyIcon(GdiNative.NIM_ADD, ref _nid);
             }
         }
     }
 
-    public ViewRect? TryGetIconRect()
+    public unsafe ViewRect? TryGetIconRect()
     {
         lock (_lock)
         {
@@ -163,15 +175,15 @@ public sealed class TrayRenderer : ITrayIconView
                 return null;
             }
 
-            var identifier = new GdiNative.NOTIFYICONIDENTIFIER
+            var identifier = new GdiNative.NotifyIconIdentifier
             {
-                cbSize = (uint)Marshal.SizeOf<GdiNative.NOTIFYICONIDENTIFIER>(),
-                hWnd = _hwnd,
-                uID = 1001,
-                guidItem = Guid.Empty
+                Size = (uint)sizeof(GdiNative.NotifyIconIdentifier),
+                WindowHandle = _hwnd,
+                Id = 1001,
+                GuidItem = Guid.Empty
             };
 
-            int hresult = GdiNative.Shell_NotifyIconGetRect(ref identifier, out GdiNative.RECT iconRect);
+            int hresult = GdiNative.Shell_NotifyIconGetRect(ref identifier, out GdiNative.NativeRect iconRect);
             if (hresult < 0 || iconRect.Right <= iconRect.Left || iconRect.Bottom <= iconRect.Top)
             {
                 return null;
@@ -200,18 +212,18 @@ public sealed class TrayRenderer : ITrayIconView
         };
 
         IntPtr hBrush = GdiNative.CreateSolidBrush(color);
-        var rc = new GdiNative.RECT(1, 1, size - 1, size - 1);
+        var rc = new GdiNative.NativeRect(1, 1, size - 1, size - 1);
         GdiNative.FillRect(hdcMem, ref rc, hBrush);
 
         GdiNative.DeleteObject(hBrush);
         GdiNative.SelectObject(hdcMem, hOldBmp);
         GdiNative.DeleteDC(hdcMem);
 
-        var info = new GdiNative.ICONINFO
+        var info = new GdiNative.IconInfo
         {
-            fIcon = true,
-            hbmColor = hbmColor,
-            hbmMask = hbmMask
+            IsIcon = 1,
+            ColorBitmap = hbmColor,
+            MaskBitmap = hbmMask
         };
 
         IntPtr hIcon = GdiNative.CreateIconIndirect(ref info);

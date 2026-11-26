@@ -1,5 +1,5 @@
+using VoltTray.Core.Diagnostics;
 using System.Globalization;
-using VoltTray.Core.Models;
 using VoltTray.Infrastructure.Protocol;
 using VoltTray.Shared;
 
