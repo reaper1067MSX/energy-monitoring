@@ -1,6 +1,7 @@
 using System.Runtime.InteropServices;
 using VoltTray.Core.Models;
 using VoltTray.UI.Interop;
+using VoltTray.UI.Models;
 using VoltTray.UI.Views;
 
 namespace VoltTray.UI.Rendering;
@@ -150,6 +151,33 @@ public sealed class TrayRenderer : ITrayIconView
                 _nid.hIcon = _currentHIcon;
                 _iconAdded = GdiNative.Shell_NotifyIcon(GdiNative.NIM_ADD, ref _nid);
             }
+        }
+    }
+
+    public ViewRect? TryGetIconRect()
+    {
+        lock (_lock)
+        {
+            if (!_iconAdded || _hwnd == IntPtr.Zero)
+            {
+                return null;
+            }
+
+            var identifier = new GdiNative.NOTIFYICONIDENTIFIER
+            {
+                cbSize = (uint)Marshal.SizeOf<GdiNative.NOTIFYICONIDENTIFIER>(),
+                hWnd = _hwnd,
+                uID = 1001,
+                guidItem = Guid.Empty
+            };
+
+            int hresult = GdiNative.Shell_NotifyIconGetRect(ref identifier, out GdiNative.RECT iconRect);
+            if (hresult < 0 || iconRect.Right <= iconRect.Left || iconRect.Bottom <= iconRect.Top)
+            {
+                return null;
+            }
+
+            return new ViewRect(iconRect.Left, iconRect.Top, iconRect.Right, iconRect.Bottom);
         }
     }
 

@@ -6,6 +6,9 @@ namespace VoltTray.UI.Presenters;
 
 public class SplitCockpitPresenter
 {
+    public const string DefaultUpsDisplayName = "VoltTray UPS";
+    private const int DefaultDpi = 96;
+
     private readonly ITrayIconView _trayIcon;
     private readonly IPopoverView _popover;
     private readonly Func<bool> _toggleBeeper;
@@ -25,12 +28,20 @@ public class SplitCockpitPresenter
         _triggerSelfTest = triggerSelfTest ?? throw new ArgumentNullException(nameof(triggerSelfTest));
     }
 
-    public void UpdateTelemetry(UpsTelemetry telemetry, int dpi = 96)
+    public void UpdateTelemetry(UpsTelemetry telemetry, int dpi = DefaultDpi, string? modelName = null)
     {
         CurrentTelemetry = telemetry;
 
+        string? resolvedModelName = string.IsNullOrWhiteSpace(modelName)
+            ? telemetry.BankSpec.Label
+            : modelName;
+
         _trayIcon.UpdateIcon(telemetry.State, telemetry.BatteryPercentage, dpi);
-        _trayIcon.SetTooltip(FormatTooltip(telemetry.State, telemetry.BatteryPercentage, telemetry.EstimatedRuntimeMinutes));
+        _trayIcon.SetTooltip(FormatTooltip(
+            telemetry.State,
+            telemetry.BatteryPercentage,
+            telemetry.EstimatedRuntimeMinutes,
+            resolvedModelName));
     }
 
     public void TogglePopover(ViewRect iconRect, TaskbarEdge edge, ViewRect workArea, UITheme theme)
@@ -64,8 +75,15 @@ public class SplitCockpitPresenter
         return (int)Math.Round((double)clamped * ratedWatts / 100.0, MidpointRounding.AwayFromZero);
     }
 
-    public static string FormatTooltip(UpsOperationalState state, int batteryPercentage, int? runtimeMinutes)
+    public static string FormatTooltip(
+        UpsOperationalState state,
+        int batteryPercentage,
+        int? runtimeMinutes,
+        string? modelName = null)
     {
+        string displayTitle = string.IsNullOrWhiteSpace(modelName)
+            ? DefaultUpsDisplayName
+            : modelName;
         string? runtimeSegment = RuntimeDisplayFormatter.FormatRuntimeString(runtimeMinutes);
         string metricsSegment = runtimeSegment is null
             ? $"{batteryPercentage}%"
@@ -73,13 +91,13 @@ public class SplitCockpitPresenter
 
         return state switch
         {
-            UpsOperationalState.LineNormal => $"Forza FX-2200 LCD · Online ({metricsSegment})",
-            UpsOperationalState.OnBattery => $"Forza FX-2200 LCD · On Battery ({metricsSegment})",
-            UpsOperationalState.BatteryLow => $"Forza FX-2200 LCD · Battery Low ({metricsSegment})",
-            UpsOperationalState.ChargingAvr => $"Forza FX-2200 LCD · AVR Boost ({metricsSegment})",
-            UpsOperationalState.Fault => "Forza FX-2200 LCD · Fault (Check Unit)",
-            UpsOperationalState.Paused => "Forza FX-2200 LCD · Monitoring Paused",
-            _ => "Forza FX-2200 LCD · No Communication"
+            UpsOperationalState.LineNormal => $"{displayTitle} · Online ({metricsSegment})",
+            UpsOperationalState.OnBattery => $"{displayTitle} · On Battery ({metricsSegment})",
+            UpsOperationalState.BatteryLow => $"{displayTitle} · Battery Low ({metricsSegment})",
+            UpsOperationalState.ChargingAvr => $"{displayTitle} · AVR Boost ({metricsSegment})",
+            UpsOperationalState.Fault => $"{displayTitle} · Fault (Check Unit)",
+            UpsOperationalState.Paused => $"{displayTitle} · Monitoring Paused",
+            _ => $"{displayTitle} · No Communication"
         };
     }
 }

@@ -11,6 +11,9 @@ public class Phase1AdversarialTests
 {
     private class TrackingTrayIconView : ITrayIconView
     {
+        public event Action? OnTrayIconClicked { add { } remove { } }
+        public event Action? OnContextMenuRequested { add { } remove { } }
+
         public int UpdateIconCount { get; private set; }
         public int SetTooltipCount { get; private set; }
         public UpsOperationalState? LastState { get; private set; }
@@ -30,12 +33,17 @@ public class Phase1AdversarialTests
             LastTooltip = text;
         }
         public void Recreate() { }
+        public ViewRect? TryGetIconRect() => null;
         public void Dispose() { }
     }
 
     private class TrackingPopoverView : IPopoverView
     {
+        public event Action? OnSelfTestRequested { add { } remove { } }
+        public event Action? OnToggleBeeperRequested { add { } remove { } }
+
         public bool IsVisible { get; set; }
+        public UITheme CurrentTheme { get; private set; } = UITheme.Dark;
         public int ShowCount { get; private set; }
         public int HideCount { get; private set; }
         public UpsTelemetry? LastTelemetry { get; private set; }
@@ -47,6 +55,7 @@ public class Phase1AdversarialTests
         public void Show(UpsTelemetry telemetry, UITheme theme, ViewRect iconRect, TaskbarEdge edge, ViewRect workArea)
         {
             IsVisible = true;
+            CurrentTheme = theme;
             ShowCount++;
             LastTelemetry = telemetry;
             LastTheme = theme;
