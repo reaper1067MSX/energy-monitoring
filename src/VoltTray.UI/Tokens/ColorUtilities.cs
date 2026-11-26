@@ -4,6 +4,15 @@ namespace VoltTray.UI.Tokens;
 
 public static class ColorUtilities
 {
+    public static uint ParseArgbColor(string hex, byte alpha = 0xFF)
+    {
+        string clean = hex.TrimStart('#');
+        byte r = byte.Parse(clean[..2], NumberStyles.HexNumber, CultureInfo.InvariantCulture);
+        byte g = byte.Parse(clean.Substring(2, 2), NumberStyles.HexNumber, CultureInfo.InvariantCulture);
+        byte b = byte.Parse(clean.Substring(4, 2), NumberStyles.HexNumber, CultureInfo.InvariantCulture);
+        return ((uint)alpha << 24) | ((uint)r << 16) | ((uint)g << 8) | b;
+    }
+
     public static uint ParseBgrColor(string hex)
     {
         string clean = hex.TrimStart('#');

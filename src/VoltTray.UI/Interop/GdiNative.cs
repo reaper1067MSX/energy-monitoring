@@ -52,6 +52,22 @@ internal static partial class GdiNative
     }
 
     [StructLayout(LayoutKind.Sequential)]
+    public struct BitmapInfoHeader
+    {
+        public uint Size;
+        public int Width;
+        public int Height;
+        public ushort Planes;
+        public ushort BitCount;
+        public uint Compression;
+        public uint SizeImage;
+        public int XPelsPerMeter;
+        public int YPelsPerMeter;
+        public uint ClrUsed;
+        public uint ClrImportant;
+    }
+
+    [StructLayout(LayoutKind.Sequential)]
     public struct MonitorInfo
     {
         public uint Size;
@@ -232,7 +248,19 @@ internal static partial class GdiNative
     [LibraryImport("gdi32.dll")]
     public static partial IntPtr CreatePen(int iStyle, int cWidth, uint color);
 
-    [LibraryImport("gdi32.dll")]
+    [LibraryImport("gdi32.dll", SetLastError = true)]
     [return: MarshalAs(UnmanagedType.Bool)]
     public static partial bool RoundRect(IntPtr hdc, int left, int top, int right, int bottom, int width, int height);
+
+    [LibraryImport("gdi32.dll", SetLastError = true)]
+    public static partial IntPtr CreateDIBSection(
+        IntPtr hdc,
+        ref BitmapInfoHeader pbmi,
+        uint usage,
+        out IntPtr ppvBits,
+        IntPtr hSection,
+        uint offset);
+
+    [LibraryImport("user32.dll", EntryPoint = "RegisterWindowMessageW", SetLastError = true, StringMarshalling = StringMarshalling.Utf16)]
+    public static partial uint RegisterWindowMessage(string lpString);
 }

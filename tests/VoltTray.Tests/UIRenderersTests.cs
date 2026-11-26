@@ -182,4 +182,44 @@ public class UIRenderersTests
         Assert.True(bounds.Top >= workArea.Top);
         Assert.True(bounds.Bottom <= workArea.Bottom);
     }
+
+    [Fact]
+    public void TrayIconRasterizer_Renders32BppArgbWithTransparentBackground_DistinctStateShapes_AndTaskbarThemeColors()
+    {
+        Assert.Equal(16, TrayIconRasterizer.ResolvePhysicalSize(96));
+        Assert.Equal(20, TrayIconRasterizer.ResolvePhysicalSize(120));
+        Assert.Equal(24, TrayIconRasterizer.ResolvePhysicalSize(144));
+        Assert.Equal(32, TrayIconRasterizer.ResolvePhysicalSize(192));
+
+        uint[] darkOnline = TrayIconRasterizer.RenderArgbPixels(UpsOperationalState.LineNormal, 100, 20, isLightTaskbar: false);
+        uint[] lightOnline = TrayIconRasterizer.RenderArgbPixels(UpsOperationalState.LineNormal, 100, 20, isLightTaskbar: true);
+        uint[] onBattery = TrayIconRasterizer.RenderArgbPixels(UpsOperationalState.OnBattery, 50, 20, isLightTaskbar: false);
+        uint[] fault = TrayIconRasterizer.RenderArgbPixels(UpsOperationalState.Fault, 0, 20, isLightTaskbar: false);
+        uint[] paused = TrayIconRasterizer.RenderArgbPixels(UpsOperationalState.Paused, 0, 20, isLightTaskbar: false);
+        uint[] noComm = TrayIconRasterizer.RenderArgbPixels(UpsOperationalState.CommunicationsLost, 0, 20, isLightTaskbar: false);
+
+        Assert.Equal(0x00u, darkOnline[0] >> 24);
+        Assert.Contains(darkOnline, px => (px >> 24) == 0xFF);
+        Assert.NotEqual(darkOnline, lightOnline);
+        Assert.NotEqual(darkOnline, onBattery);
+        Assert.NotEqual(onBattery, fault);
+        Assert.NotEqual(fault, paused);
+        Assert.NotEqual(paused, noComm);
+    }
+
+    [Fact]
+    public void TrayRenderer_HandlesTaskbarCreatedMessage_WithoutLeakingIconHandle()
+    {
+        using var renderer = new TrayRenderer(() => true);
+        renderer.UpdateIcon(UpsOperationalState.LineNormal, 100, dpi: 192);
+        IntPtr iconBefore = renderer.CurrentHIcon;
+        Assert.NotEqual(IntPtr.Zero, iconBefore);
+
+        if (renderer.TaskbarCreatedMessageId != 0)
+        {
+            Assert.True(renderer.HandleWindowMessage(renderer.TaskbarCreatedMessageId, IntPtr.Zero));
+        }
+
+        Assert.Equal(iconBefore, renderer.CurrentHIcon);
+    }
 }
