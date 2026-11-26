@@ -3,19 +3,21 @@ using System.Runtime.InteropServices;
 using System.Text;
 using Microsoft.Win32;
 using Microsoft.Win32.SafeHandles;
+using VoltTray.Core.Models;
 using VoltTray.Core.Ports;
+using VoltTray.Infrastructure.Protocol;
 
 namespace VoltTray.Infrastructure.Hid;
 
 /// <summary>
-/// Driverless Win32 Overlapped USB HID port for Forza FX-2200 LCD (VID_0665 PID_5161).
+/// Driverless Win32 Overlapped USB HID port for Voltronic/Forza UPS (VID_0665 PID_5161).
 /// Communicates using 9-byte reports (Byte 0: 0x00 Report ID, Bytes 1..8: chunk payload).
 /// Supports rapid release in under 100 ms when paused to avoid port contention.
 /// </summary>
 public sealed class Win32HidUpsPort : IUpsDevicePort
 {
-    public const string DefaultDevicePath = @"\\?\HID#VID_0665&PID_5161#7&1949aaec&0&0000#{4d1e55b2-f16f-11cf-88cb-001111000030}";
-    private const string HidInterfaceGuid = "{4d1e55b2-f16f-11cf-88cb-001111000030}";
+    public const string DefaultDevicePath = HidConstants.DefaultDevicePath;
+    private const string HidInterfaceGuid = HidConstants.HidInterfaceGuid;
 
     private const uint GENERIC_READ = 0x80000000;
     private const uint GENERIC_WRITE = 0x40000000;
@@ -23,6 +25,8 @@ public sealed class Win32HidUpsPort : IUpsDevicePort
     private const uint FILE_SHARE_WRITE = 0x00000002;
     private const uint OPEN_EXISTING = 3;
     private const uint FILE_FLAG_OVERLAPPED = 0x40000000;
+    private const int ERROR_IO_PENDING = 997;
+    private const uint WAIT_OBJECT_0 = 0x00000000;
 
     [StructLayout(LayoutKind.Sequential)]
     private struct OVERLAPPED
@@ -47,7 +51,7 @@ public sealed class Win32HidUpsPort : IUpsDevicePort
     [DllImport("kernel32.dll", SetLastError = true)]
     private static extern bool WriteFile(
         SafeFileHandle hFile,
-        byte[] lpBuffer,
+        IntPtr lpBuffer,
         uint nNumberOfBytesToWrite,
         out uint lpNumberOfBytesWritten,
         IntPtr lpOverlapped);
@@ -55,7 +59,7 @@ public sealed class Win32HidUpsPort : IUpsDevicePort
     [DllImport("kernel32.dll", SetLastError = true)]
     private static extern bool ReadFile(
         SafeFileHandle hFile,
-        byte[] lpBuffer,
+        IntPtr lpBuffer,
         uint nNumberOfBytesToRead,
         out uint lpNumberOfBytesRead,
         IntPtr lpOverlapped);
@@ -80,8 +84,22 @@ public sealed class Win32HidUpsPort : IUpsDevicePort
     private static extern bool CancelIoEx(SafeFileHandle hFile, IntPtr lpOverlapped);
 
     private readonly object _lock = new();
+    private readonly string _defaultDevicePath;
+    private readonly bool _allowRegistryFallback;
+    private readonly VoltronicParser _parser;
+    private UpsTelemetry? _lastTelemetry;
     private SafeFileHandle? _handle;
     private bool _isDisposed;
+
+    public Win32HidUpsPort(
+        string? defaultDevicePath = null,
+        bool allowRegistryFallback = true,
+        IBatteryAutonomyEstimator? estimator = null)
+    {
+        _defaultDevicePath = defaultDevicePath ?? DefaultDevicePath;
+        _allowRegistryFallback = allowRegistryFallback;
+        _parser = new VoltronicParser(estimator);
+    }
 
     public bool IsConnected
     {
@@ -104,7 +122,7 @@ public sealed class Win32HidUpsPort : IUpsDevicePort
 
             DisconnectInternal();
 
-            string targetPath = customPath ?? DefaultDevicePath;
+            string targetPath = customPath ?? _defaultDevicePath;
             if (TryOpenHandle(targetPath))
             {
                 ActiveDevicePath = targetPath;
@@ -112,15 +130,17 @@ public sealed class Win32HidUpsPort : IUpsDevicePort
                 return true;
             }
 
+            if (customPath != null || !_allowRegistryFallback) return false;
+
             // Fallback: Registry enumeration
             try
             {
-                using var key = Registry.LocalMachine.OpenSubKey(@"SYSTEM\CurrentControlSet\Enum\HID\VID_0665&PID_5161");
+                using var key = Registry.LocalMachine.OpenSubKey($@"SYSTEM\CurrentControlSet\Enum\HID\{HidConstants.DeviceIdSubstring}");
                 if (key != null)
                 {
                     foreach (string subKey in key.GetSubKeyNames())
                     {
-                        string candidatePath = $@"\\?\HID#VID_0665&PID_5161#{subKey}#{HidInterfaceGuid}";
+                        string candidatePath = $@"\\?\HID#{HidConstants.DeviceIdSubstring}#{subKey}#{HidInterfaceGuid}";
                         if (TryOpenHandle(candidatePath))
                         {
                             ActiveDevicePath = candidatePath;
@@ -180,79 +200,79 @@ public sealed class Win32HidUpsPort : IUpsDevicePort
             _handle = null;
         }
         ActiveDevicePath = null;
+        _parser.ResetSelfTest();
     }
 
     private void DrainStaleBufferInternal()
     {
         if (_handle == null || _handle.IsClosed) return;
-        byte[] drainBuf = new byte[9];
-        while (ReadOverlapped(_handle, drainBuf, 25) > 0) { }
+        byte[] drainBuf = new byte[HidConstants.ReportLength];
+        while (ReadOverlapped(_handle, drainBuf, HidConstants.DefaultDrainTimeoutMs) > 0) { }
     }
 
-    public Task<string?> QueryAsync(string command, CancellationToken cancellationToken = default)
+    public async Task<UpsTelemetry?> ReadTelemetryAsync(DateTimeOffset? now = null, CancellationToken cancellationToken = default)
+    {
+        byte[]? raw = await QueryRawAsync(VoltronicProtocolConstants.QueryStatusCommand, cancellationToken);
+        if (raw is null or { Length: 0 }) return null;
+
+        var parsed = _parser.Parse(raw, _lastTelemetry, now);
+        if (parsed != null) _lastTelemetry = parsed;
+        return parsed;
+    }
+
+    public Task<bool> ToggleBeeperAsync(CancellationToken cancellationToken = default) =>
+        SendControlCommandAsync(VoltronicProtocolConstants.BeeperToggleCommand, cancellationToken);
+
+    public Task<bool> TriggerSelfTestAsync(CancellationToken cancellationToken = default) =>
+        SendControlCommandAsync(VoltronicProtocolConstants.SelfTestCommand, cancellationToken);
+
+    public Task<byte[]?> QueryRawAsync(string command, CancellationToken cancellationToken = default)
     {
         return Task.Run(() =>
         {
             lock (_lock)
             {
-                if (!IsConnected && !TryConnect())
-                    return null;
-
+                if (!IsConnected && !TryConnect()) return null;
                 if (_handle == null || _handle.IsClosed) return null;
 
                 try
                 {
                     DrainStaleBufferInternal();
-
-                    byte[] cmdBytes = Encoding.ASCII.GetBytes(command);
-                    int chunkLen = 8;
-                    for (int i = 0; i < cmdBytes.Length; i += chunkLen)
+                    if (!WriteCommandChunksInternal(_handle, command))
                     {
-                        byte[] report = new byte[9];
-                        report[0] = 0x00; // Report ID
-                        int count = Math.Min(chunkLen, cmdBytes.Length - i);
-                        Array.Copy(cmdBytes, i, report, 1, count);
-                        if (!WriteOverlapped(_handle, report, 1000))
-                        {
-                            DisconnectInternal();
-                            return null;
-                        }
+                        DisconnectInternal();
+                        return null;
                     }
 
                     List<byte> response = new();
-                    bool expectHeader = command.StartsWith("Q", StringComparison.OrdinalIgnoreCase);
+                    bool expectHeader = command.StartsWith(VoltronicProtocolConstants.QueryCommandPrefix, StringComparison.OrdinalIgnoreCase);
                     var sw = Stopwatch.StartNew();
-                    while (sw.ElapsedMilliseconds < 1500)
+                    while (sw.ElapsedMilliseconds < HidConstants.DefaultQueryTimeoutMs)
                     {
                         if (cancellationToken.IsCancellationRequested) return null;
 
-                        byte[] inReport = new byte[9];
-                        int read = ReadOverlapped(_handle, inReport, 200);
+                        byte[] inReport = new byte[HidConstants.ReportLength];
+                        int read = ReadOverlapped(_handle, inReport, HidConstants.DefaultReadTimeoutMs);
                         if (read > 0)
                         {
                             for (int b = 1; b < read; b++)
                             {
                                 byte val = inReport[b];
-                                if (val == 0) continue;
-
-                                if (response.Count == 0 && expectHeader && val != 0x23 && val != 0x28)
+                                if (response.Count == 0)
                                 {
-                                    // Discard stale unconsumed bytes from a previous interrupted query
-                                    continue;
+                                    if (expectHeader && val != VoltronicProtocolConstants.FrameHeaderHash && val != VoltronicProtocolConstants.FrameHeaderParen)
+                                        continue;
+                                    if (val == VoltronicProtocolConstants.NullByte)
+                                        continue;
                                 }
 
                                 response.Add(val);
-                                if (val == 0x0D) goto Done; // CR delimiter
+                                if (val == VoltronicProtocolConstants.CarriageReturn) return response.ToArray();
                             }
-                        }
-                        else if (response.Count > 0)
-                        {
-                            break;
                         }
                     }
 
-                Done:
-                    return response.Count > 0 ? Encoding.Latin1.GetString(response.ToArray()) : null;
+                    return response.Count > 0 ? response.ToArray() : null;
                 }
                 catch
                 {
@@ -263,76 +283,117 @@ public sealed class Win32HidUpsPort : IUpsDevicePort
         }, cancellationToken);
     }
 
-    public async Task<bool> SendCommandAsync(string command, CancellationToken cancellationToken = default)
+    private Task<bool> SendControlCommandAsync(string command, CancellationToken cancellationToken)
     {
-        var response = await QueryAsync(command, cancellationToken);
-        return response != null;
+        return Task.Run(() =>
+        {
+            lock (_lock)
+            {
+                if (cancellationToken.IsCancellationRequested) return false;
+                if (!IsConnected && !TryConnect()) return false;
+                if (_handle == null || _handle.IsClosed) return false;
+
+                try
+                {
+                    DrainStaleBufferInternal();
+                    if (!WriteCommandChunksInternal(_handle, command))
+                    {
+                        DisconnectInternal();
+                        return false;
+                    }
+
+                    byte[] inReport = new byte[HidConstants.ReportLength];
+                    int read = ReadOverlapped(_handle, inReport, HidConstants.DefaultReadTimeoutMs);
+                    if (read > 1 && inReport[1] == VoltronicProtocolConstants.NakHeader)
+                        return false;
+
+                    return true;
+                }
+                catch
+                {
+                    DisconnectInternal();
+                    return false;
+                }
+            }
+        }, cancellationToken);
+    }
+
+    private static bool WriteCommandChunksInternal(SafeFileHandle handle, string command)
+    {
+        byte[] cmdBytes = Encoding.ASCII.GetBytes(command);
+        int chunkLen = HidConstants.PayloadChunkLength;
+        for (int i = 0; i < cmdBytes.Length; i += chunkLen)
+        {
+            byte[] report = new byte[HidConstants.ReportLength];
+            report[0] = HidConstants.DefaultReportId;
+            int count = Math.Min(chunkLen, cmdBytes.Length - i);
+            Array.Copy(cmdBytes, i, report, 1, count);
+            if (!WriteOverlapped(handle, report, HidConstants.DefaultWriteTimeoutMs))
+                return false;
+        }
+        return true;
     }
 
     private static int ReadOverlapped(SafeFileHandle handle, byte[] buffer, int timeoutMs)
     {
         IntPtr hEvent = CreateEvent(IntPtr.Zero, true, false, null);
-        OVERLAPPED ov = new() { hEvent = hEvent };
-        IntPtr pOv = Marshal.AllocHGlobal(Marshal.SizeOf(ov));
-        Marshal.StructureToPtr(ov, pOv, false);
+        IntPtr pOv = Marshal.AllocHGlobal(Marshal.SizeOf<OVERLAPPED>());
+        IntPtr pBuf = Marshal.AllocHGlobal(buffer.Length);
+        Marshal.StructureToPtr(new OVERLAPPED { hEvent = hEvent }, pOv, false);
 
         try
         {
-            bool ok = ReadFile(handle, buffer, (uint)buffer.Length, out uint read, pOv);
-            if (!ok && Marshal.GetLastWin32Error() == 997) // ERROR_IO_PENDING
-            {
-                uint wait = WaitForSingleObject(hEvent, (uint)timeoutMs);
-                if (wait == 0) // WAIT_OBJECT_0
-                {
-                    GetOverlappedResult(handle, pOv, out read, false);
-                    return (int)read;
-                }
-                else
-                {
-                    CancelIoEx(handle, pOv);
-                    return 0;
-                }
-            }
-            return (int)read;
+            if (!ReadFile(handle, pBuf, (uint)buffer.Length, out uint read, pOv) &&
+                !WaitOverlappedCompletion(handle, hEvent, pOv, timeoutMs, out read))
+                return 0;
+
+            int count = (int)Math.Min(read, (uint)buffer.Length);
+            if (count > 0) Marshal.Copy(pBuf, buffer, 0, count);
+            return count;
         }
         finally
         {
             CloseHandle(hEvent);
             Marshal.FreeHGlobal(pOv);
+            Marshal.FreeHGlobal(pBuf);
         }
     }
 
     private static bool WriteOverlapped(SafeFileHandle handle, byte[] buffer, int timeoutMs)
     {
         IntPtr hEvent = CreateEvent(IntPtr.Zero, true, false, null);
-        OVERLAPPED ov = new() { hEvent = hEvent };
-        IntPtr pOv = Marshal.AllocHGlobal(Marshal.SizeOf(ov));
-        Marshal.StructureToPtr(ov, pOv, false);
+        IntPtr pOv = Marshal.AllocHGlobal(Marshal.SizeOf<OVERLAPPED>());
+        IntPtr pBuf = Marshal.AllocHGlobal(buffer.Length);
+        Marshal.StructureToPtr(new OVERLAPPED { hEvent = hEvent }, pOv, false);
+        Marshal.Copy(buffer, 0, pBuf, buffer.Length);
 
         try
         {
-            bool ok = WriteFile(handle, buffer, (uint)buffer.Length, out uint written, pOv);
-            if (!ok && Marshal.GetLastWin32Error() == 997) // ERROR_IO_PENDING
-            {
-                uint wait = WaitForSingleObject(hEvent, (uint)timeoutMs);
-                if (wait == 0) // WAIT_OBJECT_0
-                {
-                    GetOverlappedResult(handle, pOv, out written, false);
-                    return written == buffer.Length;
-                }
-                else
-                {
-                    CancelIoEx(handle, pOv);
-                    return false;
-                }
-            }
-            return ok;
+            if (!WriteFile(handle, pBuf, (uint)buffer.Length, out uint written, pOv) &&
+                !WaitOverlappedCompletion(handle, hEvent, pOv, timeoutMs, out written))
+                return false;
+
+            return written == buffer.Length;
         }
         finally
         {
             CloseHandle(hEvent);
             Marshal.FreeHGlobal(pOv);
+            Marshal.FreeHGlobal(pBuf);
         }
+    }
+
+    private static bool WaitOverlappedCompletion(SafeFileHandle handle, IntPtr hEvent, IntPtr pOv, int timeoutMs, out uint transferred)
+    {
+        transferred = 0;
+        if (Marshal.GetLastWin32Error() != ERROR_IO_PENDING) return false;
+
+        if (WaitForSingleObject(hEvent, (uint)timeoutMs) == WAIT_OBJECT_0)
+            return GetOverlappedResult(handle, pOv, out transferred, false);
+
+        CancelIoEx(handle, pOv);
+        GetOverlappedResult(handle, pOv, out _, true);
+        return false;
     }
 
     public void Dispose()

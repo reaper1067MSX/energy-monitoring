@@ -4,6 +4,8 @@ using System.Text;
 using VoltTray.Core.Models;
 using VoltTray.Core.Ports;
 using VoltTray.Core.Services;
+using VoltTray.Infrastructure.Protocol;
+using VoltTray.Tests.ObjectMothers;
 using Xunit;
 
 namespace VoltTray.Tests;
@@ -42,12 +44,7 @@ public class ChallengerAdversarialTests
         }
     }
 
-    private static readonly byte[] GoldenFrame =
-    [
-        0x23, 0x73, 0x01, 0x20, 0x34, 0x20, 0x73, 0x01, 0x20, 0x34, 0x20,
-        0x0E, 0x20, 0x50, 0x0C, 0x20, 0x12, 0xC0, 0x20, 0xE9, 0x20, 0x3C, 0x20,
-        0x08, 0x20, 0xA1, 0x0D
-    ];
+    private static readonly byte[] GoldenFrame = VoltronicFrameMother.GoldenFrame;
 
     // =========================================================================
     // SECTION 1: PeukertEstimator Mathematical Boundary Stress Tests
@@ -426,24 +423,12 @@ public class ChallengerAdversarialTests
         var coordinator = new ShutdownCoordinator(shutdown, notifications);
 
         // Scenario 1: Telemetry with LineNormal state (utility power present)
-        var telemetryLineNormal = new UpsTelemetry(
-            InputVoltageAc: 120.0,
-            FaultReferenceVoltageAc: 120.0,
-            OutputVoltageAc: 120.0,
-            LoadPercentage: 14,
-            ActiveLoadWatts: 126,
-            FrequencyHz: 60.0,
-            BatteryVoltageDc: 20.0, // Low battery voltage!
-            Cell1VoltageDc: 10.0,
-            Cell2VoltageDc: 10.0,
-            BatteryPercentage: 0,   // Low battery %!
-            EstimatedRuntimeMinutes: 25,
-            TemperatureCelsius: 25.0,
-            State: UpsOperationalState.LineNormal,
-            IsBeeperMuted: true,
-            IsTestInProgress: false,
-            BankSpec: new BatteryBankSpec(),
-            Timestamp: DateTimeOffset.UtcNow);
+        var telemetryLineNormal = TelemetryMother.CreateLineNormal(
+            inV: 120.0,
+            outV: 120.0,
+            batteryPct: 0,
+            batV: 20.0,
+            runtimeMinutes: 25);
 
         coordinator.Evaluate(telemetryLineNormal);
 

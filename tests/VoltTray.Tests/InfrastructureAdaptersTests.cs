@@ -1,6 +1,7 @@
 using VoltTray.Core.Ports;
 using VoltTray.Infrastructure.Hid;
 using VoltTray.Infrastructure.OS;
+using VoltTray.Infrastructure.Protocol;
 
 namespace VoltTray.Tests;
 
@@ -47,10 +48,17 @@ public class InfrastructureAdaptersTests
         {
             for (int i = 0; i < 3; i++)
             {
-                string? response = await port.QueryAsync("QS\r");
-                Assert.NotNull(response);
-                Assert.StartsWith("#", response);
+                if (i > 0) await Task.Delay(100);
+                var telemetry = await port.ReadTelemetryAsync();
+                Assert.NotNull(telemetry);
+                Assert.True(telemetry.InputVoltageAc > 50);
+                Assert.True(telemetry.BatteryVoltageDc > 10);
             }
+
+            await Task.Delay(100);
+            byte[]? raw = await port.QueryRawAsync(VoltronicProtocolConstants.QueryStatusCommand);
+            Assert.NotNull(raw);
+            Assert.Equal(VoltronicProtocolConstants.FrameHeaderHash, raw[0]);
         }
     }
 
@@ -68,14 +76,14 @@ public class InfrastructureAdaptersTests
     }
 
     [Fact]
-    public async Task Win32HidUpsPort_QueryAsync_WhenDeviceUnavailable_ReturnsNullWithoutThrowing()
+    public async Task Win32HidUpsPort_ReadTelemetryAsync_WhenDeviceUnavailable_ReturnsNullWithoutThrowing()
     {
-        using var port = new Win32HidUpsPort();
+        using var port = new Win32HidUpsPort(@"\\?\HID#NON_EXISTENT_UPS_DEVICE", allowRegistryFallback: false);
         using var cts = new CancellationTokenSource(100);
 
-        string? response = await port.QueryAsync("QS\r", cts.Token);
+        var telemetry = await port.ReadTelemetryAsync(cancellationToken: cts.Token);
 
-        Assert.Null(response);
+        Assert.Null(telemetry);
     }
 
     [Fact]
@@ -86,19 +94,21 @@ public class InfrastructureAdaptersTests
         Assert.True(port.IsConnected);
         Assert.NotNull(port.ActiveDevicePath);
 
-        string? frame = await port.QueryAsync("QS\r");
-        Assert.NotNull(frame);
-        Assert.StartsWith("#", frame);
-        Assert.EndsWith("\r", frame);
+        var initial = await port.ReadTelemetryAsync();
+        Assert.NotNull(initial);
+        Assert.False(initial.IsTestInProgress);
 
-        bool beeperToggled = await port.SendCommandAsync("Q\r");
+        bool beeperToggled = await port.ToggleBeeperAsync();
         Assert.True(beeperToggled);
+        var afterBeeper = await port.ReadTelemetryAsync();
+        Assert.NotNull(afterBeeper);
+        Assert.NotEqual(initial.IsBeeperMuted, afterBeeper.IsBeeperMuted);
 
-        bool testStarted = await port.SendCommandAsync("T\r");
+        bool testStarted = await port.TriggerSelfTestAsync();
         Assert.True(testStarted);
 
-        string? testFrame = await port.QueryAsync("QS\r");
-        Assert.NotNull(testFrame);
-        Assert.Contains("26.94", testFrame);
+        var testTelemetry = await port.ReadTelemetryAsync();
+        Assert.NotNull(testTelemetry);
+        Assert.True(testTelemetry.IsTestInProgress);
     }
 }

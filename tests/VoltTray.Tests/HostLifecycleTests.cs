@@ -1,9 +1,9 @@
 using System.Diagnostics;
 using System.Runtime.InteropServices;
-using System.Text;
 using VoltTray.Core.Models;
 using VoltTray.Core.Ports;
 using VoltTray.Core.Views;
+using VoltTray.Tests.ObjectMothers;
 
 namespace VoltTray.Tests;
 
@@ -17,11 +17,14 @@ public class HostLifecycleTests
         public string? ActiveDevicePath => IsConnected ? "MockPath" : null;
         public int DisconnectCalls { get; private set; }
         public int TryConnectCalls { get; private set; }
-        public string? Response { get; set; }
+        public UpsTelemetry? NextTelemetry { get; set; }
+        public bool ToggleBeeperResult { get; set; } = true;
+        public bool TriggerSelfTestResult { get; set; } = true;
         public bool TryConnect(string? p = null) { TryConnectCalls++; IsConnected = true; return true; }
         public void Disconnect() { DisconnectCalls++; IsConnected = false; }
-        public Task<string?> QueryAsync(string c, CancellationToken ct = default) => Task.FromResult(Response);
-        public Task<bool> SendCommandAsync(string c, CancellationToken ct = default) => Task.FromResult(true);
+        public Task<UpsTelemetry?> ReadTelemetryAsync(DateTimeOffset? now = null, CancellationToken ct = default) => Task.FromResult(NextTelemetry);
+        public Task<bool> ToggleBeeperAsync(CancellationToken ct = default) => Task.FromResult(ToggleBeeperResult);
+        public Task<bool> TriggerSelfTestAsync(CancellationToken ct = default) => Task.FromResult(TriggerSelfTestResult);
         public void Dispose() => Disconnect();
     }
     private sealed class MockTrayIcon : ITrayIconView
@@ -46,8 +49,8 @@ public class HostLifecycleTests
     private sealed class FakeNotificationPort : INotificationPort { public void ShowNotification(string t, string m, NotificationSeverity s) { } }
     private sealed class MockExitDialog : IExitDialogView { public ExitDialogResult Result { get; set; } = ExitDialogResult.Cancel; public ExitDialogResult Show(UITheme t, nint o = 0) => Result; }
 
-    private static readonly string GoldenFrameString = Encoding.Latin1.GetString([0x23, 0x73, 0x01, 0x20, 0x34, 0x20, 0x73, 0x01, 0x20, 0x34, 0x20, 0x0E, 0x20, 0x50, 0x0C, 0x20, 0x12, 0xC0, 0x20, 0xE9, 0x20, 0x3C, 0x20, 0x08, 0x20, 0xA1, 0x0D]);
-    private static readonly string OutageLowString = Encoding.Latin1.GetString([0x23, 0x73, 0x01, 0x20, 0x34, 0x20, 0x73, 0x01, 0x20, 0x34, 0x20, 0x0E, 0x20, 0x50, 0x0C, 0x20, 0x12, 0xC0, 0x20, 0xE9, 0x20, 0x3C, 0x20, 0xC0, 0x20, 0xA1, 0x0D]);
+    private static UpsTelemetry LineNormalTelemetry => TelemetryMother.CreateLineNormal(loadPct: 14, activeWatts: 126, runtimeMinutes: 25);
+    private static UpsTelemetry OutageLowTelemetry => TelemetryMother.CreateBatteryLow();
 
     [Fact]
     public void SingleInstance_AllowsFirst_AndRejectsSecondary()
@@ -64,7 +67,7 @@ public class HostLifecycleTests
     [Fact]
     public async Task Lifecycle_PollCycle_DecodesTelemetry_AndDispatchesToTray()
     {
-        using var port = new MockUpsPort { Response = GoldenFrameString };
+        using var port = new MockUpsPort { NextTelemetry = LineNormalTelemetry };
         using var tray = new MockTrayIcon();
         using var popover = new MockPopover { IsVisible = false };
         using var lifecycle = new HostLifecycle(port, tray, popover);
@@ -78,7 +81,7 @@ public class HostLifecycleTests
     [Fact]
     public async Task Lifecycle_PollCycle_WhenPopoverVisible_DispatchesTelemetry()
     {
-        using var port = new MockUpsPort { Response = GoldenFrameString };
+        using var port = new MockUpsPort { NextTelemetry = LineNormalTelemetry };
         using var tray = new MockTrayIcon();
         using var popover = new MockPopover { IsVisible = true };
         using var lifecycle = new HostLifecycle(port, tray, popover);
@@ -91,7 +94,7 @@ public class HostLifecycleTests
     [Fact]
     public async Task Lifecycle_ShutdownCoordinator_EvaluatesSafetyDebounce()
     {
-        using var port = new MockUpsPort { Response = OutageLowString };
+        using var port = new MockUpsPort { NextTelemetry = OutageLowTelemetry };
         using var tray = new MockTrayIcon();
         using var popover = new MockPopover();
         var shutdown = new FakeShutdownPort();
@@ -104,7 +107,7 @@ public class HostLifecycleTests
     [Fact]
     public async Task Lifecycle_CommunicationFailure_After3Attempts_SetsCommLostState()
     {
-        using var port = new MockUpsPort { Response = null };
+        using var port = new MockUpsPort { NextTelemetry = null };
         using var tray = new MockTrayIcon();
         using var popover = new MockPopover();
         using var lifecycle = new HostLifecycle(port, tray, popover);
@@ -159,7 +162,7 @@ public class HostLifecycleTests
     [Fact]
     public async Task MemorySLA_StandbyPrivateWorkingSet_RemainsUnder25MB()
     {
-        using var port = new MockUpsPort { Response = GoldenFrameString };
+        using var port = new MockUpsPort { NextTelemetry = LineNormalTelemetry };
         using var tray = new MockTrayIcon();
         using var popover = new MockPopover { IsVisible = false };
         using var lifecycle = new HostLifecycle(port, tray, popover);
@@ -174,7 +177,7 @@ public class HostLifecycleTests
     [Fact]
     public async Task MemorySLA_ActivePopover_RemainsUnder80MB()
     {
-        using var port = new MockUpsPort { Response = GoldenFrameString };
+        using var port = new MockUpsPort { NextTelemetry = LineNormalTelemetry };
         using var tray = new MockTrayIcon();
         using var popover = new MockPopover { IsVisible = true };
         using var lifecycle = new HostLifecycle(port, tray, popover);

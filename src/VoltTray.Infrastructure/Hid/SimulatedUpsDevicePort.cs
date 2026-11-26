@@ -1,16 +1,20 @@
-using System.Text;
+using VoltTray.Core.Models;
 using VoltTray.Core.Ports;
+using VoltTray.Infrastructure.Protocol;
 
 namespace VoltTray.Infrastructure.Hid;
 
 /// <summary>
 /// In-memory simulated UPS device port implementing Voltronic Protocol 'T' (QS-Hex).
-/// Provides realistic telemetry frames with micro-jitter for local UI testing without physical hardware.
+/// Provides realistic telemetry snapshots with micro-jitter for local UI testing without physical hardware.
 /// </summary>
 public sealed class SimulatedUpsDevicePort : IUpsDevicePort
 {
-    private readonly Random _random = new(42);
+    private const int DefaultRandomSeed = 42;
+    private readonly Random _random = new(DefaultRandomSeed);
     private readonly object _lock = new();
+    private readonly VoltronicParser _parser = new();
+    private UpsTelemetry? _lastTelemetry;
     private bool _isConnected = true;
     private bool _beeperActive = true;
     private bool _selfTestActive = false;
@@ -21,7 +25,7 @@ public sealed class SimulatedUpsDevicePort : IUpsDevicePort
         get { lock (_lock) return _isConnected; }
     }
 
-    public string? ActiveDevicePath => @"\\?\SIMULATED_UPS_FORZA_FX2200";
+    public string? ActiveDevicePath => HidConstants.SimulatedDevicePath;
 
     public bool TryConnect(string? customPath = null)
     {
@@ -37,71 +41,54 @@ public sealed class SimulatedUpsDevicePort : IUpsDevicePort
         lock (_lock)
         {
             _isConnected = false;
+            _parser.ResetSelfTest();
         }
     }
 
-    public Task<string?> QueryAsync(string command, CancellationToken cancellationToken = default)
+    public Task<UpsTelemetry?> ReadTelemetryAsync(DateTimeOffset? now = null, CancellationToken cancellationToken = default)
     {
         lock (_lock)
         {
-            if (!_isConnected) return Task.FromResult<string?>(null);
+            if (!_isConnected) return Task.FromResult<UpsTelemetry?>(null);
 
-            if (command.StartsWith("QS", StringComparison.OrdinalIgnoreCase))
+            if (_selfTestActive && DateTime.UtcNow >= _selfTestExpires)
             {
-                if (_selfTestActive && DateTime.UtcNow >= _selfTestExpires)
-                {
-                    _selfTestActive = false;
-                }
-
-                // Micro-jitter: +/- 0.3V on AC, +/- 0.05 Hz on freq
-                double jitterV = (_random.NextDouble() - 0.5) * 0.6;
-                double inV = Math.Round(116.2 + jitterV, 1);
-                double outV = Math.Round(116.2 + jitterV, 1);
-                int loadPct = 14 + _random.Next(-1, 2);
-                double freq = 60.0;
-                double batV = _selfTestActive ? 26.94 : 27.41;
-                double temp = 25.0;
-
-                // Status Byte 1:
-                // Bit 3 = Line-Interactive (1)
-                // Bit 2 = Self-Test (1 if active)
-                // Bit 0 = Beeper (1 if active, 0 if muted)
-                byte statusByte = 0b00001000;
-                if (_beeperActive) statusByte |= 0b00000001;
-                if (_selfTestActive) statusByte |= 0b00000100;
-
-                string statusBits = Convert.ToString(statusByte, 2).PadLeft(8, '0');
-
-                // Voltronic format: #(MMM.M QQQ.Q SSS.S RRR.R KKK.K III.I b7b6b5b4b3b2b1b0\r
-                string frame = string.Create(System.Globalization.CultureInfo.InvariantCulture,
-                    $"#{inV:F1} {outV:F1} {loadPct:D3} {freq:F1} {batV:F2} {temp:F1} {statusBits}\r");
-
-                return Task.FromResult<string?>(frame);
+                _selfTestActive = false;
             }
 
-            return Task.FromResult<string?>(null);
+            int loadPct = VoltronicProtocolConstants.NominalLoadPercentage + _random.Next(-1, 2);
+
+            byte statusByte = VoltronicProtocolConstants.StatusLineNormal;
+            if (_beeperActive) statusByte |= VoltronicProtocolConstants.StatusBeeperActiveMask;
+            if (_selfTestActive) statusByte |= VoltronicProtocolConstants.StatusSelfTestActiveMask;
+
+            byte[] frameBytes = VoltronicProtocolConstants.BuildBinaryFrame(
+                statusByte1: statusByte,
+                loadPercentage: (byte)loadPct);
+
+            var parsed = _parser.Parse(frameBytes, _lastTelemetry, now);
+            if (parsed != null) _lastTelemetry = parsed;
+            return Task.FromResult(parsed);
         }
     }
 
-    public Task<bool> SendCommandAsync(string command, CancellationToken cancellationToken = default)
+    public Task<bool> ToggleBeeperAsync(CancellationToken cancellationToken = default)
     {
         lock (_lock)
         {
             if (!_isConnected) return Task.FromResult(false);
+            _beeperActive = !_beeperActive;
+            return Task.FromResult(true);
+        }
+    }
 
-            if (command.StartsWith("Q", StringComparison.OrdinalIgnoreCase))
-            {
-                _beeperActive = !_beeperActive;
-                return Task.FromResult(true);
-            }
-
-            if (command.StartsWith("T", StringComparison.OrdinalIgnoreCase))
-            {
-                _selfTestActive = true;
-                _selfTestExpires = DateTime.UtcNow.AddSeconds(10);
-                return Task.FromResult(true);
-            }
-
+    public Task<bool> TriggerSelfTestAsync(CancellationToken cancellationToken = default)
+    {
+        lock (_lock)
+        {
+            if (!_isConnected) return Task.FromResult(false);
+            _selfTestActive = true;
+            _selfTestExpires = DateTime.UtcNow.AddSeconds(HidConstants.SelfTestDurationSeconds);
             return Task.FromResult(true);
         }
     }

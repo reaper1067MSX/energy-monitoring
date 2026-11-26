@@ -1,6 +1,7 @@
 using VoltTray.Core.Models;
 using VoltTray.Core.Presenters;
 using VoltTray.Core.Views;
+using VoltTray.Tests.ObjectMothers;
 
 namespace VoltTray.Tests;
 
@@ -91,10 +92,22 @@ public class SplitCockpitPresenterTests
     }
 
     [Fact]
-    public void CommandConstants_MatchProtocolRequirements()
+    public void ActionButtons_InvokeDomainCallbacks_WithoutWireStrings()
     {
-        Assert.Equal("Q\r", SplitCockpitPresenter.BeeperToggleCommand);
-        Assert.Equal("T\r", SplitCockpitPresenter.SelfTestCommand);
+        int beeperCalls = 0;
+        int selfTestCalls = 0;
+
+        var presenter = new SplitCockpitPresenter(
+            view: new MockVoltTrayView(),
+            trayIcon: new MockTrayIconView(),
+            popover: new MockPopoverView(),
+            toggleBeeper: () => { beeperCalls++; return true; },
+            triggerSelfTest: () => { selfTestCalls++; return false; });
+
+        Assert.True(presenter.ToggleBeeper());
+        Assert.False(presenter.TriggerSelfTest());
+        Assert.Equal(1, beeperCalls);
+        Assert.Equal(1, selfTestCalls);
     }
 
     [Theory]
@@ -117,35 +130,20 @@ public class SplitCockpitPresenterTests
         var mockView = new MockVoltTrayView();
         var mockTray = new MockTrayIconView();
         var mockPopover = new MockPopoverView();
-        string? dispatchedCommand = null;
+        bool beeperTriggered = false;
+        bool selfTestTriggered = false;
 
         var presenter = new SplitCockpitPresenter(
             view: mockView,
             trayIcon: mockTray,
             popover: mockPopover,
-            sendCommand: cmd => { dispatchedCommand = cmd; return true; });
+            toggleBeeper: () => { beeperTriggered = true; return true; },
+            triggerSelfTest: () => { selfTestTriggered = true; return true; });
 
         presenter.Initialize();
         Assert.True(mockView.Initialized);
 
-        var telemetry = new UpsTelemetry(
-            InputVoltageAc: 116.2,
-            FaultReferenceVoltageAc: 116.2,
-            OutputVoltageAc: 116.2,
-            LoadPercentage: 14,
-            ActiveLoadWatts: 126,
-            FrequencyHz: 60.0,
-            BatteryVoltageDc: 27.41,
-            Cell1VoltageDc: 13.70,
-            Cell2VoltageDc: 13.70,
-            BatteryPercentage: 100,
-            EstimatedRuntimeMinutes: 25,
-            TemperatureCelsius: 25.0,
-            State: UpsOperationalState.LineNormal,
-            IsBeeperMuted: false,
-            IsTestInProgress: false,
-            BankSpec: new BatteryBankSpec(),
-            Timestamp: DateTimeOffset.UtcNow);
+        var telemetry = TelemetryMother.CreateLineNormal(inV: 116.2, outV: 116.2, runtimeMinutes: 25);
 
         presenter.UpdateTelemetry(telemetry, dpi: 144);
 
@@ -160,11 +158,11 @@ public class SplitCockpitPresenterTests
         // Action commands test
         bool beeperSuccess = presenter.ToggleBeeper();
         Assert.True(beeperSuccess);
-        Assert.Equal("Q\r", dispatchedCommand);
+        Assert.True(beeperTriggered);
 
         bool testSuccess = presenter.TriggerSelfTest();
         Assert.True(testSuccess);
-        Assert.Equal("T\r", dispatchedCommand);
+        Assert.True(selfTestTriggered);
     }
 
     [Fact]
@@ -178,26 +176,10 @@ public class SplitCockpitPresenterTests
             view: mockView,
             trayIcon: mockTray,
             popover: mockPopover,
-            sendCommand: _ => true);
+            toggleBeeper: () => true,
+            triggerSelfTest: () => true);
 
-        var telemetry = new UpsTelemetry(
-            InputVoltageAc: 116.2,
-            FaultReferenceVoltageAc: 116.2,
-            OutputVoltageAc: 116.2,
-            LoadPercentage: 14,
-            ActiveLoadWatts: 126,
-            FrequencyHz: 60.0,
-            BatteryVoltageDc: 27.41,
-            Cell1VoltageDc: 13.70,
-            Cell2VoltageDc: 13.70,
-            BatteryPercentage: 100,
-            EstimatedRuntimeMinutes: 25,
-            TemperatureCelsius: 25.0,
-            State: UpsOperationalState.LineNormal,
-            IsBeeperMuted: false,
-            IsTestInProgress: false,
-            BankSpec: new BatteryBankSpec(),
-            Timestamp: DateTimeOffset.UtcNow);
+        var telemetry = TelemetryMother.CreateLineNormal(inV: 116.2, outV: 116.2, runtimeMinutes: 25);
 
         presenter.UpdateTelemetry(telemetry);
 

@@ -288,16 +288,14 @@ public class Phase1AdversarialTests
         var mockTray = new TrackingTrayIconView();
         var mockPopover = new TrackingPopoverView();
 
-        var dispatchedCommands = new List<string>();
+        int beeperCalls = 0;
+        int selfTestCalls = 0;
         var presenter = new SplitCockpitPresenter(
             view: mockView,
             trayIcon: mockTray,
             popover: mockPopover,
-            sendCommand: cmd =>
-            {
-                dispatchedCommands.Add(cmd);
-                return true;
-            });
+            toggleBeeper: () => { beeperCalls++; return true; },
+            triggerSelfTest: () => { selfTestCalls++; return true; });
 
         var telemetry = CreateTelemetry();
         presenter.UpdateTelemetry(telemetry);
@@ -316,10 +314,9 @@ public class Phase1AdversarialTests
             Assert.True(ok);
         }
 
-        // Verify exact command tokens generated
-        Assert.Equal(100, dispatchedCommands.Count);
-        Assert.All(dispatchedCommands.Take(50), cmd => Assert.Equal("Q\r", cmd));
-        Assert.All(dispatchedCommands.Skip(50), cmd => Assert.Equal("T\r", cmd));
+        // Verify exact callback invocation counts
+        Assert.Equal(50, beeperCalls);
+        Assert.Equal(50, selfTestCalls);
 
         // State purity: presenter telemetry and view references remain unaffected by command dispatches
         Assert.Same(telemetry, presenter.CurrentTelemetry);
@@ -337,7 +334,8 @@ public class Phase1AdversarialTests
             view: mockView,
             trayIcon: mockTray,
             popover: mockPopover,
-            sendCommand: _ => false); // Failure simulation
+            toggleBeeper: () => false,
+            triggerSelfTest: () => false); // Failure simulation
 
         Assert.False(presenter.ToggleBeeper());
         Assert.False(presenter.TriggerSelfTest());
@@ -353,12 +351,13 @@ public class Phase1AdversarialTests
         var view = new TrackingVoltTrayView();
         var tray = new TrackingTrayIconView();
         var popover = new TrackingPopoverView();
-        Func<string, bool> send = _ => true;
+        Func<bool> action = () => true;
 
-        Assert.Throws<ArgumentNullException>("view", () => new SplitCockpitPresenter(null!, tray, popover, send));
-        Assert.Throws<ArgumentNullException>("trayIcon", () => new SplitCockpitPresenter(view, null!, popover, send));
-        Assert.Throws<ArgumentNullException>("popover", () => new SplitCockpitPresenter(view, tray, null!, send));
-        Assert.Throws<ArgumentNullException>("sendCommand", () => new SplitCockpitPresenter(view, tray, popover, null!));
+        Assert.Throws<ArgumentNullException>("view", () => new SplitCockpitPresenter(null!, tray, popover, action, action));
+        Assert.Throws<ArgumentNullException>("trayIcon", () => new SplitCockpitPresenter(view, null!, popover, action, action));
+        Assert.Throws<ArgumentNullException>("popover", () => new SplitCockpitPresenter(view, tray, null!, action, action));
+        Assert.Throws<ArgumentNullException>("toggleBeeper", () => new SplitCockpitPresenter(view, tray, popover, null!, action));
+        Assert.Throws<ArgumentNullException>("triggerSelfTest", () => new SplitCockpitPresenter(view, tray, popover, action, null!));
     }
 
     [Fact]
@@ -372,7 +371,8 @@ public class Phase1AdversarialTests
             view: mockView,
             trayIcon: mockTray,
             popover: mockPopover,
-            sendCommand: _ => true);
+            toggleBeeper: () => true,
+            triggerSelfTest: () => true);
 
         presenter.Initialize();
         Assert.Equal(1, mockView.InitializeCount);
@@ -428,7 +428,8 @@ public class Phase1AdversarialTests
             view: mockView,
             trayIcon: mockTray,
             popover: mockPopover,
-            sendCommand: _ => true);
+            toggleBeeper: () => true,
+            triggerSelfTest: () => true);
 
         var rect = new ViewRect(0, 0, 100, 100);
         presenter.TogglePopover(rect, TaskbarEdge.Bottom, rect, UITheme.Dark);
@@ -449,7 +450,8 @@ public class Phase1AdversarialTests
             view: mockView,
             trayIcon: mockTray,
             popover: mockPopover,
-            sendCommand: _ => true);
+            toggleBeeper: () => true,
+            triggerSelfTest: () => true);
 
         var telemetry = CreateTelemetry();
         presenter.UpdateTelemetry(telemetry);
