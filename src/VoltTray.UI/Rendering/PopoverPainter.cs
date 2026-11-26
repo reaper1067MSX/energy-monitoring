@@ -1,5 +1,6 @@
 using VoltTray.Core.Models;
 using VoltTray.UI.Models;
+using VoltTray.UI.Tokens;
 using VoltTray.UI.Views;
 
 namespace VoltTray.UI.Rendering;
@@ -11,9 +12,6 @@ namespace VoltTray.UI.Rendering;
 /// </summary>
 public sealed class PopoverPainter : IPopoverView
 {
-    public const int PopoverWidth = 372;
-    public const int MinButtonHeight = 44;
-
     public bool IsVisible { get; private set; }
     public UpsTelemetry? CurrentTelemetry { get; private set; }
     public UITheme CurrentTheme { get; private set; } = UITheme.Dark;
@@ -37,18 +35,19 @@ public sealed class PopoverPainter : IPopoverView
 
     public static ViewRect CalculatePlacement(ViewRect iconRect, TaskbarEdge edge, ViewRect workArea, int cardHeight = 320)
     {
-        int left = iconRect.Left + (iconRect.Width / 2) - (PopoverWidth / 2);
+        int popoverWidth = DesignTokens.Sizes.PopoverWidth;
+        int left = iconRect.Left + (iconRect.Width / 2) - (popoverWidth / 2);
         int top = edge == TaskbarEdge.Bottom
             ? iconRect.Top - cardHeight - 8
             : iconRect.Bottom + 8;
 
         // Clamp to screen workArea
-        if (left + PopoverWidth > workArea.Right)
-            left = workArea.Right - PopoverWidth - 8;
+        if (left + popoverWidth > workArea.Right)
+            left = workArea.Right - popoverWidth - 8;
         if (left < workArea.Left)
             left = workArea.Left + 8;
 
-        return new ViewRect(left, top, left + PopoverWidth, top + cardHeight);
+        return new ViewRect(left, top, left + popoverWidth, top + cardHeight);
     }
 
     public void TriggerSelfTest() => OnSelfTestRequested?.Invoke();

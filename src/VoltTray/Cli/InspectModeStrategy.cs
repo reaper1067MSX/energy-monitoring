@@ -1,6 +1,7 @@
 using System.Text;
 using VoltTray.Hosting;
 using VoltTray.Infrastructure.Hid;
+using VoltTray.Shared;
 
 namespace VoltTray.Cli;
 
@@ -34,14 +35,14 @@ public sealed class InspectModeStrategy : IApplicationModeStrategy
         if (targetDevice == null)
         {
             _output.WriteLine("No matching UPS HID device found.");
-            return IApplicationModeStrategy.FailureExitCode;
+            return ApplicationExitCodes.Failure;
         }
 
         UpsProbeCapture? capture = _probe.QueryDevice(targetDevice, _options.Inquiry);
         if (capture == null)
         {
             _output.WriteLine("No response received from UPS HID device.");
-            return IApplicationModeStrategy.FailureExitCode;
+            return ApplicationExitCodes.Failure;
         }
 
         UpsProbeCaptureFormatter.WriteCaptureDetails(capture, _output);
@@ -51,6 +52,6 @@ public sealed class InspectModeStrategy : IApplicationModeStrategy
             File.WriteAllText(_options.ExportPath, UpsProbeCaptureFormatter.SerializeJson(capture), Encoding.UTF8);
         }
 
-        return IApplicationModeStrategy.SuccessExitCode;
+        return ApplicationExitCodes.Success;
     }
 }

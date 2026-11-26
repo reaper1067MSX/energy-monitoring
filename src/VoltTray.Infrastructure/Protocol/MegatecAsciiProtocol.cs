@@ -3,6 +3,7 @@ using System.Text;
 using VoltTray.Core.Models;
 using VoltTray.Core.Ports;
 using VoltTray.Core.Services;
+using VoltTray.Shared;
 
 namespace VoltTray.Infrastructure.Protocol;
 
@@ -24,10 +25,6 @@ public sealed class MegatecAsciiProtocol : IUpsProtocolStrategy
     private const int NominalAcTokenIndex = 0;
     private const int NominalDcTokenIndex = 2;
     private const int NominalFreqTokenIndex = 3;
-    private const int VoltsPerSeriesBattery = 12;
-    private const double PercentageScaleDivisor = 100.0;
-    private const int BatteryVoltageDecimalPrecision = 2;
-    private const double DefaultCellCountForDisplay = 2.0;
 
     private readonly IBatteryAutonomyEstimator _estimator;
     private readonly double _capacityFactor;
@@ -91,10 +88,17 @@ public sealed class MegatecAsciiProtocol : IUpsProtocolStrategy
             : null;
 
         double scaledBatteryVoltageDc = ApplyPerCellMultiplierIfNeeded(parsedBatteryVoltage, capabilities.Bank.NominalVoltageDc);
-        double cellVoltageDc = Math.Round(scaledBatteryVoltageDc / DefaultCellCountForDisplay, BatteryVoltageDecimalPrecision);
-        int loadPercentage = Math.Clamp(rawLoad, 0, 100);
+        double cellVoltageDc = Math.Round(
+            scaledBatteryVoltageDc / ElectricalConstants.NominalLeadAcidCellVolts,
+            ElectricalConstants.BatteryVoltageDecimalPrecision);
+        int loadPercentage = Math.Clamp(
+            rawLoad,
+            ElectricalConstants.MinimumLoadPercentage,
+            ElectricalConstants.MaximumLoadPercentage);
         int? activeLoadWatts = capabilities.RatedWatts is int ratedWatts
-            ? (int)Math.Round((double)loadPercentage * ratedWatts / PercentageScaleDivisor, MidpointRounding.AwayFromZero)
+            ? (int)Math.Round(
+                (double)loadPercentage * ratedWatts / ElectricalConstants.PercentageScaleDivisor,
+                MidpointRounding.AwayFromZero)
             : null;
 
         PowerStatus powerStatus = VoltronicStatusMapper.DecodePowerStatus(statusByte1, inputVoltageAc, outputVoltageAc);
@@ -163,7 +167,7 @@ public sealed class MegatecAsciiProtocol : IUpsProtocolStrategy
         }
 
         int seriesCount = nominalDc > 0
-            ? Math.Max(1, (int)Math.Round(nominalDc / VoltsPerSeriesBattery, MidpointRounding.AwayFromZero))
+            ? Math.Max(1, (int)Math.Round(nominalDc / ElectricalConstants.NominalBlockVoltageDc, MidpointRounding.AwayFromZero))
             : currentCapabilities.Bank.SeriesBatteryCount;
 
         BatteryBankSpec updatedBank = nominalDc > 0
@@ -206,11 +210,11 @@ public sealed class MegatecAsciiProtocol : IUpsProtocolStrategy
             batteryVoltageDc <= VoltronicProtocolConstants.PerCellVoltageThresholdDc &&
             nominalBankVoltageDc > 0)
         {
-            double multiplier = nominalBankVoltageDc / VoltronicProtocolConstants.NominalLeadAcidCellVolts;
-            return Math.Round(batteryVoltageDc * multiplier, BatteryVoltageDecimalPrecision);
+            double multiplier = nominalBankVoltageDc / ElectricalConstants.NominalLeadAcidCellVolts;
+            return Math.Round(batteryVoltageDc * multiplier, ElectricalConstants.BatteryVoltageDecimalPrecision);
         }
 
-        return Math.Round(batteryVoltageDc, BatteryVoltageDecimalPrecision);
+        return Math.Round(batteryVoltageDc, ElectricalConstants.BatteryVoltageDecimalPrecision);
     }
 
     private static bool TryExtractAsciiBody(ReadOnlySpan<byte> frame, byte expectedPrefix, out string body)

@@ -64,7 +64,6 @@ public static class VoltronicProtocolConstants
     public const int MegatecStatusFlagsLength = 8;
     public const int RatingResponseMinTokenCount = 4;
     public const double PerCellVoltageThresholdDc = 3.0;
-    public const double NominalLeadAcidCellVolts = 2.0;
 
     // Status Byte 2 Masks & Nominal Value
     public const byte StatusByte2Nominal = 0xA1;
@@ -104,10 +103,6 @@ public static class VoltronicProtocolConstants
     public const double DefaultRatedWatts = 900.0;
     public const double SelfTestMaxDurationSeconds = 15.0;
     public const double MainsDivergenceThreshold = 0.05;
-    public const double DefaultNominalFrequencyHz = 60.0;
-    public const double MinValidFrequencyHz = 45.0;
-    public const double MaxValidFrequencyHz = 70.0;
-    public const double DefaultAmbientTemperatureCelsius = 25.0;
 
     // Default Simulation Baseline Frame Bytes (Forza FX-2200 Profile)
     public const byte NominalInputVoltageHexHigh = 0x73;

@@ -1,6 +1,7 @@
 using VoltTray.Core.Ports;
 using VoltTray.Infrastructure.Hid;
 using VoltTray.Infrastructure.OS;
+using VoltTray.Shared;
 using VoltTray.UI.Dialogs;
 using VoltTray.UI.Rendering;
 
@@ -23,7 +24,7 @@ public sealed class TrayMonitorModeStrategy : IApplicationModeStrategy
         using Mutex? mutex = SingleInstanceManager.TryAcquire();
         if (mutex == null)
         {
-            return IApplicationModeStrategy.SuccessExitCode;
+            return ApplicationExitCodes.Success;
         }
 
         try
@@ -48,7 +49,7 @@ public sealed class TrayMonitorModeStrategy : IApplicationModeStrategy
                 lifecycle.ShutdownCoordinator.DryRun = true;
             }
 
-            lifecycle.ExitAction = () => Win32MessagePump.PostQuit(IApplicationModeStrategy.SuccessExitCode);
+            lifecycle.ExitAction = () => Win32MessagePump.PostQuit(ApplicationExitCodes.Success);
             lifecycle.Start(_options.PollingIntervalMs);
 
             int exitCode = Win32MessagePump.Run();

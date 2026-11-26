@@ -1,3 +1,5 @@
+using VoltTray.Shared;
+
 namespace VoltTray.Infrastructure.Protocol;
 
 /// <summary>
@@ -5,8 +7,6 @@ namespace VoltTray.Infrastructure.Protocol;
 /// </summary>
 public static class VoltronicBinaryFrameBuilder
 {
-    private const int BitsPerByte = 8;
-    private const int MaxBigEndianByteWidth = 8;
     private const byte LowByteMask = 0xFF;
     private const int DefaultFrameBufferCapacity = 32;
 
@@ -48,7 +48,7 @@ public static class VoltronicBinaryFrameBuilder
     /// </summary>
     public static byte[] EncodeBigEndianBytes(ulong value, int byteWidth)
     {
-        if (byteWidth <= 0 || byteWidth > MaxBigEndianByteWidth)
+        if (byteWidth <= 0 || byteWidth > ElectricalConstants.MaxBigEndianByteWidth)
         {
             throw new ArgumentOutOfRangeException(nameof(byteWidth), "Byte width must be between 1 and 8.");
         }
@@ -57,7 +57,7 @@ public static class VoltronicBinaryFrameBuilder
         for (int index = byteWidth - 1; index >= 0; index--)
         {
             encoded[index] = (byte)(value & LowByteMask);
-            value >>= BitsPerByte;
+            value >>= ElectricalConstants.BitsPerByte;
         }
 
         return encoded;

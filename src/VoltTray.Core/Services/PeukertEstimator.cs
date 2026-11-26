@@ -1,6 +1,7 @@
 using System;
 using VoltTray.Core.Models;
 using VoltTray.Core.Ports;
+using VoltTray.Shared;
 
 namespace VoltTray.Core.Services;
 
@@ -16,7 +17,6 @@ public sealed class PeukertEstimator : IBatteryAutonomyEstimator
     public const int DefaultSeriesBatteryCount = 2;
 
     private const int MinimumLoadPercentage = 1;
-    private const double PercentageScaleDivisor = 100.0;
     private const double MinutesPerHour = 60.0;
 
     private const double BlockFullVoltageDc = 13.5;
@@ -64,7 +64,7 @@ public sealed class PeukertEstimator : IBatteryAutonomyEstimator
             : Math.Clamp(capacityFactor, MinCapacityFactor, MaxCapacityFactor);
 
         double effectiveLoadPercentage = Math.Max(loadPercentage, MinimumLoadPercentage);
-        double activeWatts = (effectiveLoadPercentage / PercentageScaleDivisor) * capabilities.RatedWatts.Value;
+        double activeWatts = (effectiveLoadPercentage / ElectricalConstants.PercentageScaleDivisor) * capabilities.RatedWatts.Value;
         double currentAmperes = (activeWatts / InverterEfficiency) / capabilities.Bank.NominalVoltageDc;
 
         double runtimeHours =

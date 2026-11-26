@@ -11,6 +11,7 @@
 
   <ItemGroup>
     <ProjectReference Include="..\VoltTray.Core\VoltTray.Core.csproj" />
+    <ProjectReference Include="..\VoltTray.Shared\VoltTray.Shared.csproj" />
   </ItemGroup>
 
 </Project>

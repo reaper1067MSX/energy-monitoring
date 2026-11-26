@@ -1,11 +1,11 @@
 using VoltTray.Core.Models;
+using VoltTray.Shared;
 
 namespace VoltTray.Core.Services;
 
 public sealed class BatteryBankInference
 {
     public const int RequiredConsecutiveReadings = 3;
-    public const int NominalVoltagePerBlock = 12;
 
     private const double Min12VBand = 9.5;
     private const double Max12VBand = 15.5;
@@ -33,7 +33,7 @@ public sealed class BatteryBankInference
     {
         if (hardwareNominalVoltageDc is 12 or 24 or 36 or 48)
         {
-            int hardwareSeriesCount = hardwareNominalVoltageDc.Value / NominalVoltagePerBlock;
+            int hardwareSeriesCount = hardwareNominalVoltageDc.Value / ElectricalConstants.NominalBlockVoltageInt;
             var hardwareBank = new BatteryBankSpec(
                 SeriesBatteryCount: hardwareSeriesCount,
                 NominalVoltageDc: hardwareNominalVoltageDc.Value,
@@ -68,7 +68,7 @@ public sealed class BatteryBankInference
         {
             LatchedBank = new BatteryBankSpec(
                 SeriesBatteryCount: detectedSeriesCount.Value,
-                NominalVoltageDc: detectedSeriesCount.Value * NominalVoltagePerBlock,
+                NominalVoltageDc: detectedSeriesCount.Value * ElectricalConstants.NominalBlockVoltageInt,
                 RatedCapacityAh: ratedCapacityAh,
                 Label: label);
         }

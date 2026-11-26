@@ -29,6 +29,7 @@ public static class DesignTokens
 
     public static class Sizes
     {
+        public const int DefaultDpi = 96;
         public const int PopoverWidth = 372;
         public const int DialogWidth = 560;
         public const int MenuWidth = 268;
