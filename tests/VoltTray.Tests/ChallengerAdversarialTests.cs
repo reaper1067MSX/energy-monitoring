@@ -45,6 +45,13 @@ public class ChallengerAdversarialTests
     }
 
     private static readonly byte[] GoldenFrame = VoltronicFrameMother.GoldenFrame;
+    private static readonly UpsCapabilities Default24VCapabilities = new(
+        ModelName: null,
+        NominalVoltageAc: 120.0,
+        NominalFrequencyHz: 60.0,
+        RatedWatts: 1200,
+        Bank: new BatteryBankSpec(),
+        DialectVerified: false);
 
     // =========================================================================
     // SECTION 1: PeukertEstimator Mathematical Boundary Stress Tests
@@ -63,7 +70,7 @@ public class ChallengerAdversarialTests
     public void Peukert_LoadBoundaries_CalculatesCorrectMinutesAndClampsToCeilingFloor(int loadPct, int expectedMinutes)
     {
         var estimator = new PeukertEstimator();
-        int minutes = estimator.EstimateRuntimeMinutes(loadPct, capacityFactor: 1.0);
+        int? minutes = estimator.EstimateRuntimeMinutes(loadPct, Default24VCapabilities, capacityFactor: 1.0);
         Assert.Equal(expectedMinutes, minutes);
     }
 
@@ -81,7 +88,7 @@ public class ChallengerAdversarialTests
     public void Peukert_CapacityFactorClamping_EnforcesStrict030To100Bounds(double fCap, int expectedMinutes)
     {
         var estimator = new PeukertEstimator();
-        int minutes = estimator.EstimateRuntimeMinutes(17, capacityFactor: fCap);
+        int? minutes = estimator.EstimateRuntimeMinutes(17, Default24VCapabilities, capacityFactor: fCap);
         Assert.Equal(expectedMinutes, minutes);
     }
 
@@ -91,13 +98,13 @@ public class ChallengerAdversarialTests
         var estimator = new PeukertEstimator();
 
         // Under 0% load
-        Assert.Equal(1, estimator.EstimateRuntimeMinutes(0, capacityFactor: 1.0, isHardwareLow: true));
+        Assert.Equal(1, estimator.EstimateRuntimeMinutes(0, Default24VCapabilities, capacityFactor: 1.0, isHardwareLow: true));
         // Under 17% load
-        Assert.Equal(1, estimator.EstimateRuntimeMinutes(17, capacityFactor: 1.0, isHardwareLow: true));
+        Assert.Equal(1, estimator.EstimateRuntimeMinutes(17, Default24VCapabilities, capacityFactor: 1.0, isHardwareLow: true));
         // Under degraded capacity
-        Assert.Equal(1, estimator.EstimateRuntimeMinutes(17, capacityFactor: 0.30, isHardwareLow: true));
+        Assert.Equal(1, estimator.EstimateRuntimeMinutes(17, Default24VCapabilities, capacityFactor: 0.30, isHardwareLow: true));
         // Under 150% overload
-        Assert.Equal(1, estimator.EstimateRuntimeMinutes(150, capacityFactor: 1.0, isHardwareLow: true));
+        Assert.Equal(1, estimator.EstimateRuntimeMinutes(150, Default24VCapabilities, capacityFactor: 1.0, isHardwareLow: true));
     }
 
     [Theory]
@@ -145,8 +152,9 @@ public class ChallengerAdversarialTests
     {
         var estimator = new PeukertEstimator();
         // NaN capacity factor
-        int minNaN = estimator.EstimateRuntimeMinutes(17, capacityFactor: double.NaN);
-        Assert.InRange(minNaN, 1, 240);
+        int? minNaN = estimator.EstimateRuntimeMinutes(17, Default24VCapabilities, capacityFactor: double.NaN);
+        Assert.NotNull(minNaN);
+        Assert.InRange(minNaN.Value, 1, 240);
     }
 
     // =========================================================================
@@ -416,43 +424,33 @@ public class ChallengerAdversarialTests
     }
 
     [Fact]
-    public void Coordinator_EvaluateTelemetry_DemonstratesUnreachableWeakBatteryWarning()
+    public void Coordinator_EvaluateTelemetry_WithDecoupledPowerStatus_EmitsWeakBatteryWarningOnMains()
     {
         var shutdown = new FakeShutdownPort();
         var notifications = new FakeNotificationPort();
         var coordinator = new ShutdownCoordinator(shutdown, notifications);
 
-        // Scenario 1: Telemetry with LineNormal state (utility power present)
-        var telemetryLineNormal = TelemetryMother.CreateLineNormal(
+        var telemetryLineNormalWeakBattery = TelemetryMother.CreateLineNormal(
             inV: 120.0,
             outV: 120.0,
             batteryPct: 0,
             batV: 20.0,
-            runtimeMinutes: 25);
+            runtimeMinutes: 25) with
+        {
+            PowerStatus = new PowerStatus(
+                IsOnBattery: false,
+                IsBatteryLow: true,
+                IsAvrActive: false,
+                IsFault: false,
+                IsLineInteractive: true,
+                IsSelfTestActive: false,
+                IsShutdownActive: false,
+                IsBeeperActive: true)
+        };
 
-        coordinator.Evaluate(telemetryLineNormal);
+        coordinator.Evaluate(telemetryLineNormalWeakBattery);
 
-        // In Evaluate(UpsTelemetry):
-        // onBattery = (State is OnBattery or BatteryLow) -> false
-        // lowBattery = (State == BatteryLow) -> false (because State is LineNormal)
-        // Therefore, line 74 `if (lowBattery)` is FALSE. No weak battery warning!
-        Assert.DoesNotContain(notifications.Notifications, n => n.Title == "Weak battery warning");
-
-        // Scenario 2: Telemetry with BatteryLow state
-        var telemetryBatteryLow = telemetryLineNormal with { State = UpsOperationalState.BatteryLow };
-
-        // Reset notifications
-        notifications.Notifications.Clear();
-        coordinator.Evaluate(telemetryBatteryLow);
-
-        // In Evaluate(UpsTelemetry):
-        // onBattery = (State is OnBattery or BatteryLow) -> true
-        // lowBattery = (State == BatteryLow) -> true
-        // Therefore, `if (!onBattery)` is FALSE.
-        // It enters outage handling, NOT the mains suppression branch!
-        Assert.DoesNotContain(notifications.Notifications, n => n.Title == "Weak battery warning");
-
-        // CONCLUSION: Through Evaluate(UpsTelemetry), `!onBattery && lowBattery` is a logical contradiction.
-        // The "Weak battery warning" branch on line 74 is unreachable when calling Evaluate(UpsTelemetry).
+        Assert.Equal(0, shutdown.InitiateShutdownCalls);
+        Assert.Contains(notifications.Notifications, n => n.Title == "Weak battery warning");
     }
 }

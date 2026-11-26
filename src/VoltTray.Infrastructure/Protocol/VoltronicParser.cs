@@ -97,11 +97,20 @@ public sealed class VoltronicParser
         DateTimeOffset timestamp = now ?? DateTimeOffset.UtcNow;
         bool isTestInProgress = UpdateSelfTestLatch(statusByte1, timestamp);
 
+        var bankSpec = new BatteryBankSpec();
+        var capabilities = new UpsCapabilities(
+            ModelName: null,
+            NominalVoltageAc: null,
+            NominalFrequencyHz: null,
+            RatedWatts: (int)VoltronicProtocolConstants.DefaultRatedWatts,
+            Bank: bankSpec,
+            DialectVerified: false);
+
         var (state, isBeeperMuted, _) = DecodeStatusBits(statusByte1, inputVoltageAc, outputVoltageAc);
-        int batteryPercentage = _estimator.CalculateSoCPercentage(batteryVoltageDc);
+        int batteryPercentage = _estimator.CalculateSoCPercentage(batteryVoltageDc, bankSpec.SeriesBatteryCount);
         bool isHardwareLow = (statusByte1 & VoltronicProtocolConstants.StatusBatteryLowMask) != 0 &&
                              (statusByte1 & VoltronicProtocolConstants.StatusOnBatteryMask) != 0;
-        int runtimeMinutes = _estimator.EstimateRuntimeMinutes(loadPercentage, _capacityFactor, isHardwareLow);
+        int? runtimeMinutes = _estimator.EstimateRuntimeMinutes(loadPercentage, capabilities, _capacityFactor, isHardwareLow);
 
         return new UpsTelemetry(
             InputVoltageAc: inputVoltageAc,
@@ -119,7 +128,7 @@ public sealed class VoltronicParser
             State: state,
             IsBeeperMuted: isBeeperMuted,
             IsTestInProgress: isTestInProgress,
-            BankSpec: new BatteryBankSpec(),
+            BankSpec: bankSpec,
             Timestamp: timestamp);
     }
 

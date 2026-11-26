@@ -6,6 +6,12 @@ namespace VoltTray.Core.Services;
 
 public sealed class ShutdownCoordinator
 {
+    public const int DefaultRuntimeThresholdMinutes = 5;
+    public const int ConfirmationReadingThreshold = 2;
+    public const double SelfTestImmunitySeconds = 15.0;
+    public const double SelfTestCooldownSeconds = 3.0;
+    public const double CriticalBlockVoltageCutoffDc = 10.8;
+
     private readonly ISafetyShutdownPort _shutdownPort;
     private readonly INotificationPort _notificationPort;
 
@@ -14,9 +20,10 @@ public sealed class ShutdownCoordinator
     private bool _shutdownInitiated;
     private bool _lastTestState;
     private DateTimeOffset? _selfTestStartTime;
+    private DateTimeOffset? _selfTestCooldownUntil;
 
     public bool DryRun { get; set; } = true;
-    public int RuntimeThresholdMinutes { get; set; } = 5;
+    public int RuntimeThresholdMinutes { get; set; } = DefaultRuntimeThresholdMinutes;
 
     public bool IsShutdownInitiated => _shutdownInitiated;
     public int OutageCycleCount => _outageCycleCount;
@@ -30,82 +37,163 @@ public sealed class ShutdownCoordinator
 
     public void Evaluate(UpsTelemetry telemetry, DateTimeOffset? now = null)
     {
-        if (telemetry == null) return;
+        if (telemetry == null)
+        {
+            return;
+        }
 
-        bool onBattery = telemetry.State is UpsOperationalState.OnBattery or UpsOperationalState.BatteryLow;
-        bool lowBattery = telemetry.State == UpsOperationalState.BatteryLow;
+        bool onBattery = telemetry.PowerStatus is { } status
+            ? status.IsOnBattery
+            : telemetry.State is UpsOperationalState.OnBattery or UpsOperationalState.BatteryLow;
 
-        Evaluate(onBattery, lowBattery, telemetry.EstimatedRuntimeMinutes, telemetry.IsTestInProgress, now);
+        bool lowBattery = telemetry.PowerStatus is { } powerStatus
+            ? powerStatus.IsBatteryLow
+            : telemetry.State == UpsOperationalState.BatteryLow;
+
+        bool isTestInProgress = telemetry.IsTestInProgress || (telemetry.PowerStatus?.IsSelfTestActive ?? false);
+
+        Evaluate(
+            onBattery,
+            lowBattery,
+            telemetry.EstimatedRuntimeMinutes,
+            isTestInProgress,
+            now,
+            telemetry.BatteryVoltageDc,
+            telemetry.BankSpec.SeriesBatteryCount);
     }
 
-    public void Evaluate(bool onBattery, bool lowBattery, int runtimeMinutes, bool isTestInProgress, DateTimeOffset? now = null)
+    public void Evaluate(
+        bool onBattery,
+        bool lowBattery,
+        int? runtimeMinutes,
+        bool isTestInProgress,
+        DateTimeOffset? now = null,
+        double? batteryVoltageDc = null,
+        int seriesBatteryCount = 2)
     {
         DateTimeOffset timestamp = now ?? DateTimeOffset.UtcNow;
-
-        if (isTestInProgress)
-        {
-            if (!_lastTestState)
-            {
-                _selfTestStartTime = timestamp;
-                _lastTestState = true;
-            }
-        }
-        else
-        {
-            _lastTestState = false;
-            _selfTestStartTime = null;
-        }
+        UpdateSelfTestWindow(isTestInProgress, timestamp);
 
         if (!onBattery)
         {
-            if (_shutdownInitiated)
-            {
-                _shutdownPort.AbortShutdown();
-                _notificationPort.ShowNotification(
-                    "Utility power restored",
-                    "Main electrical supply is normal. UPS is operating online.",
-                    NotificationSeverity.Info);
-                _shutdownInitiated = false;
-            }
-
-            _outageCycleCount = 0;
-            _lowRuntimeCycleCount = 0;
-
-            if (lowBattery)
-            {
-                _notificationPort.ShowNotification(
-                    "Weak battery warning",
-                    "Battery voltage drop detected while utility power is present. Consider replacing batteries.",
-                    NotificationSeverity.Warning);
-            }
+            HandleMainsPresent(lowBattery);
             return;
         }
 
         _outageCycleCount++;
 
-        if (_outageCycleCount >= 2 && !_shutdownInitiated)
+        if (_outageCycleCount < ConfirmationReadingThreshold || _shutdownInitiated)
         {
-            if (isTestInProgress && _selfTestStartTime.HasValue && (timestamp - _selfTestStartTime.Value).TotalSeconds < 15.0)
-            {
-                return; // 15-second self-test immunity
-            }
+            return;
+        }
 
-            if (lowBattery)
+        if (IsSelfTestImmunityActive(isTestInProgress, timestamp))
+        {
+            return;
+        }
+
+        if (lowBattery)
+        {
+            TriggerShutdown("Critical low battery detected during outage");
+            return;
+        }
+
+        if (runtimeMinutes is int measuredRuntime)
+        {
+            EvaluateDepletionCycle(
+                measuredRuntime <= RuntimeThresholdMinutes,
+                $"Estimated runtime depleted ({measuredRuntime} min <= {RuntimeThresholdMinutes} min)");
+            return;
+        }
+
+        if (batteryVoltageDc is double measuredVoltageDc)
+        {
+            int normalizedSeriesCount = Math.Max(1, seriesBatteryCount);
+            double blockVoltageDc = measuredVoltageDc / normalizedSeriesCount;
+            EvaluateDepletionCycle(
+                blockVoltageDc <= CriticalBlockVoltageCutoffDc,
+                $"Battery block voltage reached cutoff ({blockVoltageDc:F2} V <= {CriticalBlockVoltageCutoffDc:F1} V)");
+        }
+        else
+        {
+            _lowRuntimeCycleCount = 0;
+        }
+    }
+
+    private void UpdateSelfTestWindow(bool isTestInProgress, DateTimeOffset timestamp)
+    {
+        if (isTestInProgress)
+        {
+            if (!_lastTestState)
             {
-                TriggerShutdown("Critical low battery detected during outage");
-            }
-            else if (runtimeMinutes <= RuntimeThresholdMinutes)
-            {
-                _lowRuntimeCycleCount++;
-                if (_lowRuntimeCycleCount >= 2)
+                bool inCooldown = _selfTestCooldownUntil.HasValue && timestamp < _selfTestCooldownUntil.Value;
+                if (!inCooldown)
                 {
-                    TriggerShutdown($"Estimated runtime depleted ({runtimeMinutes} min <= {RuntimeThresholdMinutes} min)");
+                    _selfTestStartTime = timestamp;
+                    _lastTestState = true;
                 }
             }
-            else
+        }
+        else
+        {
+            if (_lastTestState && _selfTestStartTime.HasValue)
             {
-                _lowRuntimeCycleCount = 0;
+                double elapsedSeconds = (timestamp - _selfTestStartTime.Value).TotalSeconds;
+                if (elapsedSeconds >= SelfTestImmunitySeconds)
+                {
+                    _selfTestCooldownUntil = timestamp.AddSeconds(SelfTestCooldownSeconds);
+                }
             }
+
+            _lastTestState = false;
+            _selfTestStartTime = null;
+        }
+    }
+
+    private bool IsSelfTestImmunityActive(bool isTestInProgress, DateTimeOffset timestamp)
+    {
+        return isTestInProgress &&
+               _selfTestStartTime.HasValue &&
+               (timestamp - _selfTestStartTime.Value).TotalSeconds < SelfTestImmunitySeconds;
+    }
+
+    private void HandleMainsPresent(bool lowBattery)
+    {
+        if (_shutdownInitiated)
+        {
+            _shutdownPort.AbortShutdown();
+            _notificationPort.ShowNotification(
+                "Utility power restored",
+                "Main electrical supply is normal. UPS is operating online.",
+                NotificationSeverity.Info);
+            _shutdownInitiated = false;
+        }
+
+        _outageCycleCount = 0;
+        _lowRuntimeCycleCount = 0;
+
+        if (lowBattery)
+        {
+            _notificationPort.ShowNotification(
+                "Weak battery warning",
+                "Battery voltage drop detected while utility power is present. Consider replacing batteries.",
+                NotificationSeverity.Warning);
+        }
+    }
+
+    private void EvaluateDepletionCycle(bool isConditionMet, string triggerReason)
+    {
+        if (isConditionMet)
+        {
+            _lowRuntimeCycleCount++;
+            if (_lowRuntimeCycleCount >= ConfirmationReadingThreshold)
+            {
+                TriggerShutdown(triggerReason);
+            }
+        }
+        else
+        {
+            _lowRuntimeCycleCount = 0;
         }
     }
 

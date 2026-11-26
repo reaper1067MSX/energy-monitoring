@@ -58,18 +58,52 @@ public class DomainModelsTests
     }
 
     [Fact]
-    public void BatteryBankSpec_DefaultValues_ModelForzaFub1290()
+    public void BatteryBankSpec_DefaultValues_AreGeneric24V9AhWithoutHardcodedVendorModel()
     {
         var spec = new BatteryBankSpec();
+        Assert.Equal(2, spec.SeriesBatteryCount);
         Assert.Equal(24.0, spec.NominalVoltageDc);
         Assert.Equal(9.0, spec.RatedCapacityAh);
-        Assert.Equal(216.0, spec.NominalEnergyWh);
-        Assert.Equal(0.036, spec.InternalResistanceOhms);
-        Assert.Equal("2x Forza FUB-1290", spec.ModelName);
+        Assert.Null(spec.Label);
 
-        var custom = spec with { RatedCapacityAh = 7.0 };
+        var custom = spec with { SeriesBatteryCount = 1, NominalVoltageDc = 12.0, RatedCapacityAh = 7.0, Label = "Single 12V" };
+        Assert.Equal(1, custom.SeriesBatteryCount);
+        Assert.Equal(12.0, custom.NominalVoltageDc);
         Assert.Equal(7.0, custom.RatedCapacityAh);
-        Assert.Equal(24.0, custom.NominalVoltageDc);
+        Assert.Equal("Single 12V", custom.Label);
+    }
+
+    [Fact]
+    public void MetricProvenance_PowerStatus_And_UpsCapabilities_AreImmutableDomainContracts()
+    {
+        Assert.Equal(0, (int)MetricProvenance.HardwareMeasured);
+        Assert.Equal(1, (int)MetricProvenance.DerivedFromMeasured);
+        Assert.Equal(2, (int)MetricProvenance.ConfiguredDerived);
+        Assert.Equal(3, (int)MetricProvenance.Unavailable);
+
+        var status = new PowerStatus(
+            IsOnBattery: false,
+            IsBatteryLow: true,
+            IsAvrActive: false,
+            IsFault: false,
+            IsLineInteractive: true,
+            IsSelfTestActive: false,
+            IsShutdownActive: false,
+            IsBeeperActive: true);
+
+        Assert.False(status.IsOnBattery);
+        Assert.True(status.IsBatteryLow);
+
+        var capabilities = new UpsCapabilities(
+            ModelName: "Generic UPS",
+            NominalVoltageAc: 120.0,
+            NominalFrequencyHz: 60.0,
+            RatedWatts: 1200,
+            Bank: new BatteryBankSpec(),
+            DialectVerified: true);
+
+        Assert.Equal(1200, capabilities.RatedWatts);
+        Assert.True(capabilities.DialectVerified);
     }
 
     [Fact]

@@ -64,14 +64,22 @@ public class SplitCockpitPresenter
         return (int)Math.Round((double)clamped * ratedWatts / 100.0, MidpointRounding.AwayFromZero);
     }
 
-    public static string FormatTooltip(UpsOperationalState state, int batteryPercentage, int runtimeMinutes) => state switch
+    public static string FormatTooltip(UpsOperationalState state, int batteryPercentage, int? runtimeMinutes)
     {
-        UpsOperationalState.LineNormal => $"Forza FX-2200 LCD · Online ({batteryPercentage}% · ≈ {runtimeMinutes} min)",
-        UpsOperationalState.OnBattery => $"Forza FX-2200 LCD · On Battery ({batteryPercentage}% · ≈ {runtimeMinutes} min)",
-        UpsOperationalState.BatteryLow => $"Forza FX-2200 LCD · Battery Low ({batteryPercentage}% · ≈ {runtimeMinutes} min)",
-        UpsOperationalState.ChargingAvr => $"Forza FX-2200 LCD · AVR Boost ({batteryPercentage}% · ≈ {runtimeMinutes} min)",
-        UpsOperationalState.Fault => "Forza FX-2200 LCD · Fault (Check Unit)",
-        UpsOperationalState.Paused => "Forza FX-2200 LCD · Monitoring Paused",
-        _ => "Forza FX-2200 LCD · No Communication"
-    };
+        string? runtimeSegment = RuntimeDisplayFormatter.FormatRuntimeString(runtimeMinutes);
+        string metricsSegment = runtimeSegment is null
+            ? $"{batteryPercentage}%"
+            : $"{batteryPercentage}% · {runtimeSegment}";
+
+        return state switch
+        {
+            UpsOperationalState.LineNormal => $"Forza FX-2200 LCD · Online ({metricsSegment})",
+            UpsOperationalState.OnBattery => $"Forza FX-2200 LCD · On Battery ({metricsSegment})",
+            UpsOperationalState.BatteryLow => $"Forza FX-2200 LCD · Battery Low ({metricsSegment})",
+            UpsOperationalState.ChargingAvr => $"Forza FX-2200 LCD · AVR Boost ({metricsSegment})",
+            UpsOperationalState.Fault => "Forza FX-2200 LCD · Fault (Check Unit)",
+            UpsOperationalState.Paused => "Forza FX-2200 LCD · Monitoring Paused",
+            _ => "Forza FX-2200 LCD · No Communication"
+        };
+    }
 }
