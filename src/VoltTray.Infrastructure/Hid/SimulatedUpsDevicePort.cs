@@ -10,7 +10,8 @@ namespace VoltTray.Infrastructure.Hid;
 /// </summary>
 public sealed class SimulatedUpsDevicePort : IUpsDevicePort
 {
-    private readonly Random _random = new(42);
+    private const int DefaultRandomSeed = 42;
+    private readonly Random _random = new(DefaultRandomSeed);
     private readonly object _lock = new();
     private readonly VoltronicParser _parser = new();
     private UpsTelemetry? _lastTelemetry;
@@ -55,7 +56,7 @@ public sealed class SimulatedUpsDevicePort : IUpsDevicePort
                 _selfTestActive = false;
             }
 
-            int loadPct = 14 + _random.Next(-1, 2);
+            int loadPct = VoltronicProtocolConstants.NominalLoadPercentage + _random.Next(-1, 2);
 
             byte statusByte = VoltronicProtocolConstants.StatusLineNormal;
             if (_beeperActive) statusByte |= VoltronicProtocolConstants.StatusBeeperActiveMask;

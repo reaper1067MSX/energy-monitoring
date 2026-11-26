@@ -25,6 +25,8 @@ public sealed class Win32HidUpsPort : IUpsDevicePort
     private const uint FILE_SHARE_WRITE = 0x00000002;
     private const uint OPEN_EXISTING = 3;
     private const uint FILE_FLAG_OVERLAPPED = 0x40000000;
+    private const int ERROR_IO_PENDING = 997;
+    private const uint WAIT_OBJECT_0 = 0x00000000;
 
     [StructLayout(LayoutKind.Sequential)]
     private struct OVERLAPPED
@@ -384,9 +386,9 @@ public sealed class Win32HidUpsPort : IUpsDevicePort
     private static bool WaitOverlappedCompletion(SafeFileHandle handle, IntPtr hEvent, IntPtr pOv, int timeoutMs, out uint transferred)
     {
         transferred = 0;
-        if (Marshal.GetLastWin32Error() != 997) return false; // ERROR_IO_PENDING
+        if (Marshal.GetLastWin32Error() != ERROR_IO_PENDING) return false;
 
-        if (WaitForSingleObject(hEvent, (uint)timeoutMs) == 0) // WAIT_OBJECT_0
+        if (WaitForSingleObject(hEvent, (uint)timeoutMs) == WAIT_OBJECT_0)
             return GetOverlappedResult(handle, pOv, out transferred, false);
 
         CancelIoEx(handle, pOv);
