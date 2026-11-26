@@ -1,7 +1,9 @@
 using System;
 using System.Collections.Generic;
+using VoltTray.Core.Models;
 using VoltTray.Core.Ports;
 using VoltTray.Core.Services;
+using VoltTray.Tests.ObjectMothers;
 using Xunit;
 
 namespace VoltTray.Tests;
@@ -192,5 +194,70 @@ public class ShutdownCoordinatorTests
         var simToast = _notificationPort.Notifications.Find(n => n.Title == "Shutdown simulation (Dry-Run)");
         Assert.NotNull(simToast.Title);
         Assert.Equal(NotificationSeverity.Info, simToast.Severity);
+    }
+
+    [Fact]
+    public void Evaluate_TelemetryWithDecoupledPowerStatus_EmitsWeakBatteryWarningOnMainsEvenDuringSelfTest()
+    {
+        var mainsWeakBattery = TelemetryMother.CreateLineNormal() with
+        {
+            IsTestInProgress = true,
+            PowerStatus = new PowerStatus(
+                IsOnBattery: false,
+                IsBatteryLow: true,
+                IsAvrActive: false,
+                IsFault: false,
+                IsLineInteractive: true,
+                IsSelfTestActive: true,
+                IsShutdownActive: false,
+                IsBeeperActive: false)
+        };
+
+        _coordinator.Evaluate(mainsWeakBattery);
+
+        Assert.Equal(0, _shutdownPort.InitiateShutdownCalls);
+        Assert.Contains(_notificationPort.Notifications, n => n.Title == "Weak battery warning");
+    }
+
+    [Fact]
+    public void Evaluate_UnconfiguredRuntime_UsesPer12VBlockDcVoltageCutoffOnSecondReading()
+    {
+        var bank12V = new BatteryBankSpec(SeriesBatteryCount: 1, NominalVoltageDc: 12.0, RatedCapacityAh: null);
+        var highVoltageUnconfigured = TelemetryMother.CreateOnBattery(batV: 11.4, bankSpec: bank12V) with
+        {
+            EstimatedRuntimeMinutes = null,
+            PowerStatus = new PowerStatus(true, false, false, false, true, false, false, false)
+        };
+        var cutoffVoltageUnconfigured = highVoltageUnconfigured with { BatteryVoltageDc = 10.8 };
+
+        // Outage confirmed above 10.8 V/block -> no shutdown
+        _coordinator.Evaluate(highVoltageUnconfigured);
+        _coordinator.Evaluate(highVoltageUnconfigured);
+        Assert.Equal(0, _shutdownPort.InitiateShutdownCalls);
+
+        // Two consecutive readings <= 10.8 V/block -> initiates shutdown on 2nd reading
+        _coordinator.Evaluate(cutoffVoltageUnconfigured);
+        Assert.Equal(0, _shutdownPort.InitiateShutdownCalls);
+
+        _coordinator.Evaluate(cutoffVoltageUnconfigured);
+        Assert.Equal(1, _shutdownPort.InitiateShutdownCalls);
+    }
+
+    [Fact]
+    public void Evaluate_SelfTestImmunity_DoesNotRearmImmediatelyWithoutCooldown()
+    {
+        var t0 = new DateTimeOffset(2026, 10, 30, 12, 0, 0, TimeSpan.Zero);
+
+        _coordinator.Evaluate(onBattery: false, lowBattery: false, runtimeMinutes: 25, isTestInProgress: true, now: t0);
+        _coordinator.Evaluate(onBattery: true, lowBattery: false, runtimeMinutes: 10, isTestInProgress: true, now: t0.AddSeconds(15.5));
+        _coordinator.Evaluate(onBattery: true, lowBattery: true, runtimeMinutes: 1, isTestInProgress: true, now: t0.AddSeconds(16));
+        Assert.Equal(1, _shutdownPort.InitiateShutdownCalls);
+
+        // Mains restores briefly & flag flickers 0 -> 1 inside 3s cooldown -> immunity must not re-arm
+        _coordinator.Evaluate(onBattery: false, lowBattery: false, runtimeMinutes: 25, isTestInProgress: false, now: t0.AddSeconds(17));
+        _coordinator.Evaluate(onBattery: true, lowBattery: false, runtimeMinutes: 10, isTestInProgress: true, now: t0.AddSeconds(18));
+        _coordinator.Evaluate(onBattery: true, lowBattery: true, runtimeMinutes: 1, isTestInProgress: true, now: t0.AddSeconds(19));
+
+        Assert.Equal(2, _shutdownPort.InitiateShutdownCalls);
     }
 }

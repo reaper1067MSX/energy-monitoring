@@ -2,25 +2,27 @@ namespace VoltTray.Core.Models;
 
 public sealed record UpsTelemetry(
     double InputVoltageAc,
-    double FaultReferenceVoltageAc,
+    double? FaultReferenceVoltageAc,
     double OutputVoltageAc,
     int LoadPercentage,
-    int ActiveLoadWatts,
+    int? ActiveLoadWatts,
     double FrequencyHz,
     double BatteryVoltageDc,
     double Cell1VoltageDc,
     double Cell2VoltageDc,
     int BatteryPercentage,
-    int EstimatedRuntimeMinutes,
-    double TemperatureCelsius,
+    int? EstimatedRuntimeMinutes,
+    double? TemperatureCelsius,
     UpsOperationalState State,
     bool IsBeeperMuted,
     bool IsTestInProgress,
     BatteryBankSpec BankSpec,
-    DateTimeOffset Timestamp)
+    DateTimeOffset Timestamp,
+    PowerStatus? PowerStatus = null)
 {
-    public static UpsTelemetry CreateDefault(DateTimeOffset? timestamp = null) =>
-        new(
+    public static UpsTelemetry CreateDefault(DateTimeOffset? timestamp = null)
+    {
+        return new UpsTelemetry(
             InputVoltageAc: 116.2,
             FaultReferenceVoltageAc: 116.2,
             OutputVoltageAc: 116.2,
@@ -32,10 +34,20 @@ public sealed record UpsTelemetry(
             Cell2VoltageDc: 13.70,
             BatteryPercentage: 100,
             EstimatedRuntimeMinutes: 25,
-            TemperatureCelsius: 25.0,
+            TemperatureCelsius: null,
             State: UpsOperationalState.LineNormal,
             IsBeeperMuted: false,
             IsTestInProgress: false,
             BankSpec: new BatteryBankSpec(),
-            Timestamp: timestamp ?? DateTimeOffset.UtcNow);
+            Timestamp: timestamp ?? DateTimeOffset.UtcNow,
+            PowerStatus: new PowerStatus(
+                IsOnBattery: false,
+                IsBatteryLow: false,
+                IsAvrActive: false,
+                IsFault: false,
+                IsLineInteractive: true,
+                IsSelfTestActive: false,
+                IsShutdownActive: false,
+                IsBeeperActive: true));
+    }
 }

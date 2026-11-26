@@ -100,13 +100,14 @@ public class SplitCockpitPresenterTests
 
     [Theory]
     [InlineData(UpsOperationalState.LineNormal, 100, 25, "Forza FX-2200 LCD · Online (100% · ≈ 25 min)")]
+    [InlineData(UpsOperationalState.LineNormal, 100, null, "Forza FX-2200 LCD · Online (100%)")]
     [InlineData(UpsOperationalState.OnBattery, 82, 19, "Forza FX-2200 LCD · On Battery (82% · ≈ 19 min)")]
     [InlineData(UpsOperationalState.BatteryLow, 15, 3, "Forza FX-2200 LCD · Battery Low (15% · ≈ 3 min)")]
     [InlineData(UpsOperationalState.ChargingAvr, 100, 25, "Forza FX-2200 LCD · AVR Boost (100% · ≈ 25 min)")]
     [InlineData(UpsOperationalState.Fault, 0, 0, "Forza FX-2200 LCD · Fault (Check Unit)")]
     [InlineData(UpsOperationalState.Paused, 100, 25, "Forza FX-2200 LCD · Monitoring Paused")]
     [InlineData(UpsOperationalState.CommunicationsLost, 0, 0, "Forza FX-2200 LCD · No Communication")]
-    public void FormatTooltip_GeneratesFormattedString(UpsOperationalState state, int battPct, int runtimeMin, string expected)
+    public void FormatTooltip_GeneratesFormattedString(UpsOperationalState state, int battPct, int? runtimeMin, string expected)
     {
         string actual = SplitCockpitPresenter.FormatTooltip(state, battPct, runtimeMin);
         Assert.Equal(expected, actual);

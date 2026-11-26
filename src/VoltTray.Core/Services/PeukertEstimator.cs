@@ -1,66 +1,142 @@
 using System;
+using VoltTray.Core.Models;
 using VoltTray.Core.Ports;
 
 namespace VoltTray.Core.Services;
 
 public sealed class PeukertEstimator : IBatteryAutonomyEstimator
 {
-    public const double NominalVoltageDc = 24.0;
-    public const double NominalCapacityAh = 9.0;
     public const double PeukertExponent = 1.25;
     public const double InverterEfficiency = 0.85;
-    public const double RatedActiveWatts = 1200.0;
     public const double RatingDischargeHours = 20.0;
     public const double MinCapacityFactor = 0.30;
     public const double MaxCapacityFactor = 1.00;
     public const int MaxCeilingMinutes = 240;
     public const int LowBatteryOverrideMinutes = 1;
+    public const int DefaultSeriesBatteryCount = 2;
 
-    public int EstimateRuntimeMinutes(int loadPercentage, double capacityFactor = 1.0, bool isHardwareLow = false)
+    private const int MinimumLoadPercentage = 1;
+    private const double PercentageScaleDivisor = 100.0;
+    private const double MinutesPerHour = 60.0;
+
+    private const double BlockFullVoltageDc = 13.5;
+    private const double BlockNinetyPercentVoltageDc = 13.0;
+    private const double BlockSeventyPercentVoltageDc = 12.5;
+    private const double BlockFiftyPercentVoltageDc = 12.0;
+    private const double BlockThirtyPercentVoltageDc = 11.5;
+    private const double BlockFifteenPercentVoltageDc = 11.0;
+    private const double BlockEmptyVoltageDc = 10.2;
+
+    private const int FullSoCPercentage = 100;
+    private const int NinetyPercentSoC = 90;
+    private const int SeventyPercentSoC = 70;
+    private const int FiftyPercentSoC = 50;
+    private const int ThirtyPercentSoC = 30;
+    private const int FifteenPercentSoC = 15;
+    private const int EmptySoCPercentage = 0;
+
+    private const double UpperBandSlopePerVolt = 20.0;
+    private const double MiddleBandSlopePerVolt = 40.0;
+    private const double LowerMidBandSlopePerVolt = 30.0;
+    private const double CutoffBandSpanVolts = 0.8;
+
+    public int? EstimateRuntimeMinutes(
+        int loadPercentage,
+        UpsCapabilities capabilities,
+        double capacityFactor = 1.0,
+        bool isHardwareLow = false)
     {
         if (isHardwareLow)
+        {
             return LowBatteryOverrideMinutes;
+        }
 
-        double fCap = Math.Clamp(capacityFactor, MinCapacityFactor, MaxCapacityFactor);
-        double effectiveLoadPct = Math.Max(loadPercentage, 1);
-        double pac = (effectiveLoadPct / 100.0) * RatedActiveWatts;
-        double currentAmps = (pac / InverterEfficiency) / NominalVoltageDc;
+        if (capabilities == null ||
+            capabilities.RatedWatts is null or <= 0 ||
+            capabilities.Bank.RatedCapacityAh is null or <= 0 ||
+            capabilities.Bank.NominalVoltageDc <= 0)
+        {
+            return null;
+        }
 
-        double tHours = RatingDischargeHours * Math.Pow(NominalCapacityAh / (currentAmps * RatingDischargeHours), PeukertExponent) * fCap;
-        int tMinutes = (int)Math.Round(tHours * 60.0, MidpointRounding.AwayFromZero);
+        double clampedCapacityFactor = double.IsNaN(capacityFactor)
+            ? MinCapacityFactor
+            : Math.Clamp(capacityFactor, MinCapacityFactor, MaxCapacityFactor);
 
-        return Math.Clamp(tMinutes, 1, MaxCeilingMinutes);
+        double effectiveLoadPercentage = Math.Max(loadPercentage, MinimumLoadPercentage);
+        double activeWatts = (effectiveLoadPercentage / PercentageScaleDivisor) * capabilities.RatedWatts.Value;
+        double currentAmperes = (activeWatts / InverterEfficiency) / capabilities.Bank.NominalVoltageDc;
+
+        double runtimeHours =
+            RatingDischargeHours *
+            Math.Pow(capabilities.Bank.RatedCapacityAh.Value / (currentAmperes * RatingDischargeHours), PeukertExponent) *
+            clampedCapacityFactor;
+
+        int runtimeMinutes = (int)Math.Round(runtimeHours * MinutesPerHour, MidpointRounding.AwayFromZero);
+        return Math.Clamp(runtimeMinutes, LowBatteryOverrideMinutes, MaxCeilingMinutes);
     }
 
-    public int CalculateSoCPercentage(double batteryVoltageDc)
+    public int CalculateSoCPercentage(double batteryVoltageDc, int seriesBatteryCount = DefaultSeriesBatteryCount)
     {
-        if (batteryVoltageDc >= 27.0) return 100;
-        if (batteryVoltageDc <= 20.4) return 0;
+        if (double.IsNaN(batteryVoltageDc))
+        {
+            return EmptySoCPercentage;
+        }
 
-        if (batteryVoltageDc >= 26.0)
-            return (int)Math.Round(90.0 + (batteryVoltageDc - 26.0) * 10.0, MidpointRounding.AwayFromZero);
-        if (batteryVoltageDc >= 25.0)
-            return (int)Math.Round(70.0 + (batteryVoltageDc - 25.0) * 20.0, MidpointRounding.AwayFromZero);
-        if (batteryVoltageDc >= 24.0)
-            return (int)Math.Round(50.0 + (batteryVoltageDc - 24.0) * 20.0, MidpointRounding.AwayFromZero);
-        if (batteryVoltageDc >= 23.0)
-            return (int)Math.Round(30.0 + (batteryVoltageDc - 23.0) * 20.0, MidpointRounding.AwayFromZero);
-        if (batteryVoltageDc >= 22.0)
-            return (int)Math.Round(15.0 + (batteryVoltageDc - 22.0) * 15.0, MidpointRounding.AwayFromZero);
+        int normalizedSeriesCount = Math.Max(1, seriesBatteryCount);
+        double blockVoltageDc = batteryVoltageDc / normalizedSeriesCount;
 
-        return (int)Math.Clamp(Math.Round((batteryVoltageDc - 20.4) / (22.0 - 20.4) * 15.0, MidpointRounding.AwayFromZero), 1, 15);
-    }
+        if (blockVoltageDc >= BlockFullVoltageDc)
+        {
+            return FullSoCPercentage;
+        }
 
-    public string FormatRuntimeString(int minutes, string cultureName = "en")
-    {
-        return $"≈ {minutes} min";
-    }
+        if (blockVoltageDc <= BlockEmptyVoltageDc)
+        {
+            return EmptySoCPercentage;
+        }
 
-    public string FormatRuntimeCaption(int loadPercentage, string cultureName = "en")
-    {
-        if (cultureName.StartsWith("es", StringComparison.OrdinalIgnoreCase))
-            return $"Autonomía a {loadPercentage} % de carga";
+        if (blockVoltageDc >= BlockNinetyPercentVoltageDc)
+        {
+            return (int)Math.Round(
+                NinetyPercentSoC + ((blockVoltageDc - BlockNinetyPercentVoltageDc) * UpperBandSlopePerVolt),
+                MidpointRounding.AwayFromZero);
+        }
 
-        return $"Runtime at {loadPercentage}% load";
+        if (blockVoltageDc >= BlockSeventyPercentVoltageDc)
+        {
+            return (int)Math.Round(
+                SeventyPercentSoC + ((blockVoltageDc - BlockSeventyPercentVoltageDc) * MiddleBandSlopePerVolt),
+                MidpointRounding.AwayFromZero);
+        }
+
+        if (blockVoltageDc >= BlockFiftyPercentVoltageDc)
+        {
+            return (int)Math.Round(
+                FiftyPercentSoC + ((blockVoltageDc - BlockFiftyPercentVoltageDc) * MiddleBandSlopePerVolt),
+                MidpointRounding.AwayFromZero);
+        }
+
+        if (blockVoltageDc >= BlockThirtyPercentVoltageDc)
+        {
+            return (int)Math.Round(
+                ThirtyPercentSoC + ((blockVoltageDc - BlockThirtyPercentVoltageDc) * MiddleBandSlopePerVolt),
+                MidpointRounding.AwayFromZero);
+        }
+
+        if (blockVoltageDc >= BlockFifteenPercentVoltageDc)
+        {
+            return (int)Math.Round(
+                FifteenPercentSoC + ((blockVoltageDc - BlockFifteenPercentVoltageDc) * LowerMidBandSlopePerVolt),
+                MidpointRounding.AwayFromZero);
+        }
+
+        double interpolatedCutoff =
+            (blockVoltageDc - BlockEmptyVoltageDc) / CutoffBandSpanVolts * FifteenPercentSoC;
+
+        return (int)Math.Clamp(
+            Math.Round(interpolatedCutoff, MidpointRounding.AwayFromZero),
+            LowBatteryOverrideMinutes,
+            FifteenPercentSoC);
     }
 }
