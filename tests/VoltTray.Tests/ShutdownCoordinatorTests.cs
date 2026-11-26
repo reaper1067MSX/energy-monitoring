@@ -138,6 +138,11 @@ public class ShutdownCoordinatorTests
         _coordinator.Evaluate(onBattery: true, lowBattery: false, runtimeMinutes: 4, isTestInProgress: false);
         Assert.Equal(1, _coordinator.LowRuntimeCycleCount);
         Assert.Equal(0, _shutdownPort.InitiateShutdownCalls);
+
+        // Second consecutive cycle at threshold (5 min) now triggers shutdown
+        _coordinator.Evaluate(onBattery: true, lowBattery: false, runtimeMinutes: 5, isTestInProgress: false);
+        Assert.Equal(2, _coordinator.LowRuntimeCycleCount);
+        Assert.Equal(1, _shutdownPort.InitiateShutdownCalls);
     }
 
     [Fact]

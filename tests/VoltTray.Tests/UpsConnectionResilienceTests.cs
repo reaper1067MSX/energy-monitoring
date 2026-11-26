@@ -12,37 +12,9 @@ using VoltTray.UI.Views;
 
 namespace VoltTray.Tests;
 
-public class ResilienceAndResultPatternsTests
+public class UpsConnectionResilienceTests
 {
     private const int DisconnectCancellationBudgetMs = 100;
-
-    [Fact]
-    public void ResultPrimitives_RepresentSuccessAndFailureStatesCleanly()
-    {
-        Result ok = Result.Success();
-        Assert.True(ok.IsSuccess);
-        Assert.False(ok.IsFailure);
-        Assert.Null(ok.Error);
-
-        var domainError = new DomainError(
-            SharedErrorConstants.PortBusyContentionCode,
-            "Busy",
-            ErrorCategory.PortBusyContention,
-            IsTransient: true);
-
-        Result failed = Result.Failure(domainError);
-        Assert.False(failed.IsSuccess);
-        Assert.True(failed.IsFailure);
-        Assert.Same(domainError, failed.Error);
-
-        Result<int> genericOk = Result<int>.Success(42);
-        Assert.True(genericOk.IsSuccess);
-        Assert.Equal(42, genericOk.Value);
-
-        Result<int> genericFailed = Result<int>.Failure(domainError);
-        Assert.True(genericFailed.IsFailure);
-        Assert.Same(domainError, genericFailed.Error);
-    }
 
     [Fact]
     public async Task ConnectAsync_TransientSharingViolation_RetriesAndSucceedsOnSecondAttempt()
