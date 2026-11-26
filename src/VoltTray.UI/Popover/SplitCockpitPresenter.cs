@@ -1,11 +1,11 @@
+using VoltTray.UI.Tray;
 using VoltTray.Core.Telemetry;
 using VoltTray.Shared;
 using VoltTray.UI.Models;
 using VoltTray.UI.Tokens;
 using VoltTray.UI.Tokens.Primitives;
-using VoltTray.UI.Views;
 
-namespace VoltTray.UI.Presenters;
+namespace VoltTray.UI.Popover;
 
 public class SplitCockpitPresenter
 {

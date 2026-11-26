@@ -1,3 +1,6 @@
+using VoltTray.UI.Tray;
+using VoltTray.UI.Popover;
+using VoltTray.UI.Dialogs;
 using VoltTray.Core.Telemetry;
 using System.Reflection;
 using System.Text.Json.Serialization;

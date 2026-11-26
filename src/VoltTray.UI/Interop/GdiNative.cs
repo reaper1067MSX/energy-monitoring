@@ -4,118 +4,6 @@ namespace VoltTray.UI.Interop;
 
 internal static partial class GdiNative
 {
-    [StructLayout(LayoutKind.Sequential)]
-    public struct IconInfo
-    {
-        public int IsIcon;
-        public int HotspotX;
-        public int HotspotY;
-        public IntPtr MaskBitmap;
-        public IntPtr ColorBitmap;
-    }
-
-    [StructLayout(LayoutKind.Sequential)]
-    public struct NativeRect
-    {
-        public int Left;
-        public int Top;
-        public int Right;
-        public int Bottom;
-
-        public NativeRect(int left, int top, int right, int bottom)
-        {
-            Left = left;
-            Top = top;
-            Right = right;
-            Bottom = bottom;
-        }
-    }
-
-    [StructLayout(LayoutKind.Sequential)]
-    public struct NotifyIconIdentifier
-    {
-        public uint Size;
-        public IntPtr WindowHandle;
-        public uint Id;
-        public Guid GuidItem;
-    }
-
-    [StructLayout(LayoutKind.Sequential)]
-    public unsafe struct PaintStruct
-    {
-        public IntPtr Hdc;
-        public int Erase;
-        public NativeRect PaintRect;
-        public int Restore;
-        public int IncUpdate;
-        public fixed byte Reserved[32];
-    }
-
-    [StructLayout(LayoutKind.Sequential)]
-    public struct MonitorInfo
-    {
-        public uint Size;
-        public NativeRect MonitorBounds;
-        public NativeRect WorkArea;
-        public uint Flags;
-    }
-
-    [StructLayout(LayoutKind.Sequential)]
-    public unsafe struct NotifyIconDataW
-    {
-        public uint Size;
-        public IntPtr WindowHandle;
-        public uint Id;
-        public uint Flags;
-        public uint CallbackMessage;
-        public IntPtr IconHandle;
-        public fixed char Tip[Win32UiConstants.NotifyTipCapacity];
-        public uint State;
-        public uint StateMask;
-        public fixed char Info[Win32UiConstants.NotifyInfoCapacity];
-        public uint TimeoutOrVersion;
-        public fixed char InfoTitle[Win32UiConstants.NotifyInfoTitleCapacity];
-        public uint InfoFlags;
-        public Guid GuidItem;
-        public IntPtr BalloonIconHandle;
-
-        public void SetTip(string? text)
-        {
-            fixed (char* tipPtr = Tip)
-            {
-                var span = new Span<char>(tipPtr, Win32UiConstants.NotifyTipCapacity);
-                span.Clear();
-
-                if (string.IsNullOrEmpty(text))
-                {
-                    return;
-                }
-
-                int copyLength = Math.Min(text.Length, Win32UiConstants.NotifyTipCapacity - 1);
-                text.AsSpan(0, copyLength).CopyTo(span);
-            }
-        }
-    }
-
-    public delegate IntPtr WndProcDelegate(IntPtr hWnd, uint msg, IntPtr wParam, IntPtr lParam);
-
-    [StructLayout(LayoutKind.Sequential)]
-    public unsafe struct WindowClassExW
-    {
-        public uint Size;
-        public uint Style;
-        public IntPtr WindowProc;
-        public int ClassExtra;
-        public int WindowExtra;
-        public IntPtr Instance;
-        public IntPtr Icon;
-        public IntPtr Cursor;
-        public IntPtr BackgroundBrush;
-        public char* MenuName;
-        public char* ClassName;
-        public IntPtr SmallIcon;
-    }
-
     [LibraryImport("user32.dll", SetLastError = true)]
     public static partial int GetSystemMetrics(int nIndex);
 
@@ -232,7 +120,19 @@ internal static partial class GdiNative
     [LibraryImport("gdi32.dll")]
     public static partial IntPtr CreatePen(int iStyle, int cWidth, uint color);
 
-    [LibraryImport("gdi32.dll")]
+    [LibraryImport("gdi32.dll", SetLastError = true)]
     [return: MarshalAs(UnmanagedType.Bool)]
     public static partial bool RoundRect(IntPtr hdc, int left, int top, int right, int bottom, int width, int height);
+
+    [LibraryImport("gdi32.dll", SetLastError = true)]
+    public static partial IntPtr CreateDIBSection(
+        IntPtr hdc,
+        ref BitmapInfoHeader pbmi,
+        uint usage,
+        out IntPtr ppvBits,
+        IntPtr hSection,
+        uint offset);
+
+    [LibraryImport("user32.dll", EntryPoint = "RegisterWindowMessageW", SetLastError = true, StringMarshalling = StringMarshalling.Utf16)]
+    public static partial uint RegisterWindowMessage(string lpString);
 }

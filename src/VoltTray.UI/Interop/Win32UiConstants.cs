@@ -54,4 +54,19 @@ internal static class Win32UiConstants
     public const int NotifyTipCapacity = 128;
     public const int NotifyInfoCapacity = 256;
     public const int NotifyInfoTitleCapacity = 64;
+
+    public const uint BiRgb = 0;
+    public const uint DibRgbColors = 0;
+    public const ushort BitsPerPixel32 = 32;
+    public const ushort ColorPlanesSingle = 1;
+
+    public const uint TrayIconId = 1001;
+    public const string TaskbarCreatedMessageName = "TaskbarCreated";
+    public const string TrayHostWindowClass = "VoltTray_TrayHostWindow";
+    public const string TrayHostWindowTitle = "VoltTray Tray Host";
+
+    public const int Dpi100 = 96;
+    public const int Dpi125 = 120;
+    public const int Dpi150 = 144;
+    public const int Dpi200 = 192;
 }

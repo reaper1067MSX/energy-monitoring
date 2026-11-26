@@ -1,3 +1,6 @@
+using VoltTray.UI.Tray;
+using VoltTray.UI.Popover;
+using VoltTray.UI.Dialogs;
 using VoltTray.Core.Telemetry;
 using VoltTray.Core.Safety;
 using System.Diagnostics;
@@ -6,7 +9,6 @@ using VoltTray.Infrastructure.Diagnostics;
 using VoltTray.Shared;
 using VoltTray.Tests.ObjectMothers;
 using VoltTray.UI.Models;
-using VoltTray.UI.Views;
 
 namespace VoltTray.Tests;
 

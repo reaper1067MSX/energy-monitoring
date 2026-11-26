@@ -3,7 +3,7 @@ using VoltTray.Core.Telemetry;
 using VoltTray.Shared;
 using VoltTray.UI.Tokens;
 
-namespace VoltTray.UI.Presenters;
+namespace VoltTray.UI.Popover;
 
 /// <summary>
 /// Framework-agnostic presentation model for the Option C Popover card.

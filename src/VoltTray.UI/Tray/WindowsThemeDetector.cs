@@ -1,8 +1,9 @@
+using VoltTray.UI.Dialogs;
 using Microsoft.Win32;
 using VoltTray.UI.Models;
 using VoltTray.UI.Tokens;
 
-namespace VoltTray.UI.Rendering;
+namespace VoltTray.UI.Tray;
 
 /// <summary>
 /// Reads Windows theme preferences cleanly: AppsUseLightTheme for app surfaces

@@ -2,12 +2,10 @@ using System.Runtime.InteropServices;
 using VoltTray.Core.Telemetry;
 using VoltTray.UI.Interop;
 using VoltTray.UI.Models;
-using VoltTray.UI.Presenters;
 using VoltTray.UI.Tokens;
 using VoltTray.UI.Tokens.Themes;
-using VoltTray.UI.Views;
 
-namespace VoltTray.UI.Rendering;
+namespace VoltTray.UI.Popover;
 
 /// <summary>
 /// Option C Split-Cockpit Matrix Popover painter and Win32 DWMWCP_ROUND window host.
@@ -20,7 +18,7 @@ public sealed class PopoverPainter : IPopoverView
     private readonly bool _enableNativeWindow;
     private DateTimeOffset? _lastHiddenAt;
     private IntPtr _hwnd;
-    private GdiNative.WndProcDelegate? _wndProc;
+    private WndProcDelegate? _wndProc;
 
     public bool IsVisible { get; private set; }
     public UpsTelemetry? CurrentTelemetry { get; private set; }
@@ -180,9 +178,9 @@ public sealed class PopoverPainter : IPopoverView
 
         fixed (char* classNamePtr = className)
         {
-            var wcx = new GdiNative.WindowClassExW
+            var wcx = new WindowClassExW
             {
-                Size = (uint)sizeof(GdiNative.WindowClassExW),
+                Size = (uint)sizeof(WindowClassExW),
                 WindowProc = Marshal.GetFunctionPointerForDelegate(_wndProc),
                 Instance = hInstance,
                 ClassName = classNamePtr
@@ -236,12 +234,12 @@ public sealed class PopoverPainter : IPopoverView
 
     private void PaintNativeWindow(IntPtr hWnd)
     {
-        IntPtr hdc = GdiNative.BeginPaint(hWnd, out GdiNative.PaintStruct paintStruct);
+        IntPtr hdc = GdiNative.BeginPaint(hWnd, out PaintStruct paintStruct);
         try
         {
             ThemePalette palette = DesignTokens.GetPalette(CurrentTheme);
             IntPtr surfaceBrush = GdiNative.CreateSolidBrush(DesignTokens.ParseBgrColor(palette.Surface));
-            GdiNative.NativeRect fullRect = paintStruct.PaintRect;
+            NativeRect fullRect = paintStruct.PaintRect;
             GdiNative.FillRect(hdc, ref fullRect, surfaceBrush);
             GdiNative.DeleteObject(surfaceBrush);
 
@@ -253,15 +251,15 @@ public sealed class PopoverPainter : IPopoverView
             GdiNative.SetBkMode(hdc, Win32UiConstants.TransparentBkMode);
             GdiNative.SetTextColor(hdc, DesignTokens.ParseBgrColor(palette.Text));
 
-            var titleRect = new GdiNative.NativeRect(16, 14, CurrentBounds.Width - 16, 40);
+            var titleRect = new NativeRect(16, 14, CurrentBounds.Width - 16, 40);
             GdiNative.DrawText(hdc, vm.Title, vm.Title.Length, ref titleRect, Win32UiConstants.DtLeft | Win32UiConstants.DtSingleLine);
 
             GdiNative.SetTextColor(hdc, DesignTokens.ParseBgrColor(palette.TextMuted));
-            var subRect = new GdiNative.NativeRect(16, 38, CurrentBounds.Width - 16, 58);
+            var subRect = new NativeRect(16, 38, CurrentBounds.Width - 16, 58);
             GdiNative.DrawText(hdc, vm.BankSubtitle, vm.BankSubtitle.Length, ref subRect, Win32UiConstants.DtLeft | Win32UiConstants.DtSingleLine);
 
             string summary = $"{vm.StatusLabel} · {vm.InputVoltageText} · {vm.RuntimeText}";
-            var summaryRect = new GdiNative.NativeRect(16, 76, CurrentBounds.Width - 16, 108);
+            var summaryRect = new NativeRect(16, 76, CurrentBounds.Width - 16, 108);
             GdiNative.SetTextColor(hdc, DesignTokens.ParseBgrColor(palette.Text));
             GdiNative.DrawText(hdc, summary, summary.Length, ref summaryRect, Win32UiConstants.DtLeft | Win32UiConstants.DtSingleLine);
         }

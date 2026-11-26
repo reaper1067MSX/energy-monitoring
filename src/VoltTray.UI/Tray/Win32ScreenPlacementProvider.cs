@@ -1,9 +1,8 @@
 using VoltTray.UI.Interop;
 using VoltTray.UI.Models;
 using VoltTray.UI.Tokens;
-using VoltTray.UI.Views;
 
-namespace VoltTray.UI.Rendering;
+namespace VoltTray.UI.Tray;
 
 /// <summary>
 /// Resolves monitor work area and active taskbar edge using Win32 MonitorFromRect + GetMonitorInfoW.
@@ -14,7 +13,7 @@ public sealed class Win32ScreenPlacementProvider : IScreenPlacementProvider
     {
         try
         {
-            var nativeAnchor = new GdiNative.NativeRect(
+            var nativeAnchor = new NativeRect(
                 anchorRect.Left,
                 anchorRect.Top,
                 anchorRect.Right,
@@ -23,9 +22,9 @@ public sealed class Win32ScreenPlacementProvider : IScreenPlacementProvider
             IntPtr monitorHandle = GdiNative.MonitorFromRect(ref nativeAnchor, Win32UiConstants.MonitorDefaultToNearest);
             if (monitorHandle != IntPtr.Zero)
             {
-                var monitorInfo = new GdiNative.MonitorInfo
+                var monitorInfo = new MonitorInfo
                 {
-                    Size = (uint)sizeof(GdiNative.MonitorInfo)
+                    Size = (uint)sizeof(MonitorInfo)
                 };
 
                 if (GdiNative.GetMonitorInfo(monitorHandle, ref monitorInfo))

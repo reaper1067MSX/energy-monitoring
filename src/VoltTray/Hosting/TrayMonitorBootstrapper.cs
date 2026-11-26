@@ -1,10 +1,12 @@
+using VoltTray.UI.Atoms;
+using VoltTray.UI.Tray;
+using VoltTray.UI.Popover;
 using VoltTray.Core.Telemetry;
 using VoltTray.Core.Safety;
 using VoltTray.Core.Diagnostics;
 using VoltTray.Infrastructure.Diagnostics;
 using VoltTray.Infrastructure.OS;
 using VoltTray.UI.Dialogs;
-using VoltTray.UI.Rendering;
 
 namespace VoltTray.Hosting;
 
@@ -30,7 +32,9 @@ public sealed class TrayMonitorBootstrapper : IDisposable
         IExecutionBoundary executionBoundary = new SafeExecutionMiddleware(telemetryProbe);
         _rawPort = upsPortFactory();
         _decoratedPort = new DiagnosticUpsPortDecorator(_rawPort, telemetryProbe);
-        _trayRenderer = new TrayRenderer();
+        ITrayIconRasterizer trayIconRasterizer = TrayIconRasterizer.CreateDefault();
+        INativeIconFactory nativeIconFactory = new Win32NativeIconFactory();
+        _trayRenderer = new TrayRenderer(trayIconRasterizer, nativeIconFactory, WindowsThemeDetector.IsLightTaskbar);
         _popoverPainter = new PopoverPainter(enableNativeWindow: true);
 
         Lifecycle = new HostLifecycle(

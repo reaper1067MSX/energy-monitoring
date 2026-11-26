@@ -1,3 +1,5 @@
+using VoltTray.UI.Tray;
+using VoltTray.UI.Popover;
 using VoltTray.Core.Telemetry;
 using VoltTray.Core.Safety;
 using VoltTray.Core.Diagnostics;
@@ -9,9 +11,6 @@ using VoltTray.Shared;
 using VoltTray.Subscribers;
 using VoltTray.UI.Dialogs;
 using VoltTray.UI.Models;
-using VoltTray.UI.Presenters;
-using VoltTray.UI.Rendering;
-using VoltTray.UI.Views;
 
 namespace VoltTray;
 

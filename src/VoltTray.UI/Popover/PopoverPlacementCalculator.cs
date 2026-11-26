@@ -1,7 +1,7 @@
 using VoltTray.UI.Models;
 using VoltTray.UI.Tokens.Primitives;
 
-namespace VoltTray.UI.Rendering;
+namespace VoltTray.UI.Popover;
 
 /// <summary>
 /// Declarative anchor-strategy geometry calculator for placing the Popover card
