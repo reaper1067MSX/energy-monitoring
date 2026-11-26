@@ -204,6 +204,27 @@ public sealed class MegatecAsciiProtocol : IUpsProtocolStrategy
         return true;
     }
 
+    internal static UpsCapabilities ProbeCapabilities(
+        Func<string, byte[]?> queryRaw,
+        UpsCapabilities capabilities)
+    {
+        byte[]? ratingsResponse = queryRaw(VoltronicProtocolConstants.NominalRatingsCommand);
+        if (ratingsResponse != null &&
+            TryParseRatingsResponse(ratingsResponse, capabilities, out UpsCapabilities withRatings))
+        {
+            capabilities = withRatings;
+        }
+
+        byte[]? vendorResponse = queryRaw(VoltronicProtocolConstants.VendorInformationCommand);
+        if (vendorResponse != null &&
+            TryParseVendorInfoResponse(vendorResponse, capabilities, out UpsCapabilities withVendor))
+        {
+            capabilities = withVendor;
+        }
+
+        return capabilities;
+    }
+
     private static double ApplyPerCellMultiplierIfNeeded(double batteryVoltageDc, double nominalBankVoltageDc)
     {
         if (batteryVoltageDc > 0 &&

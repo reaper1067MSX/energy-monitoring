@@ -12,15 +12,21 @@ public sealed class ShutdownCoordinator
     public const double SelfTestCooldownSeconds = 3.0;
     public const double CriticalBlockVoltageCutoffDc = 10.8;
 
+    private static readonly IReadOnlyList<IShutdownTriggerRule> DefaultTriggerRules =
+    [
+        new ImmediateHardwareLowTriggerRule(),
+        new RuntimeThresholdTriggerRule(),
+        new UnconfiguredBlockVoltageTriggerRule()
+    ];
+
     private readonly ISafetyShutdownPort _shutdownPort;
     private readonly INotificationPort _notificationPort;
+    private readonly IReadOnlyList<IShutdownTriggerRule> _triggerRules;
+    private readonly SelfTestImmunityTracker _selfTestImmunityTracker = new();
 
     private int _outageCycleCount;
     private int _lowRuntimeCycleCount;
     private bool _shutdownInitiated;
-    private bool _lastTestState;
-    private DateTimeOffset? _selfTestStartTime;
-    private DateTimeOffset? _selfTestCooldownUntil;
 
     public bool DryRun { get; set; } = true;
     public int RuntimeThresholdMinutes { get; set; } = DefaultRuntimeThresholdMinutes;
@@ -29,10 +35,14 @@ public sealed class ShutdownCoordinator
     public int OutageCycleCount => _outageCycleCount;
     public int LowRuntimeCycleCount => _lowRuntimeCycleCount;
 
-    public ShutdownCoordinator(ISafetyShutdownPort shutdownPort, INotificationPort notificationPort)
+    public ShutdownCoordinator(
+        ISafetyShutdownPort shutdownPort,
+        INotificationPort notificationPort,
+        IReadOnlyList<IShutdownTriggerRule>? rules = null)
     {
         _shutdownPort = shutdownPort ?? throw new ArgumentNullException(nameof(shutdownPort));
         _notificationPort = notificationPort ?? throw new ArgumentNullException(nameof(notificationPort));
+        _triggerRules = rules ?? DefaultTriggerRules;
     }
 
     public void Evaluate(UpsTelemetry telemetry, DateTimeOffset? now = null)
@@ -72,7 +82,7 @@ public sealed class ShutdownCoordinator
         int seriesBatteryCount = 2)
     {
         DateTimeOffset timestamp = now ?? DateTimeOffset.UtcNow;
-        UpdateSelfTestWindow(isTestInProgress, timestamp);
+        _selfTestImmunityTracker.Update(isTestInProgress, timestamp);
 
         if (!onBattery)
         {
@@ -87,74 +97,43 @@ public sealed class ShutdownCoordinator
             return;
         }
 
-        if (IsSelfTestImmunityActive(isTestInProgress, timestamp))
+        if (_selfTestImmunityTracker.IsImmunityActive(isTestInProgress, timestamp))
         {
             return;
         }
 
-        if (lowBattery)
-        {
-            TriggerShutdown("Critical low battery detected during outage");
-            return;
-        }
+        var context = new ShutdownEvaluationContext(
+            lowBattery,
+            runtimeMinutes,
+            RuntimeThresholdMinutes,
+            batteryVoltageDc,
+            seriesBatteryCount);
 
-        if (runtimeMinutes is int measuredRuntime)
+        foreach (IShutdownTriggerRule rule in _triggerRules)
         {
-            EvaluateDepletionCycle(
-                measuredRuntime <= RuntimeThresholdMinutes,
-                $"Estimated runtime depleted ({measuredRuntime} min <= {RuntimeThresholdMinutes} min)");
-            return;
-        }
-
-        if (batteryVoltageDc is double measuredVoltageDc)
-        {
-            int normalizedSeriesCount = Math.Max(1, seriesBatteryCount);
-            double blockVoltageDc = measuredVoltageDc / normalizedSeriesCount;
-            EvaluateDepletionCycle(
-                blockVoltageDc <= CriticalBlockVoltageCutoffDc,
-                $"Battery block voltage reached cutoff ({blockVoltageDc:F2} V <= {CriticalBlockVoltageCutoffDc:F1} V)");
-        }
-        else
-        {
-            _lowRuntimeCycleCount = 0;
-        }
-    }
-
-    private void UpdateSelfTestWindow(bool isTestInProgress, DateTimeOffset timestamp)
-    {
-        if (isTestInProgress)
-        {
-            if (!_lastTestState)
+            ShutdownTriggerEvaluation evaluation = rule.Evaluate(context);
+            if (!evaluation.Applies)
             {
-                bool inCooldown = _selfTestCooldownUntil.HasValue && timestamp < _selfTestCooldownUntil.Value;
-                if (!inCooldown)
-                {
-                    _selfTestStartTime = timestamp;
-                    _lastTestState = true;
-                }
-            }
-        }
-        else
-        {
-            if (_lastTestState && _selfTestStartTime.HasValue)
-            {
-                double elapsedSeconds = (timestamp - _selfTestStartTime.Value).TotalSeconds;
-                if (elapsedSeconds >= SelfTestImmunitySeconds)
-                {
-                    _selfTestCooldownUntil = timestamp.AddSeconds(SelfTestCooldownSeconds);
-                }
+                continue;
             }
 
-            _lastTestState = false;
-            _selfTestStartTime = null;
-        }
-    }
+            if (!evaluation.IsTriggered)
+            {
+                _lowRuntimeCycleCount = 0;
+                return;
+            }
 
-    private bool IsSelfTestImmunityActive(bool isTestInProgress, DateTimeOffset timestamp)
-    {
-        return isTestInProgress &&
-               _selfTestStartTime.HasValue &&
-               (timestamp - _selfTestStartTime.Value).TotalSeconds < SelfTestImmunitySeconds;
+            if (!evaluation.RequiresDebounce)
+            {
+                TriggerShutdown(evaluation.TriggerReason);
+                return;
+            }
+
+            EvaluateDepletionCycle(true, evaluation.TriggerReason);
+            return;
+        }
+
+        _lowRuntimeCycleCount = 0;
     }
 
     private void HandleMainsPresent(bool lowBattery)

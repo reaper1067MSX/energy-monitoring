@@ -1,11 +1,10 @@
 using VoltTray.Core.Models;
 using VoltTray.Infrastructure.Protocol;
-using VoltTray.Shared;
 
 namespace VoltTray.Infrastructure.Diagnostics;
 
 /// <summary>
-/// Evaluates raw frame delimiters/escapes, electrical/battery physics invariants,
+/// Evaluates raw frame delimiters/escapes, composable electrical/battery physics rules,
 /// and provenance coercion guards before telemetry reaches ShutdownCoordinator or UI.
 /// </summary>
 public static class TelemetryPlausibilityGuard
@@ -13,6 +12,13 @@ public static class TelemetryPlausibilityGuard
     public const double MinMainsInputVoltageAc = 10.0;
     public const double MaxStaticBatteryVoltageDriftDc = 0.25;
     public const double MaxSingleCycleBatteryJumpDc = 6.0;
+
+    private static readonly IReadOnlyList<ITelemetryPhysicsRule> DefaultPhysicsRules =
+    [
+        new FrequencyBoundsPhysicsRule(),
+        new MainsInputDropPhysicsRule(),
+        new SingleCycleBatterySpikePhysicsRule()
+    ];
 
     public static TelemetryAnomalyKind? EvaluateFraming(ReadOnlySpan<byte> rawFrame)
     {
@@ -62,33 +68,21 @@ public static class TelemetryPlausibilityGuard
         return null;
     }
 
-    public static TelemetryAnomalyKind? EvaluatePhysics(UpsTelemetry candidate, UpsTelemetry? lastKnownGood)
+    public static TelemetryAnomalyKind? EvaluatePhysics(
+        UpsTelemetry candidate,
+        UpsTelemetry? lastKnownGood,
+        IReadOnlyList<ITelemetryPhysicsRule>? rules = null)
     {
         ArgumentNullException.ThrowIfNull(candidate);
 
-        if (candidate.FrequencyHz < ElectricalConstants.MinPlausibleFrequencyHz ||
-            candidate.FrequencyHz > ElectricalConstants.MaxPlausibleFrequencyHz)
+        IReadOnlyList<ITelemetryPhysicsRule> activeRules = rules ?? DefaultPhysicsRules;
+        foreach (ITelemetryPhysicsRule rule in activeRules)
         {
-            return TelemetryAnomalyKind.PhysicsImplausible;
-        }
-
-        bool isOnBattery = candidate.PowerStatus is { } powerStatus
-            ? powerStatus.IsOnBattery
-            : candidate.State is UpsOperationalState.OnBattery or UpsOperationalState.BatteryLow;
-
-        if (!isOnBattery &&
-            candidate.InputVoltageAc < MinMainsInputVoltageAc &&
-            lastKnownGood != null &&
-            Math.Abs(candidate.BatteryVoltageDc - lastKnownGood.BatteryVoltageDc) <= MaxStaticBatteryVoltageDriftDc)
-        {
-            return TelemetryAnomalyKind.PhysicsImplausible;
-        }
-
-        if (lastKnownGood != null &&
-            Math.Abs(candidate.BatteryVoltageDc - lastKnownGood.BatteryVoltageDc) > MaxSingleCycleBatteryJumpDc &&
-            candidate.State == lastKnownGood.State)
-        {
-            return TelemetryAnomalyKind.PhysicsImplausible;
+            TelemetryAnomalyKind? anomaly = rule.Evaluate(candidate, lastKnownGood);
+            if (anomaly != null)
+            {
+                return anomaly;
+            }
         }
 
         return null;
