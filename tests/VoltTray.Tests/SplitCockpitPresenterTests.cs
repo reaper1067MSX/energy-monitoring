@@ -90,7 +90,7 @@ public class SplitCockpitPresenterTests
     }
 
     [Fact]
-    public void ActionButtons_InvokeDomainCallbacks_WithoutWireStrings()
+    public async Task ActionButtons_InvokeDomainCallbacks_WithoutWireStrings()
     {
         int beeperCalls = 0;
         int selfTestCalls = 0;
@@ -98,11 +98,11 @@ public class SplitCockpitPresenterTests
         var presenter = new SplitCockpitPresenter(
             trayIcon: new MockTrayIconView(),
             popover: new MockPopoverView(),
-            toggleBeeper: () => { beeperCalls++; return true; },
-            triggerSelfTest: () => { selfTestCalls++; return false; });
+            toggleBeeper: () => { beeperCalls++; return Task.FromResult(true); },
+            triggerSelfTest: () => { selfTestCalls++; return Task.FromResult(false); });
 
-        Assert.True(presenter.ToggleBeeper());
-        Assert.False(presenter.TriggerSelfTest());
+        Assert.True(await presenter.ToggleBeeperAsync());
+        Assert.False(await presenter.TriggerSelfTestAsync());
         Assert.Equal(1, beeperCalls);
         Assert.Equal(1, selfTestCalls);
     }
@@ -129,7 +129,7 @@ public class SplitCockpitPresenterTests
     }
 
     [Fact]
-    public void UpdateTelemetry_UpdatesViewsAndGeneratesTooltip()
+    public async Task UpdateTelemetry_UpdatesViewsAndGeneratesTooltip()
     {
         var mockTray = new MockTrayIconView();
         var mockPopover = new MockPopoverView();
@@ -139,8 +139,8 @@ public class SplitCockpitPresenterTests
         var presenter = new SplitCockpitPresenter(
             trayIcon: mockTray,
             popover: mockPopover,
-            toggleBeeper: () => { beeperTriggered = true; return true; },
-            triggerSelfTest: () => { selfTestTriggered = true; return true; });
+            toggleBeeper: () => { beeperTriggered = true; return Task.FromResult(true); },
+            triggerSelfTest: () => { selfTestTriggered = true; return Task.FromResult(true); });
 
         var telemetry = TelemetryMother.CreateLineNormal(inV: 116.2, outV: 116.2, runtimeMinutes: 25);
 
@@ -153,11 +153,11 @@ public class SplitCockpitPresenterTests
         Assert.Same(telemetry, presenter.CurrentTelemetry);
 
         // Action commands test
-        bool beeperSuccess = presenter.ToggleBeeper();
+        bool beeperSuccess = await presenter.ToggleBeeperAsync();
         Assert.True(beeperSuccess);
         Assert.True(beeperTriggered);
 
-        bool testSuccess = presenter.TriggerSelfTest();
+        bool testSuccess = await presenter.TriggerSelfTestAsync();
         Assert.True(testSuccess);
         Assert.True(selfTestTriggered);
     }
@@ -171,8 +171,8 @@ public class SplitCockpitPresenterTests
         var presenter = new SplitCockpitPresenter(
             trayIcon: mockTray,
             popover: mockPopover,
-            toggleBeeper: () => true,
-            triggerSelfTest: () => true);
+            toggleBeeper: () => Task.FromResult(true),
+            triggerSelfTest: () => Task.FromResult(true));
 
         var telemetry = TelemetryMother.CreateLineNormal(inV: 116.2, outV: 116.2, runtimeMinutes: 25);
 

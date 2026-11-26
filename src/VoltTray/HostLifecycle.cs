@@ -1,3 +1,4 @@
+using VoltTray.Core.Events;
 using VoltTray.Core.Models;
 using VoltTray.Core.Ports;
 using VoltTray.Core.Services;
@@ -5,11 +6,11 @@ using VoltTray.Hosting;
 using VoltTray.Infrastructure.Diagnostics;
 using VoltTray.Infrastructure.OS;
 using VoltTray.Shared;
+using VoltTray.Subscribers;
 using VoltTray.UI.Dialogs;
 using VoltTray.UI.Models;
 using VoltTray.UI.Presenters;
 using VoltTray.UI.Rendering;
-using VoltTray.UI.Tokens;
 using VoltTray.UI.Views;
 
 namespace VoltTray;
@@ -26,7 +27,8 @@ public sealed class HostLifecycle : IDisposable
     private readonly IExecutionBoundary _executionBoundary;
     private readonly bool _delegateDiagnosticsToPort;
     private readonly SplitCockpitPresenter _presenter;
-
+    private readonly IEventBus _eventBus;
+    private readonly List<IDisposable> _subscriptions = new();
     private CancellationTokenSource? _cts;
     private Task? _pollingTask;
     private Timer? _pauseTimer;
@@ -54,7 +56,8 @@ public sealed class HostLifecycle : IDisposable
         IScreenPlacementProvider? screenPlacementProvider = null,
         InProcessTelemetryProbe? telemetryProbe = null,
         IExecutionBoundary? executionBoundary = null,
-        bool delegateDiagnosticsToPort = false)
+        bool delegateDiagnosticsToPort = false,
+        IEventBus? eventBus = null)
     {
         _upsPort = upsPort ?? throw new ArgumentNullException(nameof(upsPort));
         _trayRenderer = trayRenderer ?? new TrayRenderer();
@@ -70,8 +73,13 @@ public sealed class HostLifecycle : IDisposable
         _presenter = new SplitCockpitPresenter(
             _trayRenderer,
             _popoverPainter,
-            () => _upsPort.ToggleBeeperAsync().GetAwaiter().GetResult(),
-            () => _upsPort.TriggerSelfTestAsync().GetAwaiter().GetResult());
+            () => _upsPort.ToggleBeeperAsync(),
+            () => _upsPort.TriggerSelfTestAsync());
+
+        _eventBus = eventBus ?? new InProcessEventBus(_executionBoundary);
+        _subscriptions.Add(new ShutdownSubscriber(_eventBus, _shutdownCoordinator));
+        _subscriptions.Add(new TrayStatusSubscriber(_eventBus, _trayRenderer, _presenter));
+        _subscriptions.Add(_eventBus.Subscribe<TelemetryReceived>(RefreshVisiblePopover));
 
         _popoverPainter.OnSelfTestRequested += HandleSelfTestRequested;
         _popoverPainter.OnToggleBeeperRequested += HandleToggleBeeperRequested;
@@ -91,8 +99,7 @@ public sealed class HostLifecycle : IDisposable
             return;
         }
 
-        _trayRenderer.UpdateIcon(OperationalState, 0, DesignTokens.Sizes.DefaultDpi);
-        _trayRenderer.SetTooltip(SplitCockpitPresenter.FormatTooltip(OperationalState, 0, null));
+        _eventBus.Publish(new MonitoringStatusChanged(OperationalState));
 
         _cts = new CancellationTokenSource();
         CancellationToken token = _cts.Token;
@@ -140,8 +147,7 @@ public sealed class HostLifecycle : IDisposable
             else
             {
                 OperationalState = UpsOperationalState.Paused;
-                _trayRenderer.UpdateIcon(UpsOperationalState.Paused, 0, DesignTokens.Sizes.DefaultDpi);
-                _trayRenderer.SetTooltip(SplitCockpitPresenter.FormatTooltip(UpsOperationalState.Paused, 0, null));
+                _eventBus.Publish(new MonitoringStatusChanged(UpsOperationalState.Paused));
                 return CurrentTelemetry;
             }
         }
@@ -157,9 +163,7 @@ public sealed class HostLifecycle : IDisposable
             if (_consecutiveErrors >= HostConstants.ConsecutiveErrorsBeforeCommLost || CurrentTelemetry == null)
             {
                 OperationalState = UpsOperationalState.CommunicationsLost;
-                _trayRenderer.UpdateIcon(UpsOperationalState.CommunicationsLost, 0, DesignTokens.Sizes.DefaultDpi);
-                _trayRenderer.SetTooltip(
-                    SplitCockpitPresenter.FormatTooltip(UpsOperationalState.CommunicationsLost, 0, null));
+                _eventBus.Publish(new MonitoringStatusChanged(UpsOperationalState.CommunicationsLost));
             }
 
             return CurrentTelemetry;
@@ -183,16 +187,20 @@ public sealed class HostLifecycle : IDisposable
         }
         _consecutiveErrors = 0;
         OperationalState = telemetry.State;
-        _shutdownCoordinator.Evaluate(telemetry, timestamp);
-        _presenter.UpdateTelemetry(telemetry);
-
-        if (_popoverPainter.IsVisible)
-        {
-            (ViewRect anchorRect, ViewRect workArea, TaskbarEdge edge) = ResolvePlacement();
-            _popoverPainter.Show(telemetry, _popoverPainter.CurrentTheme, anchorRect, edge, workArea);
-        }
+        _eventBus.Publish(new TelemetryReceived(telemetry, timestamp));
 
         return telemetry;
+    }
+
+    private void RefreshVisiblePopover(TelemetryReceived received)
+    {
+        if (!_popoverPainter.IsVisible)
+        {
+            return;
+        }
+
+        (ViewRect anchorRect, ViewRect workArea, TaskbarEdge edge) = ResolvePlacement();
+        _popoverPainter.Show(received.Telemetry, _popoverPainter.CurrentTheme, anchorRect, edge, workArea);
     }
 
     public Task<UpsTelemetry?> StepAsync(CancellationToken token = default, DateTimeOffset? now = null)
@@ -206,8 +214,7 @@ public sealed class HostLifecycle : IDisposable
         _pausedUntil = (now ?? DateTimeOffset.UtcNow) + span;
         OperationalState = UpsOperationalState.Paused;
         _upsPort.Disconnect();
-        _trayRenderer.UpdateIcon(UpsOperationalState.Paused, 0, DesignTokens.Sizes.DefaultDpi);
-        _trayRenderer.SetTooltip(SplitCockpitPresenter.FormatTooltip(UpsOperationalState.Paused, 0, null));
+        _eventBus.Publish(new MonitoringStatusChanged(UpsOperationalState.Paused));
         _pauseTimer?.Dispose();
         int timerDueMs = (int)Math.Min(Math.Max(HostConstants.MinimumPauseTimerMs, span.TotalMilliseconds), int.MaxValue);
         _pauseTimer = new Timer(_ => Resume(), null, timerDueMs, Timeout.Infinite);
@@ -283,6 +290,11 @@ public sealed class HostLifecycle : IDisposable
         _trayRenderer.OnContextMenuRequested -= HandleContextMenuRequested;
 
         Stop();
+        foreach (IDisposable subscription in _subscriptions)
+        {
+            subscription.Dispose();
+        }
+
         _trayRenderer.Dispose();
         _popoverPainter.Dispose();
         _upsPort.Dispose();
@@ -290,12 +302,17 @@ public sealed class HostLifecycle : IDisposable
 
     private void HandleSelfTestRequested()
     {
-        _presenter.TriggerSelfTest();
+        RunCommandInBackground(_presenter.TriggerSelfTestAsync, HostConstants.TriggerSelfTestOperation);
     }
 
     private void HandleToggleBeeperRequested()
     {
-        _presenter.ToggleBeeper();
+        RunCommandInBackground(_presenter.ToggleBeeperAsync, HostConstants.ToggleBeeperOperation);
+    }
+
+    private void RunCommandInBackground(Func<Task<bool>> command, string operationName)
+    {
+        _ = _executionBoundary.ExecuteAsync(_ => command(), operationName);
     }
 
     private void HandleContextMenuRequested()
