@@ -20,7 +20,7 @@ public sealed class Win32ScreenPlacementProvider : IScreenPlacementProvider
                 anchorRect.Right,
                 anchorRect.Bottom);
 
-            IntPtr monitorHandle = GdiNative.MonitorFromRect(ref nativeAnchor, GdiNative.MONITOR_DEFAULTTONEAREST);
+            IntPtr monitorHandle = GdiNative.MonitorFromRect(ref nativeAnchor, Win32UiConstants.MonitorDefaultToNearest);
             if (monitorHandle != IntPtr.Zero)
             {
                 var monitorInfo = new GdiNative.MonitorInfo
@@ -51,8 +51,8 @@ public sealed class Win32ScreenPlacementProvider : IScreenPlacementProvider
             // Headless or non-interactive fallback handled below
         }
 
-        int screenWidth = GdiNative.GetSystemMetrics(GdiNative.SM_CXSCREEN);
-        int screenHeight = GdiNative.GetSystemMetrics(GdiNative.SM_CYSCREEN);
+        int screenWidth = GdiNative.GetSystemMetrics(Win32UiConstants.SmCxScreen);
+        int screenHeight = GdiNative.GetSystemMetrics(Win32UiConstants.SmCyScreen);
         int resolvedWidth = screenWidth > 0 ? screenWidth : DesignTokens.Sizes.FallbackScreenWidthPx;
         int resolvedHeight = screenHeight > 0 ? screenHeight : DesignTokens.Sizes.FallbackScreenHeightPx;
         return (new ViewRect(0, 0, resolvedWidth, resolvedHeight), TaskbarEdge.Bottom);

@@ -105,7 +105,7 @@ public class ArchitectureBoundaryTests
             "Constants",
             "Defaults",
             "ExitCodes",
-            "DesignTokens",
+            "Tokens",
             "NativeMethods",
             "GdiNative"
         ];
