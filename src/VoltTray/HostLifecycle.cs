@@ -1,7 +1,7 @@
+using VoltTray.Core.Telemetry;
+using VoltTray.Core.Safety;
+using VoltTray.Core.Diagnostics;
 using VoltTray.Core.Events;
-using VoltTray.Core.Models;
-using VoltTray.Core.Ports;
-using VoltTray.Core.Services;
 using VoltTray.Hosting;
 using VoltTray.Infrastructure.Diagnostics;
 using VoltTray.Infrastructure.OS;

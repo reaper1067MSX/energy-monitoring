@@ -1,8 +1,8 @@
+using VoltTray.Core.Battery;
+using VoltTray.Core.Telemetry;
+using VoltTray.Core.Safety;
 using System;
 using System.Collections.Generic;
-using VoltTray.Core.Models;
-using VoltTray.Core.Ports;
-using VoltTray.Core.Services;
 using VoltTray.Tests.ObjectMothers;
 using Xunit;
 

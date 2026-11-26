@@ -1,5 +1,6 @@
+using VoltTray.Core.Battery;
+using VoltTray.Core.Telemetry;
 using System.Text;
-using VoltTray.Core.Models;
 using VoltTray.Infrastructure.Hid;
 using VoltTray.Infrastructure.Protocol;
 using VoltTray.Tests.ObjectMothers;

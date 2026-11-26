@@ -1,3 +1,4 @@
+using VoltTray.Infrastructure.Diagnostics;
 using System.Globalization;
 using System.Text.Json;
 using VoltTray.Hosting;

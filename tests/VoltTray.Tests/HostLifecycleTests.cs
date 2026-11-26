@@ -1,7 +1,7 @@
+using VoltTray.Core.Telemetry;
+using VoltTray.Core.Safety;
 using System.Diagnostics;
 using System.Runtime.InteropServices;
-using VoltTray.Core.Models;
-using VoltTray.Core.Ports;
 using VoltTray.Infrastructure.Diagnostics;
 using VoltTray.Shared;
 using VoltTray.Tests.ObjectMothers;

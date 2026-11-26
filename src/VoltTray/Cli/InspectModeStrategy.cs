@@ -1,3 +1,4 @@
+using VoltTray.Infrastructure.Diagnostics;
 using System.Text;
 using VoltTray.Hosting;
 using VoltTray.Infrastructure.Hid;

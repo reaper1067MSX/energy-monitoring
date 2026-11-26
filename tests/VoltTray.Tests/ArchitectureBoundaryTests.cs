@@ -1,6 +1,6 @@
+using VoltTray.Core.Telemetry;
 using System.Reflection;
 using System.Text.Json.Serialization;
-using VoltTray.Core.Models;
 using VoltTray.Infrastructure.Protocol;
 using VoltTray.Shared;
 using VoltTray.UI.Tokens;

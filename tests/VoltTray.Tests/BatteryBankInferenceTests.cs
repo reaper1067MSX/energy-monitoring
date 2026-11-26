@@ -1,5 +1,4 @@
-using VoltTray.Core.Models;
-using VoltTray.Core.Services;
+using VoltTray.Core.Battery;
 
 namespace VoltTray.Tests;
 

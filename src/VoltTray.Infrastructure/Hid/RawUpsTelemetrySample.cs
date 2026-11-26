@@ -1,4 +1,4 @@
-using VoltTray.Core.Models;
+using VoltTray.Core.Telemetry;
 
 namespace VoltTray.Infrastructure.Hid;
 

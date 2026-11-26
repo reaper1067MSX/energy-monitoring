@@ -1,5 +1,5 @@
-using VoltTray.Core.Models;
-using VoltTray.Core.Ports;
+using VoltTray.Core.Battery;
+using VoltTray.Core.Telemetry;
 
 namespace VoltTray.Infrastructure.Protocol;
 

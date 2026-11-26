@@ -1,4 +1,4 @@
-using VoltTray.Core.Ports;
+using VoltTray.Core.Safety;
 using VoltTray.Infrastructure.Hid;
 using VoltTray.Infrastructure.OS;
 using VoltTray.Infrastructure.Protocol;

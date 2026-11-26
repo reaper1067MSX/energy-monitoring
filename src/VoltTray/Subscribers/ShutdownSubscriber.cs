@@ -1,5 +1,5 @@
+using VoltTray.Core.Safety;
 using VoltTray.Core.Events;
-using VoltTray.Core.Services;
 
 namespace VoltTray.Subscribers;
 

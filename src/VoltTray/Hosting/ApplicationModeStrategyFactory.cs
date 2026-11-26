@@ -1,3 +1,4 @@
+using VoltTray.Infrastructure.Diagnostics;
 using VoltTray.Cli;
 using VoltTray.Infrastructure.Hid;
 

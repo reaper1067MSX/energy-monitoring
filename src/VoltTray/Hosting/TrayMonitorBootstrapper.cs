@@ -1,4 +1,6 @@
-using VoltTray.Core.Ports;
+using VoltTray.Core.Telemetry;
+using VoltTray.Core.Safety;
+using VoltTray.Core.Diagnostics;
 using VoltTray.Infrastructure.Diagnostics;
 using VoltTray.Infrastructure.OS;
 using VoltTray.UI.Dialogs;

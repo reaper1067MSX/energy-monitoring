@@ -1,4 +1,4 @@
-using VoltTray.Core.Ports;
+using VoltTray.Core.Telemetry;
 using VoltTray.Infrastructure.Hid;
 using VoltTray.Shared;
 

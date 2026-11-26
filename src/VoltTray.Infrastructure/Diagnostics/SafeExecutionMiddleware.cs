@@ -1,5 +1,5 @@
-using VoltTray.Core.Models;
-using VoltTray.Core.Ports;
+using VoltTray.Core.Telemetry;
+using VoltTray.Core.Diagnostics;
 using VoltTray.Shared;
 
 namespace VoltTray.Infrastructure.Diagnostics;

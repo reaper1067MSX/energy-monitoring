@@ -1,5 +1,5 @@
+using VoltTray.Core.Telemetry;
 using System.Globalization;
-using VoltTray.Core.Models;
 using VoltTray.UI.Models;
 
 namespace VoltTray.UI.Tokens;

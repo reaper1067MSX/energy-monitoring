@@ -1,5 +1,4 @@
-using VoltTray.Core.Models;
-using VoltTray.Core.Ports;
+using VoltTray.Core.Telemetry;
 using VoltTray.Infrastructure.Protocol;
 using VoltTray.Shared;
 
