@@ -11,18 +11,27 @@ namespace VoltTray.Infrastructure.Hid;
 public sealed class SimulatedUpsDevicePort : IUpsDevicePort
 {
     private const int DefaultRandomSeed = 42;
+    private const int MinimumLoadJitterOffset = -1;
+    private const int MaximumLoadJitterExclusiveOffset = 2;
+
     private readonly Random _random = new(DefaultRandomSeed);
     private readonly object _lock = new();
     private readonly VoltronicParser _parser = new();
     private UpsTelemetry? _lastTelemetry;
     private bool _isConnected = true;
     private bool _beeperActive = true;
-    private bool _selfTestActive = false;
+    private bool _selfTestActive;
     private DateTime _selfTestExpires = DateTime.MinValue;
 
     public bool IsConnected
     {
-        get { lock (_lock) return _isConnected; }
+        get
+        {
+            lock (_lock)
+            {
+                return _isConnected;
+            }
+        }
     }
 
     public string? ActiveDevicePath => HidConstants.SimulatedDevicePath;
@@ -45,29 +54,50 @@ public sealed class SimulatedUpsDevicePort : IUpsDevicePort
         }
     }
 
-    public Task<UpsTelemetry?> ReadTelemetryAsync(DateTimeOffset? now = null, CancellationToken cancellationToken = default)
+    public Task<UpsTelemetry?> ReadTelemetryAsync(
+        DateTimeOffset? now = null,
+        CancellationToken cancellationToken = default)
     {
         lock (_lock)
         {
-            if (!_isConnected) return Task.FromResult<UpsTelemetry?>(null);
+            if (!_isConnected)
+            {
+                return Task.FromResult<UpsTelemetry?>(null);
+            }
 
             if (_selfTestActive && DateTime.UtcNow >= _selfTestExpires)
             {
                 _selfTestActive = false;
             }
 
-            int loadPct = VoltronicProtocolConstants.NominalLoadPercentage + _random.Next(-1, 2);
+            int loadPercentage =
+                VoltronicProtocolConstants.NominalLoadPercentage +
+                _random.Next(MinimumLoadJitterOffset, MaximumLoadJitterExclusiveOffset);
 
-            byte statusByte = VoltronicProtocolConstants.StatusLineNormal;
-            if (_beeperActive) statusByte |= VoltronicProtocolConstants.StatusBeeperActiveMask;
-            if (_selfTestActive) statusByte |= VoltronicProtocolConstants.StatusSelfTestActiveMask;
+            byte statusByte1 = VoltronicProtocolConstants.StatusLineNormal;
+            if (_beeperActive)
+            {
+                statusByte1 |= VoltronicProtocolConstants.StatusBeeperActiveMask;
+            }
 
-            byte[] frameBytes = VoltronicProtocolConstants.BuildBinaryFrame(
-                statusByte1: statusByte,
-                loadPercentage: (byte)loadPct);
+            if (_selfTestActive)
+            {
+                statusByte1 |= VoltronicProtocolConstants.StatusSelfTestActiveMask;
+            }
 
-            var parsed = _parser.Parse(frameBytes, _lastTelemetry, now);
-            if (parsed != null) _lastTelemetry = parsed;
+            var specification = new VoltronicFrameSpecification
+            {
+                StatusByte1 = statusByte1,
+                LoadPercentage = (byte)loadPercentage
+            };
+
+            byte[] frameBytes = VoltronicBinaryFrameBuilder.Build(specification);
+            UpsTelemetry? parsed = _parser.Parse(frameBytes, _lastTelemetry, now);
+            if (parsed != null)
+            {
+                _lastTelemetry = parsed;
+            }
+
             return Task.FromResult(parsed);
         }
     }
@@ -76,7 +106,11 @@ public sealed class SimulatedUpsDevicePort : IUpsDevicePort
     {
         lock (_lock)
         {
-            if (!_isConnected) return Task.FromResult(false);
+            if (!_isConnected)
+            {
+                return Task.FromResult(false);
+            }
+
             _beeperActive = !_beeperActive;
             return Task.FromResult(true);
         }
@@ -86,9 +120,13 @@ public sealed class SimulatedUpsDevicePort : IUpsDevicePort
     {
         lock (_lock)
         {
-            if (!_isConnected) return Task.FromResult(false);
+            if (!_isConnected)
+            {
+                return Task.FromResult(false);
+            }
+
             _selfTestActive = true;
-            _selfTestExpires = DateTime.UtcNow.AddSeconds(HidConstants.SelfTestDurationSeconds);
+            _selfTestExpires = DateTime.UtcNow.AddSeconds(VoltronicProtocolConstants.SelfTestMaxDurationSeconds);
             return Task.FromResult(true);
         }
     }

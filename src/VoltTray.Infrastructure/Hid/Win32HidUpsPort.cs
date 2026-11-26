@@ -1,8 +1,4 @@
 using System.Diagnostics;
-using System.Runtime.InteropServices;
-using System.Text;
-using Microsoft.Win32;
-using Microsoft.Win32.SafeHandles;
 using VoltTray.Core.Models;
 using VoltTray.Core.Ports;
 using VoltTray.Infrastructure.Protocol;
@@ -16,88 +12,41 @@ namespace VoltTray.Infrastructure.Hid;
 /// </summary>
 public sealed class Win32HidUpsPort : IUpsDevicePort
 {
-    public const string DefaultDevicePath = HidConstants.DefaultDevicePath;
-    private const string HidInterfaceGuid = HidConstants.HidInterfaceGuid;
-
-    private const uint GENERIC_READ = 0x80000000;
-    private const uint GENERIC_WRITE = 0x40000000;
-    private const uint FILE_SHARE_READ = 0x00000001;
-    private const uint FILE_SHARE_WRITE = 0x00000002;
-    private const uint OPEN_EXISTING = 3;
-    private const uint FILE_FLAG_OVERLAPPED = 0x40000000;
-    private const int ERROR_IO_PENDING = 997;
-    private const uint WAIT_OBJECT_0 = 0x00000000;
-
-    [StructLayout(LayoutKind.Sequential)]
-    private struct OVERLAPPED
-    {
-        public IntPtr Internal;
-        public IntPtr InternalHigh;
-        public uint Offset;
-        public uint OffsetHigh;
-        public IntPtr hEvent;
-    }
-
-    [DllImport("kernel32.dll", EntryPoint = "CreateFileW", SetLastError = true, CharSet = CharSet.Unicode)]
-    private static extern SafeFileHandle CreateFile(
-        string lpFileName,
-        uint dwDesiredAccess,
-        uint dwShareMode,
-        IntPtr lpSecurityAttributes,
-        uint dwCreationDisposition,
-        uint dwFlagsAndAttributes,
-        IntPtr hTemplateFile);
-
-    [DllImport("kernel32.dll", SetLastError = true)]
-    private static extern bool WriteFile(
-        SafeFileHandle hFile,
-        IntPtr lpBuffer,
-        uint nNumberOfBytesToWrite,
-        out uint lpNumberOfBytesWritten,
-        IntPtr lpOverlapped);
-
-    [DllImport("kernel32.dll", SetLastError = true)]
-    private static extern bool ReadFile(
-        SafeFileHandle hFile,
-        IntPtr lpBuffer,
-        uint nNumberOfBytesToRead,
-        out uint lpNumberOfBytesRead,
-        IntPtr lpOverlapped);
-
-    [DllImport("kernel32.dll", SetLastError = true)]
-    private static extern IntPtr CreateEvent(IntPtr lpEventAttributes, bool bManualReset, bool bInitialState, string? lpName);
-
-    [DllImport("kernel32.dll", SetLastError = true)]
-    private static extern uint WaitForSingleObject(IntPtr hHandle, uint dwMilliseconds);
-
-    [DllImport("kernel32.dll", SetLastError = true)]
-    private static extern bool GetOverlappedResult(
-        SafeFileHandle hFile,
-        IntPtr lpOverlapped,
-        out uint lpNumberOfBytesTransferred,
-        bool bWait);
-
-    [DllImport("kernel32.dll", SetLastError = true)]
-    private static extern bool CloseHandle(IntPtr hObject);
-
-    [DllImport("kernel32.dll", SetLastError = true)]
-    private static extern bool CancelIoEx(SafeFileHandle hFile, IntPtr lpOverlapped);
-
-    private readonly object _lock = new();
-    private readonly string _defaultDevicePath;
-    private readonly bool _allowRegistryFallback;
+    private readonly object _stateLock = new();
+    private readonly SemaphoreSlim _ioGate = new(1, 1);
+    private readonly string? _preferredDevicePath;
+    private readonly bool _allowAutoDiscovery;
+    private readonly IHidDeviceScanner _deviceScanner;
+    private readonly IHidTransport _transport;
     private readonly VoltronicParser _parser;
+
     private UpsTelemetry? _lastTelemetry;
-    private SafeFileHandle? _handle;
+    private IHidConnection? _activeConnection;
+    private CancellationTokenSource? _connectionCts;
+    private string? _activeDevicePath;
+    private long _connectionGeneration;
     private bool _isDisposed;
 
     public Win32HidUpsPort(
-        string? defaultDevicePath = null,
-        bool allowRegistryFallback = true,
-        IBatteryAutonomyEstimator? estimator = null)
+        string? preferredDevicePath = null,
+        bool allowAutoDiscovery = true,
+        IBatteryAutonomyEstimator? estimator = null,
+        IHidDeviceScanner? deviceScanner = null)
+        : this(preferredDevicePath, allowAutoDiscovery, estimator, deviceScanner, new Win32HidTransport())
     {
-        _defaultDevicePath = defaultDevicePath ?? DefaultDevicePath;
-        _allowRegistryFallback = allowRegistryFallback;
+    }
+
+    internal Win32HidUpsPort(
+        string? preferredDevicePath,
+        bool allowAutoDiscovery,
+        IBatteryAutonomyEstimator? estimator,
+        IHidDeviceScanner? deviceScanner,
+        IHidTransport transport)
+    {
+        _preferredDevicePath = preferredDevicePath;
+        _allowAutoDiscovery = allowAutoDiscovery;
+        _deviceScanner = deviceScanner ?? new HidDeviceScanner();
+        _transport = transport;
         _parser = new VoltronicParser(estimator);
     }
 
@@ -105,301 +54,339 @@ public sealed class Win32HidUpsPort : IUpsDevicePort
     {
         get
         {
-            lock (_lock)
+            lock (_stateLock)
             {
-                return _handle != null && !_handle.IsInvalid && !_handle.IsClosed;
+                return IsConnectedUnsafe();
             }
         }
     }
 
-    public string? ActiveDevicePath { get; private set; }
+    public string? ActiveDevicePath
+    {
+        get
+        {
+            lock (_stateLock)
+            {
+                return _activeDevicePath;
+            }
+        }
+    }
 
     public bool TryConnect(string? customPath = null)
     {
-        lock (_lock)
+        lock (_stateLock)
         {
-            if (IsConnected) return true;
-
-            DisconnectInternal();
-
-            string targetPath = customPath ?? _defaultDevicePath;
-            if (TryOpenHandle(targetPath))
+            if (_isDisposed)
             {
-                ActiveDevicePath = targetPath;
-                DrainStaleBufferInternal();
+                return false;
+            }
+
+            if (IsConnectedUnsafe())
+            {
+                return true;
+            }
+        }
+
+        string? targetPath = ResolveTargetPath(customPath);
+        if (string.IsNullOrEmpty(targetPath))
+        {
+            return false;
+        }
+
+        IHidConnection? openedConnection = _transport.TryOpen(targetPath);
+        if (openedConnection == null)
+        {
+            return false;
+        }
+
+        openedConnection.DrainInputBuffer(HidConstants.DefaultDrainTimeoutMs);
+
+        lock (_stateLock)
+        {
+            if (_isDisposed)
+            {
+                openedConnection.Dispose();
+                return false;
+            }
+
+            if (IsConnectedUnsafe())
+            {
+                openedConnection.Dispose();
                 return true;
             }
 
-            if (customPath != null || !_allowRegistryFallback) return false;
-
-            // Fallback: Registry enumeration
-            try
-            {
-                using var key = Registry.LocalMachine.OpenSubKey($@"SYSTEM\CurrentControlSet\Enum\HID\{HidConstants.DeviceIdSubstring}");
-                if (key != null)
-                {
-                    foreach (string subKey in key.GetSubKeyNames())
-                    {
-                        string candidatePath = $@"\\?\HID#{HidConstants.DeviceIdSubstring}#{subKey}#{HidInterfaceGuid}";
-                        if (TryOpenHandle(candidatePath))
-                        {
-                            ActiveDevicePath = candidatePath;
-                            DrainStaleBufferInternal();
-                            return true;
-                        }
-                    }
-                }
-            }
-            catch
-            {
-                // Registry access error fallback
-            }
-
-            return false;
-        }
-    }
-
-    private bool TryOpenHandle(string path)
-    {
-        var handle = CreateFile(
-            path,
-            GENERIC_READ | GENERIC_WRITE,
-            FILE_SHARE_READ | FILE_SHARE_WRITE,
-            IntPtr.Zero,
-            OPEN_EXISTING,
-            FILE_FLAG_OVERLAPPED,
-            IntPtr.Zero);
-
-        if (handle.IsInvalid)
-        {
-            handle.Dispose();
-            return false;
+            _connectionGeneration++;
+            _activeConnection = openedConnection;
+            _connectionCts = new CancellationTokenSource();
+            _activeDevicePath = targetPath;
         }
 
-        _handle = handle;
         return true;
     }
 
     public void Disconnect()
     {
-        lock (_lock)
-        {
-            DisconnectInternal();
-        }
-    }
+        IHidConnection? connectionToDispose;
+        CancellationTokenSource? ctsToCancel;
 
-    private void DisconnectInternal()
-    {
-        if (_handle != null)
+        lock (_stateLock)
         {
-            if (!_handle.IsClosed && !_handle.IsInvalid)
+            _connectionGeneration++;
+            connectionToDispose = _activeConnection;
+            _activeConnection = null;
+            ctsToCancel = _connectionCts;
+            _connectionCts = null;
+            _activeDevicePath = null;
+            _parser.ResetSelfTest();
+        }
+
+        if (ctsToCancel != null)
+        {
+            try
             {
-                CancelIoEx(_handle, IntPtr.Zero);
-                _handle.Dispose();
+                ctsToCancel.Cancel();
             }
-            _handle = null;
-        }
-        ActiveDevicePath = null;
-        _parser.ResetSelfTest();
-    }
-
-    private void DrainStaleBufferInternal()
-    {
-        if (_handle == null || _handle.IsClosed) return;
-        byte[] drainBuf = new byte[HidConstants.ReportLength];
-        while (ReadOverlapped(_handle, drainBuf, HidConstants.DefaultDrainTimeoutMs) > 0) { }
-    }
-
-    public async Task<UpsTelemetry?> ReadTelemetryAsync(DateTimeOffset? now = null, CancellationToken cancellationToken = default)
-    {
-        byte[]? raw = await QueryRawAsync(VoltronicProtocolConstants.QueryStatusCommand, cancellationToken);
-        if (raw is null or { Length: 0 }) return null;
-
-        var parsed = _parser.Parse(raw, _lastTelemetry, now);
-        if (parsed != null) _lastTelemetry = parsed;
-        return parsed;
-    }
-
-    public Task<bool> ToggleBeeperAsync(CancellationToken cancellationToken = default) =>
-        SendControlCommandAsync(VoltronicProtocolConstants.BeeperToggleCommand, cancellationToken);
-
-    public Task<bool> TriggerSelfTestAsync(CancellationToken cancellationToken = default) =>
-        SendControlCommandAsync(VoltronicProtocolConstants.SelfTestCommand, cancellationToken);
-
-    public Task<byte[]?> QueryRawAsync(string command, CancellationToken cancellationToken = default)
-    {
-        return Task.Run(() =>
-        {
-            lock (_lock)
+            catch (ObjectDisposedException)
             {
-                if (!IsConnected && !TryConnect()) return null;
-                if (_handle == null || _handle.IsClosed) return null;
-
-                try
-                {
-                    DrainStaleBufferInternal();
-                    if (!WriteCommandChunksInternal(_handle, command))
-                    {
-                        DisconnectInternal();
-                        return null;
-                    }
-
-                    List<byte> response = new();
-                    bool expectHeader = command.StartsWith(VoltronicProtocolConstants.QueryCommandPrefix, StringComparison.OrdinalIgnoreCase);
-                    var sw = Stopwatch.StartNew();
-                    while (sw.ElapsedMilliseconds < HidConstants.DefaultQueryTimeoutMs)
-                    {
-                        if (cancellationToken.IsCancellationRequested) return null;
-
-                        byte[] inReport = new byte[HidConstants.ReportLength];
-                        int read = ReadOverlapped(_handle, inReport, HidConstants.DefaultReadTimeoutMs);
-                        if (read > 0)
-                        {
-                            for (int b = 1; b < read; b++)
-                            {
-                                byte val = inReport[b];
-                                if (response.Count == 0)
-                                {
-                                    if (expectHeader && val != VoltronicProtocolConstants.FrameHeaderHash && val != VoltronicProtocolConstants.FrameHeaderParen)
-                                        continue;
-                                    if (val == VoltronicProtocolConstants.NullByte)
-                                        continue;
-                                }
-
-                                response.Add(val);
-                                if (val == VoltronicProtocolConstants.CarriageReturn) return response.ToArray();
-                            }
-                        }
-                    }
-
-                    return response.Count > 0 ? response.ToArray() : null;
-                }
-                catch
-                {
-                    DisconnectInternal();
-                    return null;
-                }
             }
-        }, cancellationToken);
+
+            ctsToCancel.Dispose();
+        }
+
+        if (connectionToDispose != null)
+        {
+            connectionToDispose.CancelPendingIo();
+            connectionToDispose.Dispose();
+        }
     }
 
-    private Task<bool> SendControlCommandAsync(string command, CancellationToken cancellationToken)
+    public async Task<UpsTelemetry?> ReadTelemetryAsync(
+        DateTimeOffset? now = null,
+        CancellationToken cancellationToken = default)
     {
-        return Task.Run(() =>
+        var (rawBytes, capturedGeneration) = await QueryRawWithGenerationAsync(
+            VoltronicProtocolConstants.QueryStatusCommand,
+            cancellationToken);
+
+        if (rawBytes is null or { Length: 0 })
         {
-            lock (_lock)
+            return null;
+        }
+
+        lock (_stateLock)
+        {
+            if (_connectionGeneration != capturedGeneration || !IsConnectedUnsafe())
             {
-                if (cancellationToken.IsCancellationRequested) return false;
-                if (!IsConnected && !TryConnect()) return false;
-                if (_handle == null || _handle.IsClosed) return false;
-
-                try
-                {
-                    DrainStaleBufferInternal();
-                    if (!WriteCommandChunksInternal(_handle, command))
-                    {
-                        DisconnectInternal();
-                        return false;
-                    }
-
-                    byte[] inReport = new byte[HidConstants.ReportLength];
-                    int read = ReadOverlapped(_handle, inReport, HidConstants.DefaultReadTimeoutMs);
-                    if (read > 1 && inReport[1] == VoltronicProtocolConstants.NakHeader)
-                        return false;
-
-                    return true;
-                }
-                catch
-                {
-                    DisconnectInternal();
-                    return false;
-                }
+                return null;
             }
-        }, cancellationToken);
-    }
 
-    private static bool WriteCommandChunksInternal(SafeFileHandle handle, string command)
-    {
-        byte[] cmdBytes = Encoding.ASCII.GetBytes(command);
-        int chunkLen = HidConstants.PayloadChunkLength;
-        for (int i = 0; i < cmdBytes.Length; i += chunkLen)
-        {
-            byte[] report = new byte[HidConstants.ReportLength];
-            report[0] = HidConstants.DefaultReportId;
-            int count = Math.Min(chunkLen, cmdBytes.Length - i);
-            Array.Copy(cmdBytes, i, report, 1, count);
-            if (!WriteOverlapped(handle, report, HidConstants.DefaultWriteTimeoutMs))
-                return false;
-        }
-        return true;
-    }
+            UpsTelemetry? parsed = _parser.Parse(rawBytes, _lastTelemetry, now);
+            if (parsed != null)
+            {
+                _lastTelemetry = parsed;
+            }
 
-    private static int ReadOverlapped(SafeFileHandle handle, byte[] buffer, int timeoutMs)
-    {
-        IntPtr hEvent = CreateEvent(IntPtr.Zero, true, false, null);
-        IntPtr pOv = Marshal.AllocHGlobal(Marshal.SizeOf<OVERLAPPED>());
-        IntPtr pBuf = Marshal.AllocHGlobal(buffer.Length);
-        Marshal.StructureToPtr(new OVERLAPPED { hEvent = hEvent }, pOv, false);
-
-        try
-        {
-            if (!ReadFile(handle, pBuf, (uint)buffer.Length, out uint read, pOv) &&
-                !WaitOverlappedCompletion(handle, hEvent, pOv, timeoutMs, out read))
-                return 0;
-
-            int count = (int)Math.Min(read, (uint)buffer.Length);
-            if (count > 0) Marshal.Copy(pBuf, buffer, 0, count);
-            return count;
-        }
-        finally
-        {
-            CloseHandle(hEvent);
-            Marshal.FreeHGlobal(pOv);
-            Marshal.FreeHGlobal(pBuf);
+            return parsed;
         }
     }
 
-    private static bool WriteOverlapped(SafeFileHandle handle, byte[] buffer, int timeoutMs)
+    public Task<bool> ToggleBeeperAsync(CancellationToken cancellationToken = default)
     {
-        IntPtr hEvent = CreateEvent(IntPtr.Zero, true, false, null);
-        IntPtr pOv = Marshal.AllocHGlobal(Marshal.SizeOf<OVERLAPPED>());
-        IntPtr pBuf = Marshal.AllocHGlobal(buffer.Length);
-        Marshal.StructureToPtr(new OVERLAPPED { hEvent = hEvent }, pOv, false);
-        Marshal.Copy(buffer, 0, pBuf, buffer.Length);
-
-        try
-        {
-            if (!WriteFile(handle, pBuf, (uint)buffer.Length, out uint written, pOv) &&
-                !WaitOverlappedCompletion(handle, hEvent, pOv, timeoutMs, out written))
-                return false;
-
-            return written == buffer.Length;
-        }
-        finally
-        {
-            CloseHandle(hEvent);
-            Marshal.FreeHGlobal(pOv);
-            Marshal.FreeHGlobal(pBuf);
-        }
+        return SendControlCommandAsync(VoltronicProtocolConstants.BeeperToggleCommand, cancellationToken);
     }
 
-    private static bool WaitOverlappedCompletion(SafeFileHandle handle, IntPtr hEvent, IntPtr pOv, int timeoutMs, out uint transferred)
+    public Task<bool> TriggerSelfTestAsync(CancellationToken cancellationToken = default)
     {
-        transferred = 0;
-        if (Marshal.GetLastWin32Error() != ERROR_IO_PENDING) return false;
+        return SendControlCommandAsync(VoltronicProtocolConstants.SelfTestCommand, cancellationToken);
+    }
 
-        if (WaitForSingleObject(hEvent, (uint)timeoutMs) == WAIT_OBJECT_0)
-            return GetOverlappedResult(handle, pOv, out transferred, false);
-
-        CancelIoEx(handle, pOv);
-        GetOverlappedResult(handle, pOv, out _, true);
-        return false;
+    public async Task<byte[]?> QueryRawAsync(string command, CancellationToken cancellationToken = default)
+    {
+        var (rawBytes, _) = await QueryRawWithGenerationAsync(command, cancellationToken);
+        return rawBytes;
     }
 
     public void Dispose()
     {
-        if (_isDisposed) return;
-        _isDisposed = true;
+        lock (_stateLock)
+        {
+            if (_isDisposed)
+            {
+                return;
+            }
+
+            _isDisposed = true;
+        }
+
         Disconnect();
+        _ioGate.Dispose();
+    }
+
+    private bool IsConnectedUnsafe()
+    {
+        return _activeConnection != null && _activeConnection.IsOpen;
+    }
+
+    private string? ResolveTargetPath(string? customPath)
+    {
+        if (!string.IsNullOrEmpty(customPath))
+        {
+            return customPath;
+        }
+
+        if (!string.IsNullOrEmpty(_preferredDevicePath))
+        {
+            return _preferredDevicePath;
+        }
+
+        if (!_allowAutoDiscovery)
+        {
+            return null;
+        }
+
+        HidDeviceDescriptor? discoveredDevice = _deviceScanner
+            .DiscoverDevices(includeAllHidDevices: false)
+            .FirstOrDefault(descriptor =>
+                descriptor.VendorId == HidConstants.VendorId &&
+                descriptor.ProductId == HidConstants.ProductId);
+
+        return discoveredDevice?.DevicePath;
+    }
+
+    private bool TrySnapshotActiveConnection(
+        CancellationToken callerToken,
+        out IHidConnection? connection,
+        out CancellationTokenSource? linkedCts,
+        out long generation)
+    {
+        lock (_stateLock)
+        {
+            if (_isDisposed || !IsConnectedUnsafe() || _connectionCts == null)
+            {
+                connection = null;
+                linkedCts = null;
+                generation = 0;
+                return false;
+            }
+
+            connection = _activeConnection;
+            generation = _connectionGeneration;
+            linkedCts = CancellationTokenSource.CreateLinkedTokenSource(callerToken, _connectionCts.Token);
+            return true;
+        }
+    }
+
+    private Task<(byte[]? RawBytes, long Generation)> QueryRawWithGenerationAsync(
+        string command,
+        CancellationToken cancellationToken)
+    {
+        return ExecuteSerializedCommandAsync<(byte[]?, long)>(
+            command,
+            cancellationToken,
+            fallbackResult: (null, 0L),
+            executeAfterWrite: (connection, linkedToken, generation) =>
+            {
+                byte[]? response = HidReportFramer.ReadFramedResponse(connection, command, linkedToken);
+                return (response, response != null ? generation : 0L);
+            });
+    }
+
+    private Task<bool> SendControlCommandAsync(string command, CancellationToken cancellationToken)
+    {
+        return ExecuteSerializedCommandAsync(
+            command,
+            cancellationToken,
+            fallbackResult: false,
+            executeAfterWrite: (connection, linkedToken, _) =>
+                HidReportFramer.ReadControlAcknowledgement(connection, linkedToken));
+    }
+
+    private async Task<TResult> ExecuteSerializedCommandAsync<TResult>(
+        string command,
+        CancellationToken cancellationToken,
+        TResult fallbackResult,
+        Func<IHidConnection, CancellationToken, long, TResult> executeAfterWrite)
+    {
+        if (cancellationToken.IsCancellationRequested || (!IsConnected && !TryConnect()))
+        {
+            return fallbackResult;
+        }
+
+        if (!TrySnapshotActiveConnection(
+                cancellationToken,
+                out IHidConnection? connection,
+                out CancellationTokenSource? linkedCts,
+                out long generation) ||
+            connection == null ||
+            linkedCts == null)
+        {
+            return fallbackResult;
+        }
+
+        try
+        {
+            await _ioGate.WaitAsync(linkedCts.Token).ConfigureAwait(false);
+        }
+        catch (Exception exception) when (exception is OperationCanceledException or ObjectDisposedException)
+        {
+            linkedCts.Dispose();
+            return fallbackResult;
+        }
+
+        try
+        {
+            return await Task.Run(() =>
+            {
+                if (linkedCts.IsCancellationRequested || !connection.IsOpen)
+                {
+                    return fallbackResult;
+                }
+
+                try
+                {
+                    connection.DrainInputBuffer(HidConstants.DefaultDrainTimeoutMs);
+                    if (linkedCts.IsCancellationRequested || !connection.WriteCommand(command))
+                    {
+                        if (!linkedCts.IsCancellationRequested)
+                        {
+                            Disconnect();
+                        }
+
+                        return fallbackResult;
+                    }
+
+                    return executeAfterWrite(connection, linkedCts.Token, generation);
+                }
+                catch
+                {
+                    if (!linkedCts.IsCancellationRequested)
+                    {
+                        Disconnect();
+                    }
+
+                    return fallbackResult;
+                }
+            }, linkedCts.Token).ConfigureAwait(false);
+        }
+        catch (OperationCanceledException)
+        {
+            return fallbackResult;
+        }
+        finally
+        {
+            ReleaseIoGateSafely();
+            linkedCts.Dispose();
+        }
+    }
+
+    private void ReleaseIoGateSafely()
+    {
+        try
+        {
+            _ioGate.Release();
+        }
+        catch (ObjectDisposedException)
+        {
+        }
     }
 }

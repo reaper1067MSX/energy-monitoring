@@ -24,7 +24,25 @@ scratch/
 # =============================================================================
 .agents/
 .atl/
+.codegraph/
 openspec/
+Agent.md
+AGENTS.md
+CLAUDE.md
+GEMINI.md
+.claude/
+.cursor/
+.gemini/
+.codex/
+.env
+.env.*
+*.pem
+*.key
+*.pfx
+*.p12
+*credentials*
+*secret*
+*.local.json
 PROJECT.md
 TEST_READY.md
 run-interactive.bat
