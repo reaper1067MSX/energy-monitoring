@@ -1,6 +1,9 @@
+using System.Globalization;
+using VoltTray.Core.Battery;
 using VoltTray.Core.Telemetry;
 using VoltTray.UI.Dialogs;
 using VoltTray.UI.Models;
+using VoltTray.UI.Presenters;
 using VoltTray.UI.Rendering;
 using VoltTray.UI.Tokens;
 
@@ -99,5 +102,84 @@ public class UIRenderersTests
 
         TaskbarEdge edge = Win32ScreenPlacementProvider.InferTaskbarEdge(monitorBounds, workArea);
         Assert.Equal(expectedEdge, edge);
+    }
+
+    [Fact]
+    public void PopoverViewModel_OmitsUnavailableMetrics_AndUsesDynamicModelTitle()
+    {
+        UpsTelemetry telemetry = UpsTelemetry.CreateDefault() with
+        {
+            TemperatureCelsius = null,
+            ActiveLoadWatts = null,
+            FaultReferenceVoltageAc = null,
+            BankSpec = new BatteryBankSpec(SeriesBatteryCount: 2, NominalVoltageDc: 24.0, RatedCapacityAh: 9.0, Label: "Forza NT-2401PRO")
+        };
+
+        PopoverViewModel vm = PopoverViewModel.FromTelemetry(telemetry, CultureInfo.GetCultureInfo("en-US"));
+
+        Assert.Equal("Forza NT-2401PRO", vm.Title);
+        Assert.Equal("FN", vm.Emblem);
+        Assert.Null(vm.TemperatureText);
+        Assert.Null(vm.ActiveLoadWattsText);
+        Assert.Null(vm.FaultReferenceText);
+    }
+
+    [Fact]
+    public void PopoverPainter_Debounce350Ms_PreventsImmediateReopenAfterHide_AndAllowsKeyboardActions()
+    {
+        DateTimeOffset now = new(2026, 11, 26, 12, 0, 0, TimeSpan.Zero);
+        using var painter = new PopoverPainter(enableNativeWindow: false, clock: () => now);
+        UpsTelemetry telemetry = UpsTelemetry.CreateDefault();
+        var anchor = new ViewRect(1800, 1040, 1824, 1064);
+        var workArea = new ViewRect(0, 0, 1920, 1040);
+
+        bool beeperFired = false;
+        painter.OnToggleBeeperRequested += () => beeperFired = true;
+
+        painter.Show(telemetry, UITheme.Dark, anchor, TaskbarEdge.Bottom, workArea);
+        Assert.True(painter.IsVisible);
+
+        painter.Hide();
+        Assert.False(painter.IsVisible);
+
+        now = now.AddMilliseconds(100);
+        painter.Show(telemetry, UITheme.Dark, anchor, TaskbarEdge.Bottom, workArea);
+        Assert.False(painter.IsVisible);
+
+        now = now.AddMilliseconds(300);
+        painter.Show(telemetry, UITheme.Dark, anchor, TaskbarEdge.Bottom, workArea);
+        Assert.True(painter.IsVisible);
+
+        Assert.True(painter.HandleKeyDown(LocalizationConstants.VkTab));
+        Assert.True(painter.HandleKeyDown(LocalizationConstants.VkReturn));
+        Assert.True(beeperFired);
+
+        Assert.True(painter.HandleKeyDown(LocalizationConstants.VkEscape));
+        Assert.False(painter.IsVisible);
+    }
+
+    [Theory]
+    [InlineData(TaskbarEdge.Bottom)]
+    [InlineData(TaskbarEdge.Top)]
+    [InlineData(TaskbarEdge.Left)]
+    [InlineData(TaskbarEdge.Right)]
+    public void PopoverPainter_CalculatePlacement_HandlesAllFourTaskbarEdgesWithinWorkArea(TaskbarEdge edge)
+    {
+        var workArea = new ViewRect(0, 0, 1920, 1040);
+        var iconRect = edge switch
+        {
+            TaskbarEdge.Top => new ViewRect(1800, 8, 1824, 32),
+            TaskbarEdge.Left => new ViewRect(8, 900, 32, 924),
+            TaskbarEdge.Right => new ViewRect(1880, 900, 1904, 924),
+            _ => new ViewRect(1800, 1016, 1824, 1040)
+        };
+
+        ViewRect bounds = PopoverPainter.CalculatePlacement(iconRect, edge, workArea);
+
+        Assert.Equal(DesignTokens.Sizes.PopoverWidth, bounds.Width);
+        Assert.True(bounds.Left >= workArea.Left);
+        Assert.True(bounds.Right <= workArea.Right);
+        Assert.True(bounds.Top >= workArea.Top);
+        Assert.True(bounds.Bottom <= workArea.Bottom);
     }
 }

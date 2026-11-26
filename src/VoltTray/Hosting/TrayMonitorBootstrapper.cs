@@ -31,7 +31,7 @@ public sealed class TrayMonitorBootstrapper : IDisposable
         _rawPort = upsPortFactory();
         _decoratedPort = new DiagnosticUpsPortDecorator(_rawPort, telemetryProbe);
         _trayRenderer = new TrayRenderer();
-        _popoverPainter = new PopoverPainter();
+        _popoverPainter = new PopoverPainter(enableNativeWindow: true);
 
         Lifecycle = new HostLifecycle(
             _decoratedPort,

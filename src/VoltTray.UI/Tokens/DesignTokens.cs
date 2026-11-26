@@ -31,6 +31,9 @@ public static class DesignTokens
     {
         public const int DefaultDpi = 96;
         public const int PopoverWidth = 372;
+        public const int PopoverCardHeight = 320;
+        public const int PopoverEdgeMarginPx = 8;
+        public const int PopoverDebounceMs = 350;
         public const int DialogWidth = 560;
         public const int MenuWidth = 268;
         public const int ButtonHeight = 44;
@@ -119,6 +122,15 @@ public static class DesignTokens
         (UpsOperationalState.Fault, true) => "#C42B1C",
         _ => isLightTaskbar ? "#5F6368" : "#9AA0A6"
     };
+
+    public static uint ParseBgrColor(string hex)
+    {
+        string clean = hex.TrimStart('#');
+        byte r = byte.Parse(clean[..2], NumberStyles.HexNumber, CultureInfo.InvariantCulture);
+        byte g = byte.Parse(clean.Substring(2, 2), NumberStyles.HexNumber, CultureInfo.InvariantCulture);
+        byte b = byte.Parse(clean.Substring(4, 2), NumberStyles.HexNumber, CultureInfo.InvariantCulture);
+        return (uint)(r | (g << 8) | (b << 16));
+    }
 
     public static double CalculateContrastRatio(string foregroundHex, string backgroundHex)
     {

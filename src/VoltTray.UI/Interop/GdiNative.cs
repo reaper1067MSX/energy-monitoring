@@ -38,8 +38,20 @@ internal static partial class GdiNative
 
     public const uint WM_USER = 0x0400;
     public const uint WM_TRAYICON = WM_USER + 101;
+    public const uint WM_ACTIVATE = 0x0006;
+    public const uint WM_PAINT = 0x000F;
+    public const uint WM_KEYDOWN = 0x0100;
     public const uint WM_LBUTTONUP = 0x0202;
     public const uint WM_RBUTTONUP = 0x0205;
+    public const int WA_INACTIVE = 0;
+
+    public const int TRANSPARENT = 1;
+    public const int PS_SOLID = 0;
+    public const uint DT_LEFT = 0x0000;
+    public const uint DT_CENTER = 0x0001;
+    public const uint DT_RIGHT = 0x0002;
+    public const uint DT_VCENTER = 0x0004;
+    public const uint DT_SINGLELINE = 0x0020;
 
     public const int NotifyTipCapacity = 128;
     public const int NotifyInfoCapacity = 256;
@@ -79,6 +91,17 @@ internal static partial class GdiNative
         public IntPtr WindowHandle;
         public uint Id;
         public Guid GuidItem;
+    }
+
+    [StructLayout(LayoutKind.Sequential)]
+    public unsafe struct PaintStruct
+    {
+        public IntPtr Hdc;
+        public int Erase;
+        public NativeRect PaintRect;
+        public int Restore;
+        public int IncUpdate;
+        public fixed byte Reserved[32];
     }
 
     [StructLayout(LayoutKind.Sequential)]
@@ -223,4 +246,46 @@ internal static partial class GdiNative
 
     [LibraryImport("kernel32.dll", EntryPoint = "GetModuleHandleW", StringMarshalling = StringMarshalling.Utf16)]
     public static partial IntPtr GetModuleHandle(string? lpModuleName);
+
+    [LibraryImport("user32.dll")]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    public static partial bool ShowWindow(IntPtr hWnd, int nCmdShow);
+
+    [LibraryImport("user32.dll", SetLastError = true)]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    public static partial bool SetWindowPos(
+        IntPtr hWnd,
+        IntPtr hWndInsertAfter,
+        int x,
+        int y,
+        int cx,
+        int cy,
+        uint uFlags);
+
+    [LibraryImport("user32.dll")]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    public static partial bool InvalidateRect(IntPtr hWnd, IntPtr lpRect, [MarshalAs(UnmanagedType.Bool)] bool bErase);
+
+    [LibraryImport("user32.dll")]
+    public static partial IntPtr BeginPaint(IntPtr hWnd, out PaintStruct lpPaint);
+
+    [LibraryImport("user32.dll")]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    public static partial bool EndPaint(IntPtr hWnd, ref PaintStruct lpPaint);
+
+    [LibraryImport("gdi32.dll")]
+    public static partial int SetBkMode(IntPtr hdc, int mode);
+
+    [LibraryImport("gdi32.dll")]
+    public static partial uint SetTextColor(IntPtr hdc, uint color);
+
+    [LibraryImport("user32.dll", EntryPoint = "DrawTextW", StringMarshalling = StringMarshalling.Utf16)]
+    public static partial int DrawText(IntPtr hdc, string lpchText, int cchText, ref NativeRect lprc, uint format);
+
+    [LibraryImport("gdi32.dll")]
+    public static partial IntPtr CreatePen(int iStyle, int cWidth, uint color);
+
+    [LibraryImport("gdi32.dll")]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    public static partial bool RoundRect(IntPtr hdc, int left, int top, int right, int bottom, int width, int height);
 }
