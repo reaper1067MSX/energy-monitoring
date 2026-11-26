@@ -35,8 +35,7 @@ public sealed class VoltronicParser
 
     private readonly IBatteryAutonomyEstimator _estimator;
     private readonly double _capacityFactor;
-    private bool _wasSelfTestBitActive;
-    private DateTimeOffset? _selfTestStartTime;
+    private readonly SelfTestLatch _selfTestLatch = new();
 
     public VoltronicParser(IBatteryAutonomyEstimator? estimator = null, double capacityFactor = 1.0)
     {
@@ -46,7 +45,21 @@ public sealed class VoltronicParser
 
     public UpsTelemetry? Parse(byte[]? raw, UpsTelemetry? previous = null, DateTimeOffset? now = null)
     {
-        if (raw == null || raw.Length < VoltronicProtocolConstants.MinRawFrameLength)
+        if (raw == null)
+        {
+            return previous;
+        }
+
+        return Parse(raw.AsSpan(), capabilities: null, previous, now);
+    }
+
+    public UpsTelemetry? Parse(
+        ReadOnlySpan<byte> raw,
+        UpsCapabilities? capabilities,
+        UpsTelemetry? previous = null,
+        DateTimeOffset? now = null)
+    {
+        if (raw.Length < VoltronicProtocolConstants.MinRawFrameLength)
         {
             return previous;
         }
@@ -68,10 +81,6 @@ public sealed class VoltronicParser
             ? tokens[VoltronicProtocolConstants.LoadPercentageTokenIndex][0]
             : MinimumLoadPercentage;
         int loadPercentage = Math.Clamp(rawLoad, MinimumLoadPercentage, MaximumLoadPercentage);
-
-        int activeLoadWatts = (int)Math.Round(
-            (double)loadPercentage * VoltronicProtocolConstants.DefaultRatedWatts / PercentageScaleDivisor,
-            MidpointRounding.AwayFromZero);
 
         double frequencyHz = tokens.Count >= VoltronicProtocolConstants.MinFrequencyTokenCount
             ? DecodeFrequencyHz(
@@ -95,22 +104,35 @@ public sealed class VoltronicParser
             ? tokens[VoltronicProtocolConstants.StatusByte1TokenIndex][0]
             : (byte)0;
         DateTimeOffset timestamp = now ?? DateTimeOffset.UtcNow;
-        bool isTestInProgress = UpdateSelfTestLatch(statusByte1, timestamp);
+        bool isTestInProgress = _selfTestLatch.Update(
+            (statusByte1 & VoltronicProtocolConstants.StatusSelfTestActiveMask) != 0,
+            timestamp);
 
-        var bankSpec = new BatteryBankSpec();
-        var capabilities = new UpsCapabilities(
+        UpsCapabilities effectiveCapabilities = capabilities ?? new UpsCapabilities(
             ModelName: null,
             NominalVoltageAc: null,
             NominalFrequencyHz: null,
             RatedWatts: (int)VoltronicProtocolConstants.DefaultRatedWatts,
-            Bank: bankSpec,
+            Bank: new BatteryBankSpec(),
             DialectVerified: false);
 
+        if (tokens.Count >= VoltronicProtocolConstants.MinStatusByte2TokenCount &&
+            tokens[VoltronicProtocolConstants.StatusByte2TokenIndex].Length > 0)
+        {
+            effectiveCapabilities = VoltronicStatusMapper.RefineCapabilitiesFromStatusByte2(
+                effectiveCapabilities,
+                tokens[VoltronicProtocolConstants.StatusByte2TokenIndex][0]);
+        }
+
+        int? activeLoadWatts = effectiveCapabilities.RatedWatts is int ratedWatts
+            ? (int)Math.Round((double)loadPercentage * ratedWatts / PercentageScaleDivisor, MidpointRounding.AwayFromZero)
+            : null;
+
+        PowerStatus powerStatus = VoltronicStatusMapper.DecodePowerStatus(statusByte1, inputVoltageAc, outputVoltageAc);
         var (state, isBeeperMuted, _) = DecodeStatusBits(statusByte1, inputVoltageAc, outputVoltageAc);
-        int batteryPercentage = _estimator.CalculateSoCPercentage(batteryVoltageDc, bankSpec.SeriesBatteryCount);
-        bool isHardwareLow = (statusByte1 & VoltronicProtocolConstants.StatusBatteryLowMask) != 0 &&
-                             (statusByte1 & VoltronicProtocolConstants.StatusOnBatteryMask) != 0;
-        int? runtimeMinutes = _estimator.EstimateRuntimeMinutes(loadPercentage, capabilities, _capacityFactor, isHardwareLow);
+        int batteryPercentage = _estimator.CalculateSoCPercentage(batteryVoltageDc, effectiveCapabilities.Bank.SeriesBatteryCount);
+        bool isHardwareLow = powerStatus.IsBatteryLow && powerStatus.IsOnBattery;
+        int? runtimeMinutes = _estimator.EstimateRuntimeMinutes(loadPercentage, effectiveCapabilities, _capacityFactor, isHardwareLow);
 
         return new UpsTelemetry(
             InputVoltageAc: inputVoltageAc,
@@ -124,12 +146,13 @@ public sealed class VoltronicParser
             Cell2VoltageDc: cellVoltageDc,
             BatteryPercentage: batteryPercentage,
             EstimatedRuntimeMinutes: runtimeMinutes,
-            TemperatureCelsius: VoltronicProtocolConstants.DefaultAmbientTemperatureCelsius,
+            TemperatureCelsius: null,
             State: state,
             IsBeeperMuted: isBeeperMuted,
             IsTestInProgress: isTestInProgress,
-            BankSpec: bankSpec,
-            Timestamp: timestamp);
+            BankSpec: effectiveCapabilities.Bank,
+            Timestamp: timestamp,
+            PowerStatus: powerStatus);
     }
 
     /// <summary>
@@ -351,29 +374,7 @@ public sealed class VoltronicParser
 
     public void ResetSelfTest()
     {
-        _wasSelfTestBitActive = false;
-        _selfTestStartTime = null;
-    }
-
-    private bool UpdateSelfTestLatch(byte statusByte1, DateTimeOffset timestamp)
-    {
-        bool isSelfTestBitActive = (statusByte1 & VoltronicProtocolConstants.StatusSelfTestActiveMask) != 0;
-        if (!isSelfTestBitActive)
-        {
-            _wasSelfTestBitActive = false;
-            _selfTestStartTime = null;
-            return false;
-        }
-
-        if (!_wasSelfTestBitActive)
-        {
-            _selfTestStartTime = timestamp;
-            _wasSelfTestBitActive = true;
-            return true;
-        }
-
-        return _selfTestStartTime.HasValue &&
-               (timestamp - _selfTestStartTime.Value).TotalSeconds < VoltronicProtocolConstants.SelfTestMaxDurationSeconds;
+        _selfTestLatch.Reset();
     }
 
     private static byte DeescapeByte(byte escapeCode)

@@ -44,6 +44,7 @@ public static class VoltronicProtocolConstants
 
     // Status Byte 1 Bit Masks (Bit 0..7)
     public const byte StatusBeeperActiveMask = 0x01;
+    public const byte StatusShutdownActiveMask = 0x02;
     public const byte StatusSelfTestActiveMask = 0x04;
     public const byte StatusLineInteractiveMask = 0x08;
     public const byte StatusFaultMask = 0x10;
@@ -51,6 +52,19 @@ public static class VoltronicProtocolConstants
     public const byte StatusBatteryLowMask = 0x40;
     public const byte StatusOnBatteryMask = 0x80;
     public const byte StatusLineNormal = StatusLineInteractiveMask;
+
+    // Protocol Dialect Identifiers
+    public const string DialectT = "T";
+    public const string DialectP = "P";
+    public const string DialectV = "V";
+    public const string DialectQ1 = "Q1";
+
+    // Megatec ASCII Constants
+    public const int MegatecStatusTokenCount = 8;
+    public const int MegatecStatusFlagsLength = 8;
+    public const int RatingResponseMinTokenCount = 4;
+    public const double PerCellVoltageThresholdDc = 3.0;
+    public const double NominalLeadAcidCellVolts = 2.0;
 
     // Status Byte 2 Masks & Nominal Value
     public const byte StatusByte2Nominal = 0xA1;
