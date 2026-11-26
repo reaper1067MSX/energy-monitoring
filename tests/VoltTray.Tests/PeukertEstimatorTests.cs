@@ -1,6 +1,6 @@
+using VoltTray.UI.Popover;
 using VoltTray.Core.Battery;
 using VoltTray.Core.Telemetry;
-using VoltTray.UI.Presenters;
 using Xunit;
 
 namespace VoltTray.Tests;

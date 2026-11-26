@@ -1,12 +1,13 @@
+using VoltTray.UI.Atoms;
+using VoltTray.UI.Atoms.TrayGlyphs;
 using VoltTray.Core.Telemetry;
 using VoltTray.UI.Interop;
 using VoltTray.UI.Models;
-using VoltTray.UI.Rendering.Glyphs;
 using VoltTray.UI.Tokens;
 using VoltTray.UI.Tokens.Primitives;
 using VoltTray.UI.Tokens.Themes;
 
-namespace VoltTray.UI.Rendering;
+namespace VoltTray.UI.Tray;
 
 /// <summary>
 /// Composes a 32-bpp ARGB tray icon by delegating state-specific glyph drawing

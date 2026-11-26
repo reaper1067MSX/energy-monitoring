@@ -1,8 +1,8 @@
+using VoltTray.UI.Tray;
+using VoltTray.UI.Popover;
 using VoltTray.Core.Events;
 using VoltTray.Hosting;
-using VoltTray.UI.Presenters;
 using VoltTray.UI.Tokens;
-using VoltTray.UI.Views;
 
 namespace VoltTray.Subscribers;
 

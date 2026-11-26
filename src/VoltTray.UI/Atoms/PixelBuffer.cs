@@ -1,6 +1,6 @@
 using VoltTray.UI.Models;
 
-namespace VoltTray.UI.Rendering;
+namespace VoltTray.UI.Atoms;
 
 /// <summary>
 /// Lightweight 32-bpp ARGB pixel drawing helper shared by tray glyph renderers.

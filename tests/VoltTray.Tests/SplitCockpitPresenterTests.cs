@@ -1,8 +1,8 @@
+using VoltTray.UI.Tray;
+using VoltTray.UI.Popover;
 using VoltTray.Core.Telemetry;
 using VoltTray.Tests.ObjectMothers;
 using VoltTray.UI.Models;
-using VoltTray.UI.Presenters;
-using VoltTray.UI.Views;
 
 namespace VoltTray.Tests;
 

@@ -1,7 +1,7 @@
 using VoltTray.Core.Telemetry;
 using VoltTray.UI.Models;
 
-namespace VoltTray.UI.Views;
+namespace VoltTray.UI.Tray;
 
 public interface ITrayIconView : IDisposable
 {

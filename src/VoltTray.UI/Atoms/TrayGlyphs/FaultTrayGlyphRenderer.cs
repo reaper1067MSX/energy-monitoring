@@ -1,7 +1,8 @@
+using VoltTray.UI.Atoms;
 using VoltTray.Core.Telemetry;
 using VoltTray.UI.Models;
 
-namespace VoltTray.UI.Rendering.Glyphs;
+namespace VoltTray.UI.Atoms.TrayGlyphs;
 
 public sealed class FaultTrayGlyphRenderer : ITrayStateGlyphRenderer
 {

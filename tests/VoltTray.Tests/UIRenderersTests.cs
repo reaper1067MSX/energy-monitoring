@@ -1,10 +1,10 @@
+using VoltTray.UI.Tray;
+using VoltTray.UI.Popover;
 using System.Globalization;
 using VoltTray.Core.Battery;
 using VoltTray.Core.Telemetry;
 using VoltTray.UI.Dialogs;
 using VoltTray.UI.Models;
-using VoltTray.UI.Presenters;
-using VoltTray.UI.Rendering;
 using VoltTray.UI.Tokens;
 
 namespace VoltTray.Tests;

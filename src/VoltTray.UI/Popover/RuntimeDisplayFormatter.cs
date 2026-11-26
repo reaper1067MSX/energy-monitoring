@@ -1,6 +1,6 @@
 using VoltTray.UI.Tokens;
 
-namespace VoltTray.UI.Presenters;
+namespace VoltTray.UI.Popover;
 
 public static class RuntimeDisplayFormatter
 {

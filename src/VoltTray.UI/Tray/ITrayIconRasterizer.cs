@@ -1,6 +1,6 @@
 using VoltTray.Core.Telemetry;
 
-namespace VoltTray.UI.Rendering;
+namespace VoltTray.UI.Tray;
 
 public interface ITrayIconRasterizer
 {

@@ -1,20 +1,21 @@
 using System.Runtime.InteropServices;
 using VoltTray.Core.Telemetry;
 using VoltTray.Shared;
+using VoltTray.UI.Atoms;
 using VoltTray.UI.Interop;
 using VoltTray.UI.Models;
 using VoltTray.UI.Tokens.Primitives;
-using VoltTray.UI.Views;
 
-namespace VoltTray.UI.Rendering;
+namespace VoltTray.UI.Tray;
 
 /// <summary>
-/// Win32 System Tray Icon renderer using 32-bpp ARGB DIB sections,
+/// Win32 System Tray Icon renderer coordinating Shell_NotifyIconW,
 /// atomic HICON swapping, SystemUsesLightTheme detection, and TaskbarCreated recovery.
 /// </summary>
 public sealed class TrayRenderer : ITrayIconView
 {
     private readonly ITrayIconRasterizer _rasterizer;
+    private readonly INativeIconFactory _iconFactory;
     private readonly Func<bool> _isLightTaskbarProvider;
     private readonly object _lock = new();
     private IntPtr _currentHIcon = IntPtr.Zero;
@@ -22,8 +23,8 @@ public sealed class TrayRenderer : ITrayIconView
 
     private IntPtr _hwnd = IntPtr.Zero;
     private uint _taskbarCreatedMessage;
-    private GdiNative.WndProcDelegate? _wndProc;
-    private GdiNative.NotifyIconDataW _nid;
+    private WndProcDelegate? _wndProc;
+    private NotifyIconDataW _nid;
     private bool _iconAdded;
 
     public event Action? OnTrayIconClicked;
@@ -39,9 +40,11 @@ public sealed class TrayRenderer : ITrayIconView
 
     public TrayRenderer(
         ITrayIconRasterizer? rasterizer = null,
+        INativeIconFactory? iconFactory = null,
         Func<bool>? isLightTaskbarProvider = null)
     {
         _rasterizer = rasterizer ?? TrayIconRasterizer.CreateDefault();
+        _iconFactory = iconFactory ?? new Win32NativeIconFactory();
         _isLightTaskbarProvider = isLightTaskbarProvider ?? WindowsThemeDetector.IsLightTaskbar;
         InitializeHostWindow();
     }
@@ -56,9 +59,9 @@ public sealed class TrayRenderer : ITrayIconView
 
             fixed (char* classNamePtr = Win32UiConstants.TrayHostWindowClass)
             {
-                var wcx = new GdiNative.WindowClassExW
+                var wcx = new WindowClassExW
                 {
-                    Size = (uint)sizeof(GdiNative.WindowClassExW),
+                    Size = (uint)sizeof(WindowClassExW),
                     WindowProc = Marshal.GetFunctionPointerForDelegate(_wndProc),
                     Instance = hInstance,
                     ClassName = classNamePtr
@@ -124,24 +127,21 @@ public sealed class TrayRenderer : ITrayIconView
     public unsafe void UpdateIcon(UpsOperationalState state, int batteryPct, int dpi = LayoutTokens.DefaultDpi)
     {
         int size = _rasterizer.ResolvePhysicalSize(dpi);
-        bool isLightTaskbar = _isLightTaskbarProvider();
-        IntPtr hNew = CreateArgbIcon(state, batteryPct, size, isLightTaskbar);
+        uint[] pixels = _rasterizer.RenderArgbPixels(state, batteryPct, size, _isLightTaskbarProvider());
+        IntPtr hNew = _iconFactory.CreateFromArgbPixels(pixels, size);
 
         lock (_lock)
         {
-            if (_currentHIcon != IntPtr.Zero)
-            {
-                GdiNative.DestroyIcon(_currentHIcon);
-            }
+            _iconFactory.DestroyIcon(_currentHIcon);
             _currentHIcon = hNew;
 
             if (_hwnd != IntPtr.Zero && _currentHIcon != IntPtr.Zero)
             {
                 if (!_iconAdded)
                 {
-                    _nid = new GdiNative.NotifyIconDataW
+                    _nid = new NotifyIconDataW
                     {
-                        Size = (uint)sizeof(GdiNative.NotifyIconDataW),
+                        Size = (uint)sizeof(NotifyIconDataW),
                         WindowHandle = _hwnd,
                         Id = Win32UiConstants.TrayIconId,
                         Flags = Win32UiConstants.NifMessage | Win32UiConstants.NifIcon | Win32UiConstants.NifTip,
@@ -202,15 +202,15 @@ public sealed class TrayRenderer : ITrayIconView
                 return null;
             }
 
-            var identifier = new GdiNative.NotifyIconIdentifier
+            var identifier = new NotifyIconIdentifier
             {
-                Size = (uint)sizeof(GdiNative.NotifyIconIdentifier),
+                Size = (uint)sizeof(NotifyIconIdentifier),
                 WindowHandle = _hwnd,
                 Id = Win32UiConstants.TrayIconId,
                 GuidItem = Guid.Empty
             };
 
-            int hresult = GdiNative.Shell_NotifyIconGetRect(ref identifier, out GdiNative.NativeRect iconRect);
+            int hresult = GdiNative.Shell_NotifyIconGetRect(ref identifier, out NativeRect iconRect);
             if (hresult < 0 || iconRect.Right <= iconRect.Left || iconRect.Bottom <= iconRect.Top)
             {
                 return null;
@@ -218,58 +218,6 @@ public sealed class TrayRenderer : ITrayIconView
 
             return new ViewRect(iconRect.Left, iconRect.Top, iconRect.Right, iconRect.Bottom);
         }
-    }
-
-    private unsafe IntPtr CreateArgbIcon(UpsOperationalState state, int batteryPct, int size, bool isLightTaskbar)
-    {
-        uint[] pixels = _rasterizer.RenderArgbPixels(state, batteryPct, size, isLightTaskbar);
-        var header = new BitmapInfoHeader
-        {
-            Size = (uint)sizeof(BitmapInfoHeader),
-            Width = size,
-            Height = -size,
-            Planes = Win32UiConstants.ColorPlanesSingle,
-            BitCount = Win32UiConstants.BitsPerPixel32,
-            Compression = Win32UiConstants.BiRgb
-        };
-
-        IntPtr hbmColor = GdiNative.CreateDIBSection(
-            IntPtr.Zero,
-            ref header,
-            Win32UiConstants.DibRgbColors,
-            out IntPtr bitsPtr,
-            IntPtr.Zero,
-            0);
-        if (hbmColor == IntPtr.Zero || bitsPtr == IntPtr.Zero)
-        {
-            return IntPtr.Zero;
-        }
-
-        fixed (uint* srcPtr = pixels)
-        {
-            Buffer.MemoryCopy(
-                srcPtr,
-                (void*)bitsPtr,
-                (long)pixels.Length * sizeof(uint),
-                (long)pixels.Length * sizeof(uint));
-        }
-
-        IntPtr hbmMask = GdiNative.CreateBitmap(size, size, Win32UiConstants.ColorPlanesSingle, Win32UiConstants.ColorPlanesSingle, IntPtr.Zero);
-        var info = new GdiNative.IconInfo
-        {
-            IsIcon = 1,
-            ColorBitmap = hbmColor,
-            MaskBitmap = hbmMask
-        };
-
-        IntPtr hIcon = GdiNative.CreateIconIndirect(ref info);
-        GdiNative.DeleteObject(hbmColor);
-        if (hbmMask != IntPtr.Zero)
-        {
-            GdiNative.DeleteObject(hbmMask);
-        }
-
-        return hIcon;
     }
 
     public void Dispose()
@@ -285,7 +233,7 @@ public sealed class TrayRenderer : ITrayIconView
             }
             if (_currentHIcon != IntPtr.Zero)
             {
-                GdiNative.DestroyIcon(_currentHIcon);
+                _iconFactory.DestroyIcon(_currentHIcon);
                 _currentHIcon = IntPtr.Zero;
             }
             if (_hwnd != IntPtr.Zero)

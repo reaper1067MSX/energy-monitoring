@@ -1,18 +1,8 @@
 using System.Globalization;
 using VoltTray.UI.Models;
 using VoltTray.UI.Tokens;
-using VoltTray.UI.Views;
 
 namespace VoltTray.UI.Dialogs;
-
-public sealed record ExitDialogCopy(
-    string Title,
-    string Body,
-    string PauseLabel,
-    string PauseHelp,
-    string CloseLabel,
-    string CloseHelp,
-    string CancelLabel);
 
 /// <summary>
 /// 3-Choice Exit Confirmation Dialog (Pause 15 min, Close, Cancel).
