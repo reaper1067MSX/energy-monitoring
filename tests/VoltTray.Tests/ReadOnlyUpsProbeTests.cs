@@ -2,6 +2,8 @@ using System;
 using System.IO;
 using System.Text.Json;
 using VoltTray.Cli;
+using VoltTray.Core.Models;
+using VoltTray.Hosting;
 using VoltTray.Infrastructure.Hid;
 using VoltTray.Infrastructure.Protocol;
 using VoltTray.Tests.ObjectMothers;
@@ -12,36 +14,47 @@ namespace VoltTray.Tests;
 public class ReadOnlyUpsProbeTests
 {
     [Theory]
-    [InlineData("M\r")]
-    [InlineData("QS\r")]
-    [InlineData("Q1\r")]
-    [InlineData("QGS\r")]
-    [InlineData("F\r")]
-    [InlineData("I\r")]
-    public void UpsInquiryCommandPolicy_AcceptsReadOnlyInquiryCommands(string command)
+    [InlineData(VoltronicProtocolConstants.ProtocolIdentityCommand, UpsDiagnosticInquiry.ProtocolIdentity)]
+    [InlineData(VoltronicProtocolConstants.QueryStatusCommand, UpsDiagnosticInquiry.QuickStatus)]
+    [InlineData("QS", UpsDiagnosticInquiry.QuickStatus)]
+    [InlineData(VoltronicProtocolConstants.MegatecStatusCommand, UpsDiagnosticInquiry.MegatecStatus)]
+    [InlineData(VoltronicProtocolConstants.GeneralStatusCommand, UpsDiagnosticInquiry.GeneralStatus)]
+    [InlineData(VoltronicProtocolConstants.NominalRatingsCommand, UpsDiagnosticInquiry.NominalRatings)]
+    [InlineData(VoltronicProtocolConstants.VendorInformationCommand, UpsDiagnosticInquiry.VendorInformation)]
+    public void VoltronicInquiryCodec_MapsReadOnlyWireCommandsToDomainEnum(
+        string rawCommand,
+        UpsDiagnosticInquiry expectedInquiry)
     {
-        Assert.True(UpsInquiryCommandPolicy.IsReadOnlyInquiry(command));
-        Assert.Equal(command, UpsInquiryCommandPolicy.EnsureReadOnlyInquiry(command));
+        bool parsed = VoltronicInquiryCodec.TryParseWireCommand(rawCommand, out UpsDiagnosticInquiry parsedInquiry);
+
+        Assert.True(parsed);
+        Assert.Equal(expectedInquiry, parsedInquiry);
+        Assert.Equal(
+            rawCommand.EndsWith(VoltronicProtocolConstants.CarriageReturnChar)
+                ? rawCommand
+                : rawCommand + VoltronicProtocolConstants.CarriageReturnChar,
+            VoltronicInquiryCodec.ToWireCommand(parsedInquiry));
     }
 
     [Theory]
-    [InlineData("Q\r")]
-    [InlineData("T\r")]
-    [InlineData("CT\r")]
-    [InlineData("TL\r")]
+    [InlineData(VoltronicProtocolConstants.BeeperToggleCommand)]
+    [InlineData(VoltronicProtocolConstants.SelfTestCommand)]
+    [InlineData(VoltronicProtocolConstants.CancelSelfTestCommand)]
+    [InlineData(VoltronicProtocolConstants.LongSelfTestCommand)]
     [InlineData("S01R0001")]
-    [InlineData("C\r")]
+    [InlineData(VoltronicProtocolConstants.CalibrationCommand)]
     [InlineData("PE\r")]
-    public void UpsInquiryCommandPolicy_RejectsMutatingCommandsBeforeUsbWrite(string command)
+    [InlineData("")]
+    public void VoltronicInquiryCodec_RejectsMutatingOrUnknownCommands(string rawCommand)
     {
-        Assert.False(UpsInquiryCommandPolicy.IsReadOnlyInquiry(command));
-        Assert.Throws<InvalidOperationException>(() => UpsInquiryCommandPolicy.EnsureReadOnlyInquiry(command));
+        bool parsed = VoltronicInquiryCodec.TryParseWireCommand(rawCommand, out _);
+        Assert.False(parsed);
     }
 
     [Fact]
     public void HidReportFramer_CreateOutputReports_ChunksCommandIntoNineByteReports()
     {
-        IReadOnlyList<byte[]> reports = HidReportFramer.CreateOutputReports("QFLAG\r");
+        IReadOnlyList<byte[]> reports = HidReportFramer.CreateOutputReports(VoltronicProtocolConstants.FeatureFlagsCommand);
 
         Assert.Single(reports);
         Assert.Equal(HidConstants.ReportLength, reports[0].Length);
@@ -80,23 +93,16 @@ public class ReadOnlyUpsProbeTests
     [Fact]
     public void ReadOnlyUpsProbe_BuildCapture_ExtractsTokensFrequencyAndStatusByte2()
     {
-        var descriptor = new HidDeviceDescriptor(
-            @"\\?\HID#VID_0665&PID_5161#test",
-            0x0665,
-            0x5161,
-            0x0100,
-            "Forza",
-            "NT-2401PRO",
-            "(none)",
-            9,
-            9);
+        var descriptor = CreateTestDescriptor();
 
         UpsProbeCapture capture = ReadOnlyUpsProbe.BuildCapture(
             descriptor,
-            "QS\r",
+            UpsDiagnosticInquiry.QuickStatus,
             [[0x00, 0x23, 0x72, 0x00]],
             VoltronicFrameMother.Nt2401ProLiveFrame);
 
+        Assert.Equal(UpsDiagnosticInquiry.QuickStatus, capture.Inquiry);
+        Assert.Equal(VoltronicProtocolConstants.QueryStatusCommand, capture.WireCommand);
         Assert.Equal(11, capture.Tokens.Count);
         Assert.Equal(59.97, capture.FrequencyHz);
         Assert.NotNull(capture.StatusByte2Ratings);
@@ -106,30 +112,22 @@ public class ReadOnlyUpsProbeTests
     }
 
     [Fact]
-    public void InspectCommandRunner_SerializeCaptureJson_ContainsDeviceRawHexTokensAndRatings()
+    public void UpsProbeCaptureFormatter_SerializeJson_ContainsDeviceRawHexTokensAndRatings()
     {
-        var descriptor = new HidDeviceDescriptor(
-            @"\\?\HID#VID_0665&PID_5161#test",
-            0x0665,
-            0x5161,
-            0x0100,
-            "Forza",
-            "NT-2401PRO",
-            "(none)",
-            9,
-            9);
+        var descriptor = CreateTestDescriptor();
 
         UpsProbeCapture capture = ReadOnlyUpsProbe.BuildCapture(
             descriptor,
-            "QS\r",
+            UpsDiagnosticInquiry.QuickStatus,
             [[0x00, 0x23, 0x72, 0x00]],
             VoltronicFrameMother.Nt2401ProLiveFrame);
 
-        string json = InspectCommandRunner.SerializeCaptureJson(capture);
+        string json = UpsProbeCaptureFormatter.SerializeJson(capture);
         using var document = JsonDocument.Parse(json);
         JsonElement root = document.RootElement;
 
         Assert.Equal("NT-2401PRO", root.GetProperty("Device").GetProperty("Product").GetString());
+        Assert.Equal("QuickStatus", root.GetProperty("Inquiry").GetString());
         Assert.Contains("72 00", root.GetProperty("RawHex").GetString());
         Assert.Contains("12 C0 00", root.GetProperty("RawHex").GetString());
         Assert.True(root.GetProperty("TokenHexBreakdown").GetArrayLength() >= 11);
@@ -144,12 +142,29 @@ public class ReadOnlyUpsProbeTests
     [InlineData("--inspect", "--cmd", "Q")]
     [InlineData("--inspect", "--cmd")]
     [InlineData("--inspect", "--export")]
-    public void InspectCommandRunner_Run_BlockedOrMissingArguments_ReturnsOneWithoutThrowing(params string[] args)
+    public void InspectModeStrategy_BlockedOrMissingArguments_ReturnsOneWithoutThrowing(params string[] args)
     {
+        ApplicationOptions options = ApplicationOptionsParser.Parse(args);
         using var output = new StringWriter();
-        int exitCode = InspectCommandRunner.Run(args, output);
+        var strategy = new InspectModeStrategy(output);
+
+        int exitCode = strategy.Execute(options);
 
         Assert.Equal(1, exitCode);
         Assert.False(string.IsNullOrWhiteSpace(output.ToString()));
+    }
+
+    private static HidDeviceDescriptor CreateTestDescriptor()
+    {
+        return new HidDeviceDescriptor(
+            @"\\?\HID#VID_0665&PID_5161#test",
+            HidConstants.VendorId,
+            HidConstants.ProductId,
+            0x0100,
+            "Forza",
+            "NT-2401PRO",
+            "(none)",
+            HidConstants.ReportLength,
+            HidConstants.ReportLength);
     }
 }

@@ -62,7 +62,7 @@ public sealed class SimulatedUpsDevicePort : IUpsDevicePort
             if (_beeperActive) statusByte |= VoltronicProtocolConstants.StatusBeeperActiveMask;
             if (_selfTestActive) statusByte |= VoltronicProtocolConstants.StatusSelfTestActiveMask;
 
-            byte[] frameBytes = VoltronicProtocolConstants.BuildBinaryFrame(
+            byte[] frameBytes = VoltronicBinaryFrameBuilder.Build(
                 statusByte1: statusByte,
                 loadPercentage: (byte)loadPct);
 

@@ -1,3 +1,4 @@
+using VoltTray.Core.Models;
 using VoltTray.Infrastructure.Protocol;
 
 namespace VoltTray.Infrastructure.Hid;
@@ -7,7 +8,8 @@ namespace VoltTray.Infrastructure.Hid;
 /// </summary>
 public sealed record UpsProbeCapture(
     HidDeviceDescriptor Device,
-    string Command,
+    UpsDiagnosticInquiry Inquiry,
+    string WireCommand,
     IReadOnlyList<byte[]> RawReports,
     byte[] RawPayload,
     byte[] DeescapedPayload,

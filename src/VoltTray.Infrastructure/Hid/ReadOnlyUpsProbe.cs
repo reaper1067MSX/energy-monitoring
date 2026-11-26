@@ -1,5 +1,6 @@
 using System.Diagnostics;
 using Microsoft.Win32.SafeHandles;
+using VoltTray.Core.Models;
 using VoltTray.Infrastructure.Protocol;
 
 namespace VoltTray.Infrastructure.Hid;
@@ -23,14 +24,12 @@ public sealed class ReadOnlyUpsProbe
     }
 
     /// <summary>
-    /// Discovers the first matching Voltronic/Forza HID device and executes one allowlisted read-only inquiry.
+    /// Discovers the first matching Voltronic/Forza HID device and executes one read-only inquiry.
     /// </summary>
     public UpsProbeCapture? InspectFirstMatchingDevice(
-        string command = VoltronicProtocolConstants.QueryStatusCommand,
+        UpsDiagnosticInquiry inquiry = UpsDiagnosticInquiry.QuickStatus,
         bool includeAllHidDevices = false)
     {
-        UpsInquiryCommandPolicy.EnsureReadOnlyInquiry(command);
-
         HidDeviceDescriptor? targetDevice = _deviceScanner
             .DiscoverDevices(includeAllHidDevices)
             .FirstOrDefault(descriptor =>
@@ -48,21 +47,21 @@ public sealed class ReadOnlyUpsProbe
             return null;
         }
 
-        return QueryReadOnly(handle, targetDevice, command);
+        return QueryReadOnly(handle, targetDevice, inquiry);
     }
 
     /// <summary>
-    /// Executes one allowlisted read-only inquiry against an open HID handle without stripping interior 0x00 bytes.
+    /// Executes one read-only inquiry against an open HID handle without stripping interior 0x00 bytes.
     /// </summary>
     public UpsProbeCapture? QueryReadOnly(
         SafeFileHandle handle,
         HidDeviceDescriptor device,
-        string command)
+        UpsDiagnosticInquiry inquiry)
     {
-        UpsInquiryCommandPolicy.EnsureReadOnlyInquiry(command);
+        string wireCommand = VoltronicInquiryCodec.ToWireCommand(inquiry);
         HidOverlappedIo.DrainInputBuffer(handle, HidConstants.DefaultDrainTimeoutMs);
 
-        if (!HidReportFramer.WriteCommand(handle, command))
+        if (!HidReportFramer.WriteCommand(handle, wireCommand))
         {
             return null;
         }
@@ -90,7 +89,7 @@ public sealed class ReadOnlyUpsProbe
 
         return rawReports.Count == 0
             ? null
-            : BuildCapture(device, command, rawReports, assembledPayload);
+            : BuildCapture(device, inquiry, rawReports, assembledPayload);
     }
 
     /// <summary>
@@ -98,10 +97,12 @@ public sealed class ReadOnlyUpsProbe
     /// </summary>
     public static UpsProbeCapture BuildCapture(
         HidDeviceDescriptor device,
-        string command,
+        UpsDiagnosticInquiry inquiry,
         IReadOnlyList<byte[]> rawReports,
         byte[] rawPayload)
     {
+        string wireCommand = VoltronicInquiryCodec.ToWireCommand(inquiry);
+
         IReadOnlyList<byte[]> tokens = VoltronicParser.TryTokenizeHashFrame(rawPayload, out IReadOnlyList<byte[]> parsedTokens)
             ? parsedTokens
             : Array.Empty<byte[]>();
@@ -119,7 +120,8 @@ public sealed class ReadOnlyUpsProbe
 
         return new UpsProbeCapture(
             device,
-            command,
+            inquiry,
+            wireCommand,
             rawReports,
             rawPayload,
             deescapedPayload,

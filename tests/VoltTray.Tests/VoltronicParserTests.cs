@@ -161,11 +161,34 @@ public class VoltronicParserTests
         Assert.Equal(60.0, VoltronicParser.DecodeFrequencyHz([0x50, 0x0C], [0x12, 0xC0]));
     }
 
+    [Fact]
+    public void VoltronicFrameMother_ProducesExactByteParityForGoldenAndNt2401ProFrames()
+    {
+        byte[] expectedGolden =
+        [
+            0x23, 0x73, 0x01, 0x20, 0x34, 0x20, 0x73, 0x01, 0x20, 0x34, 0x20,
+            0x0E, 0x20, 0x50, 0x0C, 0x20, 0x12, 0xC0, 0x20, 0xE9, 0x20, 0x3C, 0x20,
+            0x08, 0x20, 0xA1, 0x0D
+        ];
+
+        byte[] expectedNt2401Pro =
+        [
+            0x23, 0x72, 0x00, 0x20, 0x34, 0x20, 0x72, 0x00, 0x20, 0x34, 0x20,
+            0x0C, 0x20, 0x50, 0x0B, 0x20, 0x12, 0xC0, 0x00, 0x20, 0xE9, 0x20,
+            0x3C, 0x20, 0x09, 0x20, 0xA1, 0x0D
+        ];
+
+        Assert.Equal(27, VoltronicFrameMother.GoldenFrame.Length);
+        Assert.Equal(expectedGolden, VoltronicFrameMother.GoldenFrame);
+        Assert.Equal(28, VoltronicFrameMother.Nt2401ProLiveFrame.Length);
+        Assert.Equal(expectedNt2401Pro, VoltronicFrameMother.Nt2401ProLiveFrame);
+    }
+
     [Theory]
-    [InlineData((byte)0xA1, 60.0, 2, 24.0, 120.0)]
-    [InlineData((byte)0x02, 50.0, 1, 12.0, 220.0)]
-    [InlineData((byte)0x63, 50.0, 4, 48.0, 230.0)]
-    [InlineData((byte)0x47, 50.0, 3, 36.0, null)]
+    [InlineData(VoltronicProtocolConstants.StatusByte2Nominal, 60.0, 2, 24.0, 120.0)]
+    [InlineData(VoltronicProtocolConstants.StatusByte2European12V50Hz220V, 50.0, 1, 12.0, 220.0)]
+    [InlineData(VoltronicProtocolConstants.StatusByte2Nominal48V50Hz230V, 50.0, 4, 48.0, 230.0)]
+    [InlineData(VoltronicProtocolConstants.StatusByte2Nominal36V50HzUnknownAc, 50.0, 3, 36.0, null)]
     public void DecodeStatusByte2Ratings_ExtractsFrequencyBankAndNominalAc(
         byte statusByte2,
         double expectedFrequencyHz,
