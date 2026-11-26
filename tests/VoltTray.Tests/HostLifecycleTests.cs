@@ -2,8 +2,9 @@ using System.Diagnostics;
 using System.Runtime.InteropServices;
 using VoltTray.Core.Models;
 using VoltTray.Core.Ports;
-using VoltTray.Core.Views;
 using VoltTray.Tests.ObjectMothers;
+using VoltTray.UI.Models;
+using VoltTray.UI.Views;
 
 namespace VoltTray.Tests;
 

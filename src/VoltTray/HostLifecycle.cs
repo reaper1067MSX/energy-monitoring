@@ -1,15 +1,16 @@
 using VoltTray.Core.Models;
 using VoltTray.Core.Ports;
-using VoltTray.Core.Presenters;
 using VoltTray.Core.Services;
-using VoltTray.Core.Views;
 using VoltTray.Infrastructure.OS;
 using VoltTray.UI.Dialogs;
+using VoltTray.UI.Models;
+using VoltTray.UI.Presenters;
 using VoltTray.UI.Rendering;
+using VoltTray.UI.Views;
 
 namespace VoltTray;
 
-public sealed class HostLifecycle : IVoltTrayView, IDisposable
+public sealed class HostLifecycle : IDisposable
 {
     public const int DefaultPollingIntervalMs = 1500, DefaultPauseMinutes = 15;
     private readonly IUpsDevicePort _upsPort;
@@ -43,7 +44,6 @@ public sealed class HostLifecycle : IVoltTrayView, IDisposable
         _exitDialog = exitDialog ?? new ExitDialog();
         _shutdownCoordinator = new ShutdownCoordinator(shutdownPort ?? new WindowsShutdownPort(), notificationPort ?? new WindowsNotificationPort());
         _presenter = new SplitCockpitPresenter(
-            this,
             _trayRenderer,
             _popoverPainter,
             () => _upsPort.ToggleBeeperAsync().GetAwaiter().GetResult(),
@@ -149,8 +149,5 @@ public sealed class HostLifecycle : IVoltTrayView, IDisposable
     }
     public void RequestExit() { Stop(); ExitAction?.Invoke(); }
     public void Stop() { _cts?.Cancel(); try { _pollingTask?.Wait(500); } catch { } _pollingTask = null; _cts?.Dispose(); _cts = null; _pauseTimer?.Dispose(); _pauseTimer = null; _upsPort.Disconnect(); }
-    public void Initialize() { }
-    public void UpdateTelemetry(UpsTelemetry telemetry) { }
-    public void SetOperationalState(UpsOperationalState state) => OperationalState = state;
     public void Dispose() { Stop(); _trayRenderer.Dispose(); _popoverPainter.Dispose(); _upsPort.Dispose(); }
 }

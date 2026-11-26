@@ -1,6 +1,6 @@
-using VoltTray.Core.Models;
+using VoltTray.UI.Models;
 
-namespace VoltTray.Core.Views;
+namespace VoltTray.UI.Views;
 
 public interface IExitDialogView
 {

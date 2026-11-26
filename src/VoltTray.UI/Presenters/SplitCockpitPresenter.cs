@@ -1,11 +1,11 @@
 using VoltTray.Core.Models;
-using VoltTray.Core.Views;
+using VoltTray.UI.Models;
+using VoltTray.UI.Views;
 
-namespace VoltTray.Core.Presenters;
+namespace VoltTray.UI.Presenters;
 
 public class SplitCockpitPresenter
 {
-    private readonly IVoltTrayView _view;
     private readonly ITrayIconView _trayIcon;
     private readonly IPopoverView _popover;
     private readonly Func<bool> _toggleBeeper;
@@ -14,26 +14,20 @@ public class SplitCockpitPresenter
     public UpsTelemetry? CurrentTelemetry { get; private set; }
 
     public SplitCockpitPresenter(
-        IVoltTrayView view,
         ITrayIconView trayIcon,
         IPopoverView popover,
         Func<bool> toggleBeeper,
         Func<bool> triggerSelfTest)
     {
-        _view = view ?? throw new ArgumentNullException(nameof(view));
         _trayIcon = trayIcon ?? throw new ArgumentNullException(nameof(trayIcon));
         _popover = popover ?? throw new ArgumentNullException(nameof(popover));
         _toggleBeeper = toggleBeeper ?? throw new ArgumentNullException(nameof(toggleBeeper));
         _triggerSelfTest = triggerSelfTest ?? throw new ArgumentNullException(nameof(triggerSelfTest));
     }
 
-    public void Initialize() => _view.Initialize();
-
     public void UpdateTelemetry(UpsTelemetry telemetry, int dpi = 96)
     {
         CurrentTelemetry = telemetry;
-        _view.UpdateTelemetry(telemetry);
-        _view.SetOperationalState(telemetry.State);
 
         _trayIcon.UpdateIcon(telemetry.State, telemetry.BatteryPercentage, dpi);
         _trayIcon.SetTooltip(FormatTooltip(telemetry.State, telemetry.BatteryPercentage, telemetry.EstimatedRuntimeMinutes));

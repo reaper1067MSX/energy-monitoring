@@ -1,4 +1,4 @@
-namespace VoltTray.Core.Models;
+namespace VoltTray.UI.Models;
 
 public enum UITheme
 {

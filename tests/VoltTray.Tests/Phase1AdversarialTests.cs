@@ -1,35 +1,14 @@
 using System.Globalization;
 using VoltTray.Core.Models;
-using VoltTray.Core.Presenters;
-using VoltTray.Core.Tokens;
-using VoltTray.Core.Views;
+using VoltTray.UI.Models;
+using VoltTray.UI.Presenters;
+using VoltTray.UI.Tokens;
+using VoltTray.UI.Views;
 
 namespace VoltTray.Tests;
 
 public class Phase1AdversarialTests
 {
-    private class TrackingVoltTrayView : IVoltTrayView
-    {
-        public int InitializeCount { get; private set; }
-        public int UpdateTelemetryCount { get; private set; }
-        public int SetOperationalStateCount { get; private set; }
-        public UpsTelemetry? LastTelemetry { get; private set; }
-        public UpsOperationalState? LastState { get; private set; }
-
-        public void Initialize() => InitializeCount++;
-        public void UpdateTelemetry(UpsTelemetry telemetry)
-        {
-            UpdateTelemetryCount++;
-            LastTelemetry = telemetry;
-        }
-        public void SetOperationalState(UpsOperationalState state)
-        {
-            SetOperationalStateCount++;
-            LastState = state;
-        }
-        public void Dispose() { }
-    }
-
     private class TrackingTrayIconView : ITrayIconView
     {
         public int UpdateIconCount { get; private set; }
@@ -284,14 +263,12 @@ public class Phase1AdversarialTests
     [Fact]
     public void ActionDockCommands_IdempotencyAndStatePurity()
     {
-        var mockView = new TrackingVoltTrayView();
         var mockTray = new TrackingTrayIconView();
         var mockPopover = new TrackingPopoverView();
 
         int beeperCalls = 0;
         int selfTestCalls = 0;
         var presenter = new SplitCockpitPresenter(
-            view: mockView,
             trayIcon: mockTray,
             popover: mockPopover,
             toggleBeeper: () => { beeperCalls++; return true; },
@@ -320,18 +297,16 @@ public class Phase1AdversarialTests
 
         // State purity: presenter telemetry and view references remain unaffected by command dispatches
         Assert.Same(telemetry, presenter.CurrentTelemetry);
-        Assert.Equal(1, mockView.UpdateTelemetryCount);
+        Assert.Equal(1, mockTray.UpdateIconCount);
     }
 
     [Fact]
     public void ActionDockCommands_PropagateFalseOnCommunicationFailure()
     {
-        var mockView = new TrackingVoltTrayView();
         var mockTray = new TrackingTrayIconView();
         var mockPopover = new TrackingPopoverView();
 
         var presenter = new SplitCockpitPresenter(
-            view: mockView,
             trayIcon: mockTray,
             popover: mockPopover,
             toggleBeeper: () => false,
@@ -348,34 +323,27 @@ public class Phase1AdversarialTests
     [Fact]
     public void Constructor_ThrowsArgumentNullException_OnAnyNullDependency()
     {
-        var view = new TrackingVoltTrayView();
         var tray = new TrackingTrayIconView();
         var popover = new TrackingPopoverView();
         Func<bool> action = () => true;
 
-        Assert.Throws<ArgumentNullException>("view", () => new SplitCockpitPresenter(null!, tray, popover, action, action));
-        Assert.Throws<ArgumentNullException>("trayIcon", () => new SplitCockpitPresenter(view, null!, popover, action, action));
-        Assert.Throws<ArgumentNullException>("popover", () => new SplitCockpitPresenter(view, tray, null!, action, action));
-        Assert.Throws<ArgumentNullException>("toggleBeeper", () => new SplitCockpitPresenter(view, tray, popover, null!, action));
-        Assert.Throws<ArgumentNullException>("triggerSelfTest", () => new SplitCockpitPresenter(view, tray, popover, action, null!));
+        Assert.Throws<ArgumentNullException>("trayIcon", () => new SplitCockpitPresenter(null!, popover, action, action));
+        Assert.Throws<ArgumentNullException>("popover", () => new SplitCockpitPresenter(tray, null!, action, action));
+        Assert.Throws<ArgumentNullException>("toggleBeeper", () => new SplitCockpitPresenter(tray, popover, null!, action));
+        Assert.Throws<ArgumentNullException>("triggerSelfTest", () => new SplitCockpitPresenter(tray, popover, action, null!));
     }
 
     [Fact]
     public void Presenter_RapidStateTransitions_ConsistentlyUpdatesViewsAndColors()
     {
-        var mockView = new TrackingVoltTrayView();
         var mockTray = new TrackingTrayIconView();
         var mockPopover = new TrackingPopoverView();
 
         var presenter = new SplitCockpitPresenter(
-            view: mockView,
             trayIcon: mockTray,
             popover: mockPopover,
             toggleBeeper: () => true,
             triggerSelfTest: () => true);
-
-        presenter.Initialize();
-        Assert.Equal(1, mockView.InitializeCount);
 
         UpsOperationalState[] statesSequence =
         [
@@ -395,8 +363,6 @@ public class Phase1AdversarialTests
             var telemetry = CreateTelemetry(state: state);
             presenter.UpdateTelemetry(telemetry, dpi: 96 + i * 24);
 
-            Assert.Same(telemetry, mockView.LastTelemetry);
-            Assert.Equal(state, mockView.LastState);
             Assert.Equal(state, mockTray.LastState);
             Assert.Equal(96 + i * 24, mockTray.LastDpi);
 
@@ -413,19 +379,16 @@ public class Phase1AdversarialTests
             Assert.Equal(7, lightColor.Length);
         }
 
-        Assert.Equal(statesSequence.Length, mockView.UpdateTelemetryCount);
         Assert.Equal(statesSequence.Length, mockTray.UpdateIconCount);
     }
 
     [Fact]
     public void TogglePopover_WithoutTelemetry_DoesNotShow()
     {
-        var mockView = new TrackingVoltTrayView();
         var mockTray = new TrackingTrayIconView();
         var mockPopover = new TrackingPopoverView();
 
         var presenter = new SplitCockpitPresenter(
-            view: mockView,
             trayIcon: mockTray,
             popover: mockPopover,
             toggleBeeper: () => true,
@@ -442,12 +405,10 @@ public class Phase1AdversarialTests
     [Fact]
     public void TogglePopover_MultiCycleTransitions_HidesAndShowsCleanly()
     {
-        var mockView = new TrackingVoltTrayView();
         var mockTray = new TrackingTrayIconView();
         var mockPopover = new TrackingPopoverView();
 
         var presenter = new SplitCockpitPresenter(
-            view: mockView,
             trayIcon: mockTray,
             popover: mockPopover,
             toggleBeeper: () => true,

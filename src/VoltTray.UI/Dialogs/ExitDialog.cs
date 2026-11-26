@@ -1,5 +1,5 @@
-using VoltTray.Core.Models;
-using VoltTray.Core.Views;
+using VoltTray.UI.Models;
+using VoltTray.UI.Views;
 
 namespace VoltTray.UI.Dialogs;
 

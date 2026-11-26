@@ -1,4 +1,5 @@
 using VoltTray.Core.Models;
+using VoltTray.UI.Models;
 
 namespace VoltTray.Tests;
 

@@ -1,24 +1,13 @@
 using VoltTray.Core.Models;
-using VoltTray.Core.Presenters;
-using VoltTray.Core.Views;
 using VoltTray.Tests.ObjectMothers;
+using VoltTray.UI.Models;
+using VoltTray.UI.Presenters;
+using VoltTray.UI.Views;
 
 namespace VoltTray.Tests;
 
 public class SplitCockpitPresenterTests
 {
-    private class MockVoltTrayView : IVoltTrayView
-    {
-        public bool Initialized { get; private set; }
-        public UpsTelemetry? LastTelemetry { get; private set; }
-        public UpsOperationalState? LastState { get; private set; }
-
-        public void Initialize() => Initialized = true;
-        public void UpdateTelemetry(UpsTelemetry telemetry) => LastTelemetry = telemetry;
-        public void SetOperationalState(UpsOperationalState state) => LastState = state;
-        public void Dispose() { }
-    }
-
     private class MockTrayIconView : ITrayIconView
     {
         public UpsOperationalState? LastState { get; private set; }
@@ -98,7 +87,6 @@ public class SplitCockpitPresenterTests
         int selfTestCalls = 0;
 
         var presenter = new SplitCockpitPresenter(
-            view: new MockVoltTrayView(),
             trayIcon: new MockTrayIconView(),
             popover: new MockPopoverView(),
             toggleBeeper: () => { beeperCalls++; return true; },
@@ -127,28 +115,21 @@ public class SplitCockpitPresenterTests
     [Fact]
     public void UpdateTelemetry_UpdatesViewsAndGeneratesTooltip()
     {
-        var mockView = new MockVoltTrayView();
         var mockTray = new MockTrayIconView();
         var mockPopover = new MockPopoverView();
         bool beeperTriggered = false;
         bool selfTestTriggered = false;
 
         var presenter = new SplitCockpitPresenter(
-            view: mockView,
             trayIcon: mockTray,
             popover: mockPopover,
             toggleBeeper: () => { beeperTriggered = true; return true; },
             triggerSelfTest: () => { selfTestTriggered = true; return true; });
 
-        presenter.Initialize();
-        Assert.True(mockView.Initialized);
-
         var telemetry = TelemetryMother.CreateLineNormal(inV: 116.2, outV: 116.2, runtimeMinutes: 25);
 
         presenter.UpdateTelemetry(telemetry, dpi: 144);
 
-        Assert.Same(telemetry, mockView.LastTelemetry);
-        Assert.Equal(UpsOperationalState.LineNormal, mockView.LastState);
         Assert.Equal(UpsOperationalState.LineNormal, mockTray.LastState);
         Assert.Equal(100, mockTray.LastBatteryPct);
         Assert.Equal(144, mockTray.LastDpi);
@@ -168,12 +149,10 @@ public class SplitCockpitPresenterTests
     [Fact]
     public void TogglePopover_ShowsWhenHidden_AndHidesWhenVisible()
     {
-        var mockView = new MockVoltTrayView();
         var mockTray = new MockTrayIconView();
         var mockPopover = new MockPopoverView();
 
         var presenter = new SplitCockpitPresenter(
-            view: mockView,
             trayIcon: mockTray,
             popover: mockPopover,
             toggleBeeper: () => true,

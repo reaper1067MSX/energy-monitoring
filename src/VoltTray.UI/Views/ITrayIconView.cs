@@ -1,6 +1,6 @@
 using VoltTray.Core.Models;
 
-namespace VoltTray.Core.Views;
+namespace VoltTray.UI.Views;
 
 public interface ITrayIconView : IDisposable
 {

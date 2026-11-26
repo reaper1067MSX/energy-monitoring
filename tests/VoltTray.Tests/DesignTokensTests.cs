@@ -1,5 +1,6 @@
 using VoltTray.Core.Models;
-using VoltTray.Core.Tokens;
+using VoltTray.UI.Models;
+using VoltTray.UI.Tokens;
 
 namespace VoltTray.Tests;
 

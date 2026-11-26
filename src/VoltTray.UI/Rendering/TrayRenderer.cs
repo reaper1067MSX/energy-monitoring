@@ -1,7 +1,7 @@
 using System.Runtime.InteropServices;
 using VoltTray.Core.Models;
-using VoltTray.Core.Views;
 using VoltTray.UI.Interop;
+using VoltTray.UI.Views;
 
 namespace VoltTray.UI.Rendering;
 
