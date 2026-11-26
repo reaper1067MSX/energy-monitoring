@@ -1,7 +1,8 @@
 using System.Globalization;
 using VoltTray.Core.Models;
+using VoltTray.UI.Models;
 
-namespace VoltTray.Core.Tokens;
+namespace VoltTray.UI.Tokens;
 
 public static class DesignTokens
 {

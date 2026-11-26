@@ -1,5 +1,6 @@
 using VoltTray.Core.Models;
 using VoltTray.UI.Dialogs;
+using VoltTray.UI.Models;
 using VoltTray.UI.Rendering;
 
 namespace VoltTray.Tests;
