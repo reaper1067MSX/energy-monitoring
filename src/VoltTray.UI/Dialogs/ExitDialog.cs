@@ -1,5 +1,7 @@
 using System.Globalization;
-using VoltTray.UI.Interop;
+using Windows.Win32;
+using Windows.Win32.Foundation;
+using Windows.Win32.UI.WindowsAndMessaging;
 using VoltTray.UI.Models;
 using VoltTray.UI.Tokens;
 
@@ -50,7 +52,7 @@ public sealed class ExitDialog : IExitDialogView
                 LocalizationConstants.ExitCancelEn);
     }
 
-    public ExitDialogResult Show(UITheme theme, nint ownerHandle = 0)
+    public unsafe ExitDialogResult Show(UITheme theme, nint ownerHandle = 0)
     {
         if (MockDialogHandler != null)
         {
@@ -64,16 +66,22 @@ public sealed class ExitDialog : IExitDialogView
 
         ExitDialogCopy copy = GetLocalizedCopy();
         string prompt = $"{copy.Body}\n\n• Yes: {copy.PauseLabel} ({copy.PauseHelp})\n• No: {copy.CloseLabel} ({copy.CloseHelp})\n• Cancel: {copy.CancelLabel}";
-        int response = GdiNative.MessageBox(
-            ownerHandle,
-            prompt,
-            copy.Title,
-            Win32UiConstants.MbYesNoCancel | Win32UiConstants.MbIconQuestion | Win32UiConstants.MbTopmost);
+
+        MESSAGEBOX_RESULT response;
+        fixed (char* pPrompt = prompt)
+        fixed (char* pTitle = copy.Title)
+        {
+            response = PInvoke.MessageBox(
+                new HWND(ownerHandle),
+                new PCWSTR(pPrompt),
+                new PCWSTR(pTitle),
+                MESSAGEBOX_STYLE.MB_YESNOCANCEL | MESSAGEBOX_STYLE.MB_ICONQUESTION | MESSAGEBOX_STYLE.MB_TOPMOST);
+        }
 
         return response switch
         {
-            Win32UiConstants.IdYes => ExitDialogResult.Pause,
-            Win32UiConstants.IdNo => ExitDialogResult.Close,
+            MESSAGEBOX_RESULT.IDYES => ExitDialogResult.Pause,
+            MESSAGEBOX_RESULT.IDNO => ExitDialogResult.Close,
             _ => ExitDialogResult.Cancel
         };
     }

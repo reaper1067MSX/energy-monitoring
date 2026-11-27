@@ -7,7 +7,7 @@ namespace VoltTray.UI.TaskbarPill;
 /// Computes non-overlapping taskbar pill bounds anchored left of TrayNotifyWnd,
 /// with Win11 24H2 cold-boot fallback, width clamping, and Start-button vertical centering.
 /// </summary>
-public sealed class TaskbarPillPlacementCalculator : ITaskbarPillPlacementCalculator
+internal sealed class TaskbarPillPlacementCalculator : ITaskbarPillPlacementCalculator
 {
     public ViewRect Calculate(TaskbarPillLayoutSnapshot snapshot)
     {

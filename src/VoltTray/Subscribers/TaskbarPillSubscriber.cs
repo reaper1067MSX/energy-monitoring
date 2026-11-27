@@ -11,9 +11,9 @@ public sealed class TaskbarPillSubscriber : IDisposable
 {
     private readonly IDisposable _telemetrySubscription;
     private readonly ITaskbarPillView _pillView;
-    private readonly HostLifecycle _lifecycle;
+    private readonly IHostLifecycle _lifecycle;
 
-    public TaskbarPillSubscriber(IEventBus eventBus, ITaskbarPillView pillView, HostLifecycle lifecycle)
+    public TaskbarPillSubscriber(IEventBus eventBus, ITaskbarPillView pillView, IHostLifecycle lifecycle)
     {
         ArgumentNullException.ThrowIfNull(eventBus);
         _pillView = pillView ?? throw new ArgumentNullException(nameof(pillView));

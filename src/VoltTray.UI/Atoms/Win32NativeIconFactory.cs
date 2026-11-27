@@ -1,3 +1,6 @@
+using Windows.Win32;
+using Windows.Win32.Graphics.Gdi;
+using Windows.Win32.UI.WindowsAndMessaging;
 using VoltTray.UI.Interop;
 
 namespace VoltTray.UI.Atoms;
@@ -5,30 +8,33 @@ namespace VoltTray.UI.Atoms;
 /// <summary>
 /// Converts 32-bpp ARGB pixel buffers into Win32 HICON handles via CreateDIBSection.
 /// </summary>
-public sealed class Win32NativeIconFactory : INativeIconFactory
+internal sealed class Win32NativeIconFactory : INativeIconFactory
 {
     public unsafe IntPtr CreateFromArgbPixels(uint[] pixels, int size)
     {
         ArgumentNullException.ThrowIfNull(pixels);
 
-        var header = new BitmapInfoHeader
+        var bmi = new BITMAPINFO
         {
-            Size = (uint)sizeof(BitmapInfoHeader),
-            Width = size,
-            Height = -size,
-            Planes = Win32UiConstants.ColorPlanesSingle,
-            BitCount = Win32UiConstants.BitsPerPixel32,
-            Compression = Win32UiConstants.BiRgb
+            bmiHeader = new BITMAPINFOHEADER
+            {
+                biSize = (uint)sizeof(BITMAPINFOHEADER),
+                biWidth = size,
+                biHeight = -size,
+                biPlanes = Win32UiConstants.ColorPlanesSingle,
+                biBitCount = Win32UiConstants.BitsPerPixel32,
+                biCompression = (uint)BI_COMPRESSION.BI_RGB
+            }
         };
 
-        IntPtr hbmColor = GdiNative.CreateDIBSection(
-            IntPtr.Zero,
-            ref header,
-            Win32UiConstants.DibRgbColors,
-            out IntPtr bitsPtr,
-            IntPtr.Zero,
+        HBITMAP hbmColor = PInvoke.CreateDIBSection(
+            default,
+            &bmi,
+            DIB_USAGE.DIB_RGB_COLORS,
+            out void* bitsPtr,
+            default,
             0);
-        if (hbmColor == IntPtr.Zero || bitsPtr == IntPtr.Zero)
+        if (hbmColor.IsNull || bitsPtr == null)
         {
             return IntPtr.Zero;
         }
@@ -37,40 +43,40 @@ public sealed class Win32NativeIconFactory : INativeIconFactory
         {
             Buffer.MemoryCopy(
                 srcPtr,
-                (void*)bitsPtr,
+                bitsPtr,
                 (long)pixels.Length * sizeof(uint),
                 (long)pixels.Length * sizeof(uint));
         }
 
-        IntPtr hbmMask = GdiNative.CreateBitmap(
+        HBITMAP hbmMask = PInvoke.CreateBitmap(
             size,
             size,
             Win32UiConstants.ColorPlanesSingle,
             Win32UiConstants.ColorPlanesSingle,
-            IntPtr.Zero);
+            null);
 
-        var info = new IconInfo
+        var info = new ICONINFO
         {
-            IsIcon = 1,
-            ColorBitmap = hbmColor,
-            MaskBitmap = hbmMask
+            fIcon = true,
+            hbmColor = hbmColor,
+            hbmMask = hbmMask
         };
 
-        IntPtr hIcon = GdiNative.CreateIconIndirect(ref info);
-        GdiNative.DeleteObject(hbmColor);
-        if (hbmMask != IntPtr.Zero)
+        HICON hIcon = PInvoke.CreateIconIndirect(&info);
+        PInvoke.DeleteObject(hbmColor);
+        if (!hbmMask.IsNull)
         {
-            GdiNative.DeleteObject(hbmMask);
+            PInvoke.DeleteObject(hbmMask);
         }
 
-        return hIcon;
+        return (IntPtr)hIcon.Value;
     }
 
     public void DestroyIcon(IntPtr iconHandle)
     {
         if (iconHandle != IntPtr.Zero)
         {
-            GdiNative.DestroyIcon(iconHandle);
+            PInvoke.DestroyIcon(new HICON(iconHandle));
         }
     }
 }

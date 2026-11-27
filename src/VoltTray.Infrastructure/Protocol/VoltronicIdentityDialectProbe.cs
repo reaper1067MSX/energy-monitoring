@@ -6,7 +6,7 @@ namespace VoltTray.Infrastructure.Protocol;
 /// <summary>
 /// Probes Voltronic M\r identity and resolves 'T', 'P', or 'V' dialects via factory dispatch map.
 /// </summary>
-public sealed class VoltronicIdentityDialectProbe : IProtocolDialectProbe
+internal sealed class VoltronicIdentityDialectProbe : IProtocolDialectProbe
 {
     private static readonly IReadOnlyDictionary<
         char,

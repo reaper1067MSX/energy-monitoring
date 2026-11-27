@@ -121,6 +121,7 @@ public class ArchitectureBoundaryTests
             {
                 if (type.IsEnum ||
                     type.Name.StartsWith("<", StringComparison.Ordinal) ||
+                    (type.Namespace != null && type.Namespace.StartsWith("Windows.Win32", StringComparison.Ordinal)) ||
                     typeof(JsonSerializerContext).IsAssignableFrom(type))
                 {
                     continue;

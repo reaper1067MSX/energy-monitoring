@@ -2,7 +2,7 @@ using VoltTray.Core.Telemetry;
 
 namespace VoltTray.Infrastructure.Diagnostics;
 
-public sealed class SingleCycleBatterySpikePhysicsRule : ITelemetryPhysicsRule
+internal sealed class SingleCycleBatterySpikePhysicsRule : ITelemetryPhysicsRule
 {
     public TelemetryAnomalyKind? Evaluate(UpsTelemetry candidate, UpsTelemetry? lastKnownGood)
     {

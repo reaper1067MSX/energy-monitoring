@@ -4,7 +4,7 @@ using VoltTray.UI.Models;
 
 namespace VoltTray.UI.Atoms.TrayGlyphs;
 
-public sealed class AvrWaveTrayGlyphRenderer : ITrayStateGlyphRenderer
+internal sealed class AvrWaveTrayGlyphRenderer : ITrayStateGlyphRenderer
 {
     public IReadOnlyCollection<UpsOperationalState> SupportedStates { get; } = [UpsOperationalState.ChargingAvr];
     public bool UsesDashedOutline => false;

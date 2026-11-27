@@ -4,7 +4,7 @@ using VoltTray.UI.Models;
 
 namespace VoltTray.UI.Atoms.TrayGlyphs;
 
-public sealed class NoCommTrayGlyphRenderer : ITrayStateGlyphRenderer
+internal sealed class NoCommTrayGlyphRenderer : ITrayStateGlyphRenderer
 {
     public IReadOnlyCollection<UpsOperationalState> SupportedStates { get; } = [UpsOperationalState.CommunicationsLost];
     public bool UsesDashedOutline => true;

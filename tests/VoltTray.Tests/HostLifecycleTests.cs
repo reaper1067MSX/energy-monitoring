@@ -351,4 +351,48 @@ public class HostLifecycleTests
             }
         }
     }
+
+    [Fact]
+    public async Task OpenContextMenuFromTray_DispatchesOpenPauseResumeTestBeeperAndExitActions()
+    {
+        using var port = new MockUpsPort { NextTelemetry = LineNormalTelemetry };
+        using var tray = new MockTrayIcon();
+        using var popover = new MockPopover();
+        var exitDialog = new MockExitDialog { Result = ExitDialogResult.Cancel };
+        var menu = new Win32ContextMenu(enableNativeMenu: false);
+
+        using var lifecycle = new HostLifecycle(
+            port,
+            new FakeShutdownPort(),
+            new FakeNotificationPort(),
+            tray,
+            popover,
+            exitDialog,
+            contextMenu: menu);
+
+        await lifecycle.StepAsync();
+
+        menu.MockMenuHandler = _ => ContextMenuAction.Open;
+        lifecycle.OpenContextMenuFromTray();
+        Assert.True(popover.IsVisible);
+
+        menu.MockMenuHandler = _ => ContextMenuAction.ToggleUsbMonitoring;
+        lifecycle.OpenContextMenuFromTray();
+        Assert.True(lifecycle.IsPaused);
+        lifecycle.OpenContextMenuFromTray();
+        Assert.False(lifecycle.IsPaused);
+
+        menu.MockMenuHandler = _ => ContextMenuAction.BatteryTest;
+        lifecycle.OpenContextMenuFromTray();
+
+        menu.MockMenuHandler = _ => ContextMenuAction.ToggleBeeper;
+        lifecycle.OpenContextMenuFromTray();
+
+        bool exitRequested = false;
+        lifecycle.ExitAction = () => exitRequested = true;
+        exitDialog.Result = ExitDialogResult.Close;
+        menu.MockMenuHandler = _ => ContextMenuAction.Exit;
+        lifecycle.OpenContextMenuFromTray();
+        Assert.True(exitRequested);
+    }
 }

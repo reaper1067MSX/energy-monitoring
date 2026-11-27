@@ -2,7 +2,7 @@ using VoltTray.Core.Telemetry;
 
 namespace VoltTray.Infrastructure.Diagnostics;
 
-public sealed class MainsInputDropPhysicsRule : ITelemetryPhysicsRule
+internal sealed class MainsInputDropPhysicsRule : ITelemetryPhysicsRule
 {
     public TelemetryAnomalyKind? Evaluate(UpsTelemetry candidate, UpsTelemetry? lastKnownGood)
     {

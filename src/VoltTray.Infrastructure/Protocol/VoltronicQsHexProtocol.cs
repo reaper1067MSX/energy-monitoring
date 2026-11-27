@@ -7,7 +7,7 @@ namespace VoltTray.Infrastructure.Protocol;
 /// Voltronic binary QS-Hex protocol strategy supporting dialects 'T' (11-token + Status Byte 2)
 /// and 'P' (10-token without Status Byte 2).
 /// </summary>
-public sealed class VoltronicQsHexProtocol : IUpsProtocolStrategy
+internal sealed class VoltronicQsHexProtocol : IUpsProtocolStrategy
 {
     private readonly VoltronicParser _parser;
 

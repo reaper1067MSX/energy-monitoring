@@ -1,4 +1,10 @@
+using System.Collections.Concurrent;
+using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
+using Windows.Win32;
+using Windows.Win32.Foundation;
+using Windows.Win32.Graphics.Gdi;
+using Windows.Win32.UI.WindowsAndMessaging;
 using VoltTray.Core.Telemetry;
 using VoltTray.UI.Interop;
 using VoltTray.UI.Models;
@@ -11,8 +17,13 @@ namespace VoltTray.UI.TaskbarPill;
 /// Layered Win32 taskbar pill widget anchored inside Shell_TrayWnd (with HWND_TOPMOST fallback),
 /// marshaling UI updates onto the owning HWND thread and handling DPI, fullscreen, and TaskbarCreated.
 /// </summary>
-public sealed class TaskbarPillWindow : ITaskbarPillView
+internal sealed class TaskbarPillWindow : ITaskbarPillView
 {
+    private static readonly ConcurrentDictionary<nint, TaskbarPillWindow> Instances = new();
+
+    [ThreadStatic]
+    private static TaskbarPillWindow? t_creatingInstance;
+
     private readonly ITaskbarPillPlacementCalculator _placementCalculator;
     private readonly ITaskbarPillSurfaceRenderer _surfaceRenderer;
     private readonly IFullscreenStateProvider _fullscreenProvider;
@@ -20,11 +31,10 @@ public sealed class TaskbarPillWindow : ITaskbarPillView
     private readonly bool _enableNativeWindow;
     private readonly object _stateLock = new();
 
-    private IntPtr _hwnd;
-    private WndProcDelegate? _wndProc;
+    private HWND _hwnd;
     private UpsTelemetry? _lastTelemetry;
     private bool _isParentedToShellTray;
-    private NativePoint _parentOrigin;
+    private System.Drawing.Point _parentOrigin;
     private bool _isWindowShown;
     private bool _isDisposed;
 
@@ -59,7 +69,7 @@ public sealed class TaskbarPillWindow : ITaskbarPillView
     {
         ArgumentNullException.ThrowIfNull(telemetry);
 
-        IntPtr targetHwnd;
+        HWND targetHwnd;
         lock (_stateLock)
         {
             if (_isDisposed)
@@ -71,9 +81,9 @@ public sealed class TaskbarPillWindow : ITaskbarPillView
             targetHwnd = _hwnd;
         }
 
-        if (_enableNativeWindow && targetHwnd != IntPtr.Zero)
+        if (_enableNativeWindow && !targetHwnd.IsNull)
         {
-            GdiNative.PostMessage(targetHwnd, Win32UiConstants.WmPillRefresh, IntPtr.Zero, IntPtr.Zero);
+            PInvoke.PostMessage(targetHwnd, Win32UiConstants.WmPillRefresh, default, default);
             return;
         }
 
@@ -82,16 +92,16 @@ public sealed class TaskbarPillWindow : ITaskbarPillView
 
     public void Hide()
     {
-        IntPtr targetHwnd;
+        HWND targetHwnd;
         lock (_stateLock)
         {
             IsVisible = false;
             targetHwnd = _hwnd;
         }
 
-        if (_enableNativeWindow && targetHwnd != IntPtr.Zero)
+        if (_enableNativeWindow && !targetHwnd.IsNull)
         {
-            GdiNative.PostMessage(targetHwnd, Win32UiConstants.WmPillHide, IntPtr.Zero, IntPtr.Zero);
+            PInvoke.PostMessage(targetHwnd, Win32UiConstants.WmPillHide, default, default);
         }
     }
 
@@ -109,7 +119,7 @@ public sealed class TaskbarPillWindow : ITaskbarPillView
 
         if (_enableNativeWindow)
         {
-            if (_hwnd == IntPtr.Zero || !GdiNative.IsWindow(_hwnd))
+            if (_hwnd.IsNull || !PInvoke.IsWindow(_hwnd))
             {
                 _isWindowShown = false;
                 InitializeNativeWindow();
@@ -137,7 +147,7 @@ public sealed class TaskbarPillWindow : ITaskbarPillView
             return true;
         }
 
-        if (msg == Win32UiConstants.WmDpiChanged)
+        if (msg == PInvoke.WM_DPICHANGED)
         {
             int newDpi = (int)(wParam.ToInt64() & 0xFFFF);
             if (newDpi > 0)
@@ -152,13 +162,13 @@ public sealed class TaskbarPillWindow : ITaskbarPillView
             return true;
         }
 
-        if (msg == Win32UiConstants.WmLButtonUp)
+        if (msg == PInvoke.WM_LBUTTONUP)
         {
             OnPillLeftClicked?.Invoke();
             return true;
         }
 
-        if (msg == Win32UiConstants.WmRButtonUp)
+        if (msg == PInvoke.WM_RBUTTONUP)
         {
             OnPillRightClicked?.Invoke();
             return true;
@@ -167,9 +177,9 @@ public sealed class TaskbarPillWindow : ITaskbarPillView
         return false;
     }
 
-    public void Dispose()
+    public unsafe void Dispose()
     {
-        IntPtr hwndToDestroy;
+        HWND hwndToDestroy;
         lock (_stateLock)
         {
             if (_isDisposed)
@@ -181,14 +191,18 @@ public sealed class TaskbarPillWindow : ITaskbarPillView
             IsVisible = false;
             _isWindowShown = false;
             hwndToDestroy = _hwnd;
-            _hwnd = IntPtr.Zero;
+            _hwnd = default;
         }
 
-        if (hwndToDestroy != IntPtr.Zero)
+        if (!hwndToDestroy.IsNull)
         {
-            GdiNative.DestroyWindow(hwndToDestroy);
-            IntPtr hInstance = GdiNative.GetModuleHandle(null);
-            GdiNative.UnregisterClass(Win32UiConstants.TaskbarPillWindowClass, hInstance);
+            Instances.TryRemove((nint)hwndToDestroy.Value, out _);
+            PInvoke.DestroyWindow(hwndToDestroy);
+            HMODULE hInstance = PInvoke.GetModuleHandle((PCWSTR)null);
+            fixed (char* classNamePtr = Win32UiConstants.TaskbarPillWindowClass)
+            {
+                PInvoke.UnregisterClass(new PCWSTR(classNamePtr), hInstance);
+            }
         }
     }
 
@@ -220,7 +234,7 @@ public sealed class TaskbarPillWindow : ITaskbarPillView
             IsVisible = true;
         }
 
-        if (!_enableNativeWindow || _hwnd == IntPtr.Zero)
+        if (!_enableNativeWindow || _hwnd.IsNull)
         {
             return;
         }
@@ -243,9 +257,9 @@ public sealed class TaskbarPillWindow : ITaskbarPillView
             _isWindowShown = false;
         }
 
-        if (_hwnd != IntPtr.Zero)
+        if (!_hwnd.IsNull)
         {
-            GdiNative.ShowWindow(_hwnd, Win32UiConstants.SwHide);
+            PInvoke.ShowWindow(_hwnd, SHOW_WINDOW_CMD.SW_HIDE);
         }
     }
 
@@ -275,9 +289,9 @@ public sealed class TaskbarPillWindow : ITaskbarPillView
         return _placementCalculator.Calculate(snapshot);
     }
 
-    private TaskbarPillLayoutSnapshot CaptureShellSnapshot(int pillWidth, int pillHeight, int fallbackMargin)
+    private unsafe TaskbarPillLayoutSnapshot CaptureShellSnapshot(int pillWidth, int pillHeight, int fallbackMargin)
     {
-        IntPtr shellTray = GdiNative.FindWindow(Win32UiConstants.ShellTrayWndClass, null);
+        HWND shellTray = FindTopLevelWindow(Win32UiConstants.ShellTrayWndClass);
         ViewRect fallbackTaskbar = new(
             0,
             LayoutTokens.FallbackScreenHeightPx - Win32UiConstants.PillDefaultHeightPx,
@@ -285,12 +299,12 @@ public sealed class TaskbarPillWindow : ITaskbarPillView
             LayoutTokens.FallbackScreenHeightPx);
 
         ViewRect taskbarRect = TryGetRect(shellTray) ?? fallbackTaskbar;
-        _parentOrigin = new NativePoint(taskbarRect.Left, taskbarRect.Top);
+        _parentOrigin = new System.Drawing.Point(taskbarRect.Left, taskbarRect.Top);
 
-        IntPtr notifyWnd = shellTray != IntPtr.Zero ? GdiNative.FindWindowEx(shellTray, IntPtr.Zero, Win32UiConstants.TrayNotifyWndClass, null) : IntPtr.Zero;
-        IntPtr startWnd = shellTray != IntPtr.Zero ? GdiNative.FindWindowEx(shellTray, IntPtr.Zero, Win32UiConstants.StartButtonClass, null) : IntPtr.Zero;
-        IntPtr rebarWnd = shellTray != IntPtr.Zero ? GdiNative.FindWindowEx(shellTray, IntPtr.Zero, Win32UiConstants.ReBarWindowClass, null) : IntPtr.Zero;
-        IntPtr taskSwWnd = rebarWnd != IntPtr.Zero ? GdiNative.FindWindowEx(rebarWnd, IntPtr.Zero, Win32UiConstants.TaskSwWindowClass, null) : IntPtr.Zero;
+        HWND notifyWnd = !shellTray.IsNull ? FindChildWindow(shellTray, Win32UiConstants.TrayNotifyWndClass) : default;
+        HWND startWnd = !shellTray.IsNull ? FindChildWindow(shellTray, Win32UiConstants.StartButtonClass) : default;
+        HWND rebarWnd = !shellTray.IsNull ? FindChildWindow(shellTray, Win32UiConstants.ReBarWindowClass) : default;
+        HWND taskSwWnd = !rebarWnd.IsNull ? FindChildWindow(rebarWnd, Win32UiConstants.TaskSwWindowClass) : default;
 
         return new TaskbarPillLayoutSnapshot(
             taskbarRect,
@@ -303,49 +317,78 @@ public sealed class TaskbarPillWindow : ITaskbarPillView
             RightMarginFallbackPx: fallbackMargin);
     }
 
-    private static ViewRect? TryGetRect(IntPtr hwnd)
+    private static unsafe HWND FindTopLevelWindow(string className)
     {
-        if (hwnd == IntPtr.Zero || !GdiNative.GetWindowRect(hwnd, out NativeRect rect))
+        fixed (char* pClass = className)
+        {
+            return PInvoke.FindWindow(new PCWSTR(pClass), default);
+        }
+    }
+
+    private static unsafe HWND FindChildWindow(HWND parent, string className)
+    {
+        fixed (char* pClass = className)
+        {
+            return PInvoke.FindWindowEx(parent, default, new PCWSTR(pClass), default);
+        }
+    }
+
+    private static ViewRect? TryGetRect(HWND hwnd)
+    {
+        if (hwnd.IsNull || !PInvoke.GetWindowRect(hwnd, out RECT rect))
         {
             return null;
         }
 
-        return new ViewRect(rect.Left, rect.Top, rect.Right, rect.Bottom);
+        return new ViewRect(rect.left, rect.top, rect.right, rect.bottom);
     }
 
     private unsafe void InitializeNativeWindow()
     {
         try
         {
-            _wndProc = PillWndProc;
-            IntPtr hInstance = GdiNative.GetModuleHandle(null);
+            HMODULE hInstance = PInvoke.GetModuleHandle((PCWSTR)null);
 
             fixed (char* classNamePtr = Win32UiConstants.TaskbarPillWindowClass)
+            fixed (char* titlePtr = Win32UiConstants.TaskbarPillWindowTitle)
             {
-                var wcx = new WindowClassExW
+                var wcx = new WNDCLASSEXW
                 {
-                    Size = (uint)sizeof(WindowClassExW),
-                    WindowProc = Marshal.GetFunctionPointerForDelegate(_wndProc),
-                    Instance = hInstance,
-                    ClassName = classNamePtr
+                    cbSize = (uint)sizeof(WNDCLASSEXW),
+                    lpfnWndProc = new WNDPROC(&StaticPillWndProc),
+                    hInstance = new HINSTANCE(hInstance.Value),
+                    lpszClassName = new PCWSTR(classNamePtr)
                 };
 
-                GdiNative.RegisterClassEx(ref wcx);
+                PInvoke.RegisterClassEx(&wcx);
+
+                t_creatingInstance = this;
+                try
+                {
+                    _hwnd = PInvoke.CreateWindowEx(
+                        WINDOW_EX_STYLE.WS_EX_TOOLWINDOW | WINDOW_EX_STYLE.WS_EX_NOACTIVATE | WINDOW_EX_STYLE.WS_EX_LAYERED,
+                        new PCWSTR(classNamePtr),
+                        new PCWSTR(titlePtr),
+                        WINDOW_STYLE.WS_POPUP,
+                        0,
+                        0,
+                        Win32UiConstants.PillDefaultWidthPx,
+                        Win32UiConstants.PillDefaultHeightPx,
+                        default,
+                        default,
+                        hInstance,
+                        null);
+                }
+                finally
+                {
+                    t_creatingInstance = null;
+                }
             }
 
-            _hwnd = GdiNative.CreateWindowEx(
-                Win32UiConstants.WsExToolWindow | Win32UiConstants.WsExNoActivate | Win32UiConstants.WsExLayered,
-                Win32UiConstants.TaskbarPillWindowClass,
-                Win32UiConstants.TaskbarPillWindowTitle,
-                Win32UiConstants.WsPopup,
-                0,
-                0,
-                Win32UiConstants.PillDefaultWidthPx,
-                Win32UiConstants.PillDefaultHeightPx,
-                IntPtr.Zero,
-                IntPtr.Zero,
-                hInstance,
-                IntPtr.Zero);
+            if (!_hwnd.IsNull)
+            {
+                Instances[(nint)_hwnd.Value] = this;
+            }
 
             AnchorToShellTray();
         }
@@ -355,49 +398,57 @@ public sealed class TaskbarPillWindow : ITaskbarPillView
         }
     }
 
-    private void AnchorToShellTray()
+    private unsafe void AnchorToShellTray()
     {
-        if (_hwnd == IntPtr.Zero)
+        if (_hwnd.IsNull)
         {
             return;
         }
 
-        IntPtr shellTray = GdiNative.FindWindow(Win32UiConstants.ShellTrayWndClass, null);
-        if (shellTray != IntPtr.Zero)
+        HWND shellTray = FindTopLevelWindow(Win32UiConstants.ShellTrayWndClass);
+        if (!shellTray.IsNull)
         {
-            GdiNative.SetParent(_hwnd, shellTray);
-            _isParentedToShellTray = GdiNative.GetParent(_hwnd) == shellTray;
+            PInvoke.SetParent(_hwnd, shellTray);
+            _isParentedToShellTray = PInvoke.GetParent(_hwnd) == shellTray;
             if (_isParentedToShellTray && TryGetRect(shellTray) is ViewRect taskbarRect)
             {
-                _parentOrigin = new NativePoint(taskbarRect.Left, taskbarRect.Top);
+                _parentOrigin = new System.Drawing.Point(taskbarRect.Left, taskbarRect.Top);
                 return;
             }
         }
 
         _isParentedToShellTray = false;
-        GdiNative.SetWindowPos(
+        PInvoke.SetWindowPos(
             _hwnd,
-            (IntPtr)Win32UiConstants.HwndTopmost,
+            new HWND((void*)-1),
             0,
             0,
             0,
             0,
-            Win32UiConstants.SwpNoMove | Win32UiConstants.SwpNoSize | Win32UiConstants.SwpNoActivate);
+            SET_WINDOW_POS_FLAGS.SWP_NOMOVE | SET_WINDOW_POS_FLAGS.SWP_NOSIZE | SET_WINDOW_POS_FLAGS.SWP_NOACTIVATE);
     }
 
-    private IntPtr PillWndProc(IntPtr hWnd, uint msg, IntPtr wParam, IntPtr lParam)
+    [UnmanagedCallersOnly(CallConvs = [typeof(CallConvStdcall)])]
+    private static unsafe LRESULT StaticPillWndProc(HWND hWnd, uint msg, WPARAM wParam, LPARAM lParam)
     {
-        if (HandleWindowMessage(msg, wParam, lParam))
+        nint key = (nint)hWnd.Value;
+        if (!Instances.TryGetValue(key, out TaskbarPillWindow? instance) && t_creatingInstance != null)
         {
-            return IntPtr.Zero;
+            instance = t_creatingInstance;
+            Instances[key] = instance;
         }
 
-        return GdiNative.DefWindowProc(hWnd, msg, wParam, lParam);
+        if (instance != null && instance.HandleWindowMessage(msg, (IntPtr)(nuint)wParam.Value, lParam.Value))
+        {
+            return default;
+        }
+
+        return PInvoke.DefWindowProc(hWnd, msg, wParam, lParam);
     }
 
     private unsafe void PresentLayeredFrame(ViewRect bounds, uint[] pixels)
     {
-        if (_hwnd == IntPtr.Zero || bounds.Width <= 0 || bounds.Height <= 0)
+        if (_hwnd.IsNull || bounds.Width <= 0 || bounds.Height <= 0)
         {
             return;
         }
@@ -408,81 +459,84 @@ public sealed class TaskbarPillWindow : ITaskbarPillView
             return;
         }
 
-        IntPtr memDc = GdiNative.CreateCompatibleDC(IntPtr.Zero);
-        if (memDc == IntPtr.Zero)
+        HDC memDc = PInvoke.CreateCompatibleDC(default);
+        if (memDc.IsNull)
         {
             return;
         }
 
-        IntPtr dib = IntPtr.Zero;
-        IntPtr oldBitmap = IntPtr.Zero;
+        HBITMAP dib = default;
+        HGDIOBJ oldBitmap = default;
         try
         {
-            var header = new BitmapInfoHeader
+            var bmi = new BITMAPINFO
             {
-                Size = (uint)sizeof(BitmapInfoHeader),
-                Width = bounds.Width,
-                Height = -bounds.Height,
-                Planes = Win32UiConstants.ColorPlanesSingle,
-                BitCount = Win32UiConstants.BitsPerPixel32,
-                Compression = Win32UiConstants.BiRgb
+                bmiHeader = new BITMAPINFOHEADER
+                {
+                    biSize = (uint)sizeof(BITMAPINFOHEADER),
+                    biWidth = bounds.Width,
+                    biHeight = -bounds.Height,
+                    biPlanes = Win32UiConstants.ColorPlanesSingle,
+                    biBitCount = Win32UiConstants.BitsPerPixel32,
+                    biCompression = (uint)BI_COMPRESSION.BI_RGB
+                }
             };
 
-            dib = GdiNative.CreateDIBSection(memDc, ref header, Win32UiConstants.DibRgbColors, out IntPtr bitsPtr, IntPtr.Zero, 0);
-            if (dib == IntPtr.Zero || bitsPtr == IntPtr.Zero)
+            dib = PInvoke.CreateDIBSection(memDc, &bmi, DIB_USAGE.DIB_RGB_COLORS, out void* bitsPtr, default, 0);
+            if (dib.IsNull || bitsPtr == null)
             {
                 return;
             }
 
             fixed (uint* srcPtr = pixels)
             {
-                Buffer.MemoryCopy(srcPtr, (void*)bitsPtr, dibByteCount, dibByteCount);
+                Buffer.MemoryCopy(srcPtr, bitsPtr, dibByteCount, dibByteCount);
             }
 
-            oldBitmap = GdiNative.SelectObject(memDc, dib);
+            oldBitmap = PInvoke.SelectObject(memDc, dib);
             int dstX = _isParentedToShellTray ? bounds.Left - _parentOrigin.X : bounds.Left;
             int dstY = _isParentedToShellTray ? bounds.Top - _parentOrigin.Y : bounds.Top;
-            var dstPoint = new NativePoint(dstX, dstY);
-            var dstSize = new NativeSize(bounds.Width, bounds.Height);
-            var srcPoint = new NativePoint(0, 0);
-            var blend = new BlendFunction
+            var dstPoint = new System.Drawing.Point(dstX, dstY);
+            var dstSize = new SIZE(bounds.Width, bounds.Height);
+            var srcPoint = new System.Drawing.Point(0, 0);
+            var blend = new BLENDFUNCTION
             {
-                BlendOp = Win32UiConstants.AcSrcOver,
+                BlendOp = (byte)PInvoke.AC_SRC_OVER,
                 BlendFlags = 0,
                 SourceConstantAlpha = byte.MaxValue,
-                AlphaFormat = Win32UiConstants.AcSrcAlpha
+                AlphaFormat = (byte)PInvoke.AC_SRC_ALPHA
             };
 
-            GdiNative.UpdateLayeredWindow(
+            PInvoke.UpdateLayeredWindow(
                 _hwnd,
-                IntPtr.Zero,
-                ref dstPoint,
-                ref dstSize,
+                default,
+                dstPoint,
+                dstSize,
                 memDc,
-                ref srcPoint,
-                0,
-                ref blend,
-                Win32UiConstants.UlwAlpha);
+                srcPoint,
+                default,
+                blend,
+                UPDATE_LAYERED_WINDOW_FLAGS.ULW_ALPHA);
 
             if (!_isWindowShown)
             {
-                GdiNative.ShowWindow(_hwnd, Win32UiConstants.SwShowNoActivate);
+                PInvoke.ShowWindow(_hwnd, SHOW_WINDOW_CMD.SW_SHOWNOACTIVATE);
                 _isWindowShown = true;
             }
         }
         finally
         {
-            if (oldBitmap != IntPtr.Zero)
+            if (!oldBitmap.IsNull)
             {
-                GdiNative.SelectObject(memDc, oldBitmap);
+                PInvoke.SelectObject(memDc, oldBitmap);
             }
 
-            if (dib != IntPtr.Zero)
+            if (!dib.IsNull)
             {
-                GdiNative.DeleteObject(dib);
+                PInvoke.DeleteObject(dib);
             }
 
-            GdiNative.DeleteDC(memDc);
+            PInvoke.DeleteDC(memDc);
         }
     }
 }

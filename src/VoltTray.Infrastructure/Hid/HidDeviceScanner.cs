@@ -7,7 +7,7 @@ namespace VoltTray.Infrastructure.Hid;
 /// <summary>
 /// Dynamically enumerates attached USB HID device interfaces via SetupAPI and hid.dll.
 /// </summary>
-public sealed class HidDeviceScanner : IHidDeviceScanner
+internal sealed class HidDeviceScanner : IHidDeviceScanner
 {
     /// <summary>
     /// Discovers attached HID devices, defaulting to the Voltronic/Forza VID_0665&amp;PID_5161 target.

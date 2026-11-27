@@ -27,7 +27,7 @@ public sealed class TrayMonitorModeStrategy : IApplicationModeStrategy
         try
         {
             using var bootstrapper = new TrayMonitorBootstrapper(_options, () => CreateUpsDevicePort(_options));
-            HostLifecycle lifecycle = bootstrapper.Lifecycle;
+            IHostLifecycle lifecycle = bootstrapper.Lifecycle;
 
             lifecycle.ExitAction = () => Win32MessagePump.PostQuit(ApplicationExitCodes.Success);
             lifecycle.Start(_options.PollingIntervalMs);
