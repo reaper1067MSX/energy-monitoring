@@ -121,9 +121,20 @@ public class UIRenderersTests
 
         Assert.Equal("Forza NT-2401PRO", vm.Title);
         Assert.Equal("FN", vm.Emblem);
+        Assert.Equal("Line-Int", vm.RegulationModeText);
+        Assert.Equal("216 Wh", vm.BankEnergyWhText);
+        Assert.NotNull(vm.CellsSummaryText);
         Assert.Null(vm.TemperatureText);
         Assert.Null(vm.ActiveLoadWattsText);
         Assert.Null(vm.FaultReferenceText);
+
+        UpsTelemetry distinctFault = telemetry with
+        {
+            InputVoltageAc = 117.3,
+            FaultReferenceVoltageAc = 98.5
+        };
+        PopoverViewModel faultVm = PopoverViewModel.FromTelemetry(distinctFault, CultureInfo.GetCultureInfo("es-ES"));
+        Assert.Equal("98.5 V", faultVm.FaultReferenceText);
     }
 
     [Fact]

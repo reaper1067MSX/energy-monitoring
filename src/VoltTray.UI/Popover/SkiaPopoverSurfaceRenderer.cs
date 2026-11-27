@@ -232,25 +232,30 @@ internal sealed class SkiaPopoverSurfaceRenderer : IPopoverSurfaceRenderer
         canvas.DrawText(vm.InputVoltageText, innerLeft, bounds.Top + 56f, SKTextAlign.Left, heroFont, textPaint);
 
         string outputLabel = isSpanish ? LocalizationConstants.OutputLabelEs : LocalizationConstants.OutputLabelEn;
-        float row1Y = bounds.Top + 84f;
+        float row1Y = bounds.Top + 82f;
         canvas.DrawText(outputLabel, innerLeft, row1Y, SKTextAlign.Left, metricFont, mutedPaint);
         DrawTextRightAligned(canvas, vm.OutputVoltageText, innerRight, row1Y - 4f, metricStrongFont, textPaint);
 
-        float nextRowY = bounds.Top + 106f;
+        string modeLabel = isSpanish ? LocalizationConstants.ModeLabelEs : LocalizationConstants.ModeLabelEn;
+        float row2Y = bounds.Top + 101f;
+        canvas.DrawText(modeLabel, innerLeft, row2Y, SKTextAlign.Left, metricFont, mutedPaint);
+        using var modePaint = new SKPaint { Color = ResolveBatteryAccentColor(vm.State, palette), IsAntialias = true };
+        DrawTextRightAligned(canvas, vm.RegulationModeText, innerRight, row2Y - 4f, metricStrongFont, modePaint);
+
+        float row3Y = bounds.Top + 120f;
         if (!string.IsNullOrWhiteSpace(vm.TemperatureText))
         {
-            var tempIconRect = new SKRect(innerLeft, nextRowY - 10f, innerLeft + 12f, nextRowY + 2f);
+            var tempIconRect = new SKRect(innerLeft, row3Y - 10f, innerLeft + 12f, row3Y + 2f);
             _svgIconLibrary.TryDraw(canvas, SvgIconConstants.TelemetryTemperature, tempIconRect, ParseColor(palette.TextMuted));
             string tempLabel = isSpanish ? LocalizationConstants.TemperatureLabelEs : LocalizationConstants.TemperatureLabelEn;
-            canvas.DrawText(tempLabel, tempIconRect.Right + 4f, nextRowY, SKTextAlign.Left, metricFont, mutedPaint);
-            DrawTextRightAligned(canvas, vm.TemperatureText, innerRight, nextRowY - 4f, metricStrongFont, textPaint);
-            nextRowY += 18f;
+            canvas.DrawText(tempLabel, tempIconRect.Right + 4f, row3Y, SKTextAlign.Left, metricFont, mutedPaint);
+            DrawTextRightAligned(canvas, vm.TemperatureText, innerRight, row3Y - 4f, metricStrongFont, textPaint);
         }
-
-        if (!string.IsNullOrWhiteSpace(vm.FaultReferenceText) && nextRowY <= bounds.Bottom - 8f)
+        else if (!string.IsNullOrWhiteSpace(vm.FaultReferenceText))
         {
-            canvas.DrawText("Ref", innerLeft, nextRowY, SKTextAlign.Left, metricFont, mutedPaint);
-            DrawTextRightAligned(canvas, vm.FaultReferenceText, innerRight, nextRowY - 4f, metricFont, mutedPaint);
+            string faultLabel = isSpanish ? LocalizationConstants.LastFaultLabelEs : LocalizationConstants.LastFaultLabelEn;
+            canvas.DrawText(faultLabel, innerLeft, row3Y, SKTextAlign.Left, metricFont, mutedPaint);
+            DrawTextRightAligned(canvas, vm.FaultReferenceText, innerRight, row3Y - 4f, metricFont, mutedPaint);
         }
     }
 
@@ -282,15 +287,28 @@ internal sealed class SkiaPopoverSurfaceRenderer : IPopoverSurfaceRenderer
 
         canvas.DrawText(vm.BatteryPercentageText, innerLeft, bounds.Top + 58f, SKTextAlign.Left, heroFont, accentPaint);
 
-        float runtimeRowY = bounds.Top + 86f;
+        float runtimeRowY = bounds.Top + 84f;
         var runtimeIconRect = new SKRect(innerLeft, runtimeRowY - 11f, innerLeft + 13f, runtimeRowY + 2f);
         _svgIconLibrary.TryDraw(canvas, SvgIconConstants.TelemetryRuntime, runtimeIconRect, ParseColor(palette.TextMuted));
         canvas.DrawText(vm.RuntimeText, runtimeIconRect.Right + 5f, runtimeRowY, SKTextAlign.Left, runtimeFont, textPaint);
 
+        if (!string.IsNullOrWhiteSpace(vm.CellsSummaryText))
+        {
+            canvas.DrawText(
+                EllipsizeText(vm.CellsSummaryText, metricFont, innerRight - innerLeft),
+                innerLeft,
+                bounds.Top + 104f,
+                SKTextAlign.Left,
+                metricFont,
+                mutedPaint);
+        }
+
         string runtimeLabel = isSpanish ? LocalizationConstants.RuntimeLabelEs : LocalizationConstants.RuntimeLabelEn;
         string loadSuffix = isSpanish ? LocalizationConstants.LoadCapacitySuffixEs : LocalizationConstants.LoadCapacitySuffixEn;
-        string caption = $"{runtimeLabel} · {vm.LoadPercentageText} {loadSuffix}";
-        canvas.DrawText(EllipsizeText(caption, metricFont, innerRight - innerLeft), innerLeft, bounds.Top + 112f, SKTextAlign.Left, metricFont, mutedPaint);
+        string caption = vm.BankEnergyWhText is not null
+            ? $"{vm.BankEnergyWhText} · {vm.LoadPercentageText} {loadSuffix}"
+            : $"{runtimeLabel} · {vm.LoadPercentageText} {loadSuffix}";
+        canvas.DrawText(EllipsizeText(caption, metricFont, innerRight - innerLeft), innerLeft, bounds.Top + 122f, SKTextAlign.Left, metricFont, mutedPaint);
     }
 
     private void DrawLoadBand(SKCanvas canvas, SKRect bounds, PopoverViewModel vm, ThemePalette palette, bool isSpanish)

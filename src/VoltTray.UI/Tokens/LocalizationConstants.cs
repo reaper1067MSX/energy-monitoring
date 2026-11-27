@@ -44,6 +44,16 @@ public static class LocalizationConstants
     public const string RuntimeLabelEs = "Autonomía";
     public const string LoadCapacitySuffixEn = "load";
     public const string LoadCapacitySuffixEs = "carga";
+    public const string LastFaultLabelEn = "Last fault";
+    public const string LastFaultLabelEs = "Últ. falla";
+    public const string ModeLabelEn = "Mode";
+    public const string ModeLabelEs = "Modo";
+    public const string ModeLineInteractiveEn = "Line-Int";
+    public const string ModeLineInteractiveEs = "Line-Int";
+    public const string ModeAvrEn = "AVR Boost";
+    public const string ModeAvrEs = "AVR Boost";
+    public const string ModeInverterEn = "Inverter";
+    public const string ModeInverterEs = "Inversor";
 
     public const string BatteryTestEn = "Battery test";
     public const string BatteryTestEs = "Prueba de batería";

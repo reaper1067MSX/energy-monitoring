@@ -7,7 +7,7 @@ namespace VoltTray.UI.Popover;
 
 /// <summary>
 /// Framework-agnostic presentation model for the Option C Popover card.
-/// Derives dynamic device title/emblem and omits Unavailable (null) metrics.
+/// Derives dynamic device title/emblem and omits Unavailable (null) or duplicate metrics.
 /// </summary>
 public sealed record PopoverViewModel(
     string Title,
@@ -29,7 +29,10 @@ public sealed record PopoverViewModel(
     string SelfTestButtonLabel,
     string BeeperButtonLabel,
     bool IsBeeperMuted,
-    bool IsTestInProgress)
+    bool IsTestInProgress,
+    string RegulationModeText = LocalizationConstants.UnavailablePlaceholder,
+    string? CellsSummaryText = null,
+    string? BankEnergyWhText = null)
 {
     public static PopoverViewModel FromTelemetry(UpsTelemetry telemetry, CultureInfo? culture = null)
     {
@@ -53,14 +56,24 @@ public sealed record PopoverViewModel(
         string runtimeText = RuntimeDisplayFormatter.FormatRuntimeString(telemetry.EstimatedRuntimeMinutes)
             ?? LocalizationConstants.UnavailablePlaceholder;
 
-        string? faultRefText = telemetry.FaultReferenceVoltageAc.HasValue
-            ? FormattableString.Invariant($"{telemetry.FaultReferenceVoltageAc.Value:F1} V")
+        bool hasDistinctFaultRef = telemetry.FaultReferenceVoltageAc.HasValue &&
+                                   Math.Abs(telemetry.FaultReferenceVoltageAc.Value - telemetry.InputVoltageAc) >= 0.05;
+        string? faultRefText = hasDistinctFaultRef
+            ? FormattableString.Invariant($"{telemetry.FaultReferenceVoltageAc!.Value:F1} V")
             : null;
         string? temperatureText = telemetry.TemperatureCelsius.HasValue
             ? FormattableString.Invariant($"{telemetry.TemperatureCelsius.Value:F1} °C")
             : null;
         string? wattsText = telemetry.ActiveLoadWatts.HasValue
             ? FormattableString.Invariant($"{telemetry.ActiveLoadWatts.Value} W")
+            : null;
+
+        string regulationModeText = FormatRegulationMode(telemetry.State, isSpanish);
+        string? cellsSummaryText = telemetry.Cell1VoltageDc > 0 && telemetry.Cell2VoltageDc > 0
+            ? FormattableString.Invariant($"C1 {telemetry.Cell1VoltageDc:F2}V · C2 {telemetry.Cell2VoltageDc:F2}V")
+            : null;
+        string? bankEnergyWhText = telemetry.BankSpec.RatedCapacityAh is double ratedAh && ratedAh > 0
+            ? FormattableString.Invariant($"{(int)Math.Round(telemetry.BankSpec.NominalVoltageDc * ratedAh)} Wh")
             : null;
 
         string selfTestLabel = telemetry.IsTestInProgress
@@ -91,7 +104,10 @@ public sealed record PopoverViewModel(
             SelfTestButtonLabel: selfTestLabel,
             BeeperButtonLabel: beeperLabel,
             IsBeeperMuted: telemetry.IsBeeperMuted,
-            IsTestInProgress: telemetry.IsTestInProgress);
+            IsTestInProgress: telemetry.IsTestInProgress,
+            RegulationModeText: regulationModeText,
+            CellsSummaryText: cellsSummaryText,
+            BankEnergyWhText: bankEnergyWhText);
     }
 
     private static string DeriveEmblem(string title)
@@ -116,5 +132,17 @@ public sealed record PopoverViewModel(
         UpsOperationalState.Fault => isSpanish ? LocalizationConstants.StatusFaultEs : LocalizationConstants.StatusFaultEn,
         UpsOperationalState.Paused => isSpanish ? LocalizationConstants.StatusPausedEs : LocalizationConstants.StatusPausedEn,
         _ => isSpanish ? LocalizationConstants.StatusNoCommEs : LocalizationConstants.StatusNoCommEn
+    };
+
+    private static string FormatRegulationMode(UpsOperationalState state, bool isSpanish) => state switch
+    {
+        UpsOperationalState.ChargingAvr => isSpanish ? LocalizationConstants.ModeAvrEs : LocalizationConstants.ModeAvrEn,
+        UpsOperationalState.LineNormal or UpsOperationalState.Paused => isSpanish
+            ? LocalizationConstants.ModeLineInteractiveEs
+            : LocalizationConstants.ModeLineInteractiveEn,
+        UpsOperationalState.OnBattery or UpsOperationalState.BatteryLow => isSpanish
+            ? LocalizationConstants.ModeInverterEs
+            : LocalizationConstants.ModeInverterEn,
+        _ => LocalizationConstants.UnavailablePlaceholder
     };
 }

@@ -8,6 +8,13 @@
         "DOTNET_ENVIRONMENT": "Production"
       }
     },
+    "VoltTray (Hardware USB + Pill)": {
+      "commandName": "Project",
+      "commandLineArgs": "--taskbar-pill",
+      "environmentVariables": {
+        "DOTNET_ENVIRONMENT": "Production"
+      }
+    },
     "VoltTray (Simulación UI)": {
       "commandName": "Project",
       "commandLineArgs": "--simulate",
