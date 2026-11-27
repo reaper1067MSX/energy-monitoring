@@ -13,6 +13,7 @@ public interface ITrayIconView : IDisposable
 
     void UpdateIcon(UpsOperationalState state, int batteryPct, int dpi);
     void SetTooltip(string text);
+    void SetTrayIconVisibility(bool visible) { }
     void Recreate();
     ViewRect? TryGetIconRect();
 }

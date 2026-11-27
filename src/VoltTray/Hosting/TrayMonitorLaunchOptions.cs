@@ -10,4 +10,5 @@ public sealed record TrayMonitorLaunchOptions(
     bool IsDryRun,
     int PollingIntervalMs,
     bool EnableTaskbarPill = false,
-    UpsModelPreset? SelectedModel = null) : ApplicationLaunchOptions;
+    UpsModelPreset? SelectedModel = null,
+    TrayIconMode? SelectedIconMode = null) : ApplicationLaunchOptions;

@@ -50,6 +50,13 @@ public class UpsModelSelectorTests
             store.SaveSelectedModel(UpsModelPreset.ForzaNt2401Pro);
             Assert.Equal(UpsModelPreset.ForzaNt2401Pro, store.LoadSelectedModel());
 
+            store.SaveIconMode(TrayIconMode.Short);
+            Assert.Equal(TrayIconMode.Short, store.LoadIconMode());
+            Assert.Equal(UpsModelPreset.ForzaNt2401Pro, store.LoadSelectedModel());
+
+            store.SaveIconMode(TrayIconMode.Large);
+            Assert.Equal(TrayIconMode.Large, store.LoadIconMode());
+
             File.WriteAllText(settingsPath, "{ not valid json");
             Assert.Null(store.LoadSelectedModel());
         }
@@ -77,6 +84,16 @@ public class UpsModelSelectorTests
             ApplicationOptionsParser.Parse(["--model", "unknown"]));
         Assert.Contains("nt2401pro", invalid.ErrorMessage, StringComparison.Ordinal);
         Assert.Contains("fx2200", invalid.ErrorMessage, StringComparison.Ordinal);
+
+        TrayMonitorLaunchOptions shortMode = Assert.IsType<TrayMonitorLaunchOptions>(
+            ApplicationOptionsParser.Parse(["--icon-mode", "short"]));
+        Assert.Equal(TrayIconMode.Short, shortMode.SelectedIconMode);
+
+        TrayMonitorLaunchOptions largeMode = Assert.IsType<TrayMonitorLaunchOptions>(
+            ApplicationOptionsParser.Parse(["--icon-mode", "large"]));
+        Assert.Equal(TrayIconMode.Large, largeMode.SelectedIconMode);
+
+        Assert.IsType<InvalidLaunchOptions>(ApplicationOptionsParser.Parse(["--icon-mode", "tiny"]));
     }
 
     [Fact]

@@ -65,7 +65,8 @@ public static class ApplicationOptionsParser
                 state.IsDryRun,
                 state.PollingIntervalMs,
                 state.EnableTaskbarPill,
-                state.SelectedModel);
+                state.SelectedModel,
+                state.SelectedIconMode);
     }
 
     private static IReadOnlyDictionary<string, CliFlagRule> BuildFlagRuleRegistry()
@@ -109,6 +110,11 @@ public static class ApplicationOptionsParser
                 Scope: CliOptionScope.TrayOnly,
                 RequiresValue: true,
                 Apply: ApplyModel),
+            new(
+                Aliases: [CliConstants.IconModeFlag],
+                Scope: CliOptionScope.TrayOnly,
+                RequiresValue: true,
+                Apply: ApplyIconMode),
             new(
                 Aliases: [CliConstants.TaskbarPillFlag],
                 Scope: CliOptionScope.TrayOnly,
@@ -179,6 +185,23 @@ public static class ApplicationOptionsParser
 
         state.SelectedModel = preset;
         return null;
+    }
+
+    private static string? ApplyIconMode(CliParseState state, string? rawIconMode)
+    {
+        if (string.Equals(rawIconMode, "large", StringComparison.OrdinalIgnoreCase))
+        {
+            state.SelectedIconMode = TrayIconMode.Large;
+            return null;
+        }
+
+        if (string.Equals(rawIconMode, "short", StringComparison.OrdinalIgnoreCase))
+        {
+            state.SelectedIconMode = TrayIconMode.Short;
+            return null;
+        }
+
+        return $"Invalid value for {CliConstants.IconModeFlag}: '{rawIconMode}'. Expected 'large' or 'short'.";
     }
 
     private static string? ApplyCommand(CliParseState state, string? rawCommand)

@@ -19,6 +19,57 @@ internal sealed class JsonUserSettingsStore : IUserSettingsStore
 
     public UpsModelPreset? LoadSelectedModel()
     {
+        UserSettingsDocument? document = LoadDocument();
+        if (document is null)
+        {
+            return null;
+        }
+
+        return UpsModelCatalog.TryParseCliKey(document.SelectedModel, out UpsModelPreset preset)
+            ? preset
+            : null;
+    }
+
+    public void SaveSelectedModel(UpsModelPreset preset)
+    {
+        UpsModelProfile profile = UpsModelCatalog.GetProfile(preset);
+        UserSettingsDocument document = LoadDocument() ?? new UserSettingsDocument();
+        document.SelectedModel = profile.CliKey;
+        SaveDocument(document);
+    }
+
+    public TrayIconMode? LoadIconMode()
+    {
+        UserSettingsDocument? document = LoadDocument();
+        if (document is null)
+        {
+            return null;
+        }
+
+        if (string.Equals(document.IconMode, SettingsConstants.LargeIconModeKey, StringComparison.OrdinalIgnoreCase))
+        {
+            return TrayIconMode.Large;
+        }
+
+        if (string.Equals(document.IconMode, SettingsConstants.ShortIconModeKey, StringComparison.OrdinalIgnoreCase))
+        {
+            return TrayIconMode.Short;
+        }
+
+        return null;
+    }
+
+    public void SaveIconMode(TrayIconMode mode)
+    {
+        UserSettingsDocument document = LoadDocument() ?? new UserSettingsDocument();
+        document.IconMode = mode == TrayIconMode.Short
+            ? SettingsConstants.ShortIconModeKey
+            : SettingsConstants.LargeIconModeKey;
+        SaveDocument(document);
+    }
+
+    private UserSettingsDocument? LoadDocument()
+    {
         if (!File.Exists(_settingsFilePath))
         {
             return null;
@@ -27,15 +78,7 @@ internal sealed class JsonUserSettingsStore : IUserSettingsStore
         try
         {
             string json = File.ReadAllText(_settingsFilePath);
-            UserSettingsDocument? document = JsonSerializer.Deserialize(json, UserSettingsJsonContext.Default.UserSettingsDocument);
-            if (document is null)
-            {
-                return null;
-            }
-
-            return UpsModelCatalog.TryParseCliKey(document.SelectedModel, out UpsModelPreset preset)
-                ? preset
-                : null;
+            return JsonSerializer.Deserialize(json, UserSettingsJsonContext.Default.UserSettingsDocument);
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or JsonException)
         {
@@ -43,19 +86,13 @@ internal sealed class JsonUserSettingsStore : IUserSettingsStore
         }
     }
 
-    public void SaveSelectedModel(UpsModelPreset preset)
+    private void SaveDocument(UserSettingsDocument document)
     {
-        UpsModelProfile profile = UpsModelCatalog.GetProfile(preset);
         string? directory = Path.GetDirectoryName(_settingsFilePath);
         if (!string.IsNullOrEmpty(directory))
         {
             Directory.CreateDirectory(directory);
         }
-
-        var document = new UserSettingsDocument
-        {
-            SelectedModel = profile.CliKey
-        };
 
         string json = JsonSerializer.Serialize(document, UserSettingsJsonContext.Default.UserSettingsDocument);
         File.WriteAllText(_settingsFilePath, json);

@@ -109,8 +109,8 @@ internal sealed class TrayIconRasterizer : ITrayIconRasterizer, IDisposable
         SKCanvas canvas = surface.Canvas;
         canvas.Clear(SKColors.Transparent);
 
-        string cacheKey = FluentBatterySvgBuilder.BuildCacheKey(state, batteryPct, isLightTaskbar);
-        string svgMarkup = FluentBatterySvgBuilder.BuildIconSvg(state, batteryPct, isLightTaskbar);
+        string cacheKey = RingBatterySvgBuilder.BuildCacheKey(state, batteryPct, isLightTaskbar);
+        string svgMarkup = RingBatterySvgBuilder.BuildIconSvg(state, batteryPct, isLightTaskbar);
         _svgIconLibrary.TryDrawMarkup(canvas, cacheKey, svgMarkup, new SKRect(0, 0, size, size));
 
         return surface;

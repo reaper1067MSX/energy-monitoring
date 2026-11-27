@@ -9,7 +9,10 @@ namespace VoltTray.UI.DependencyInjection;
 
 public static class UiServiceCollectionExtensions
 {
-    public static IServiceCollection AddVoltTrayUi(this IServiceCollection services, bool enableTaskbarPill)
+    public static IServiceCollection AddVoltTrayUi(
+        this IServiceCollection services,
+        bool enableTaskbarPill,
+        bool? showTrayIcon = null)
     {
         ArgumentNullException.ThrowIfNull(services);
 
@@ -23,7 +26,7 @@ public static class UiServiceCollectionExtensions
             sp.GetRequiredService<ITrayIconRasterizer>(),
             sp.GetRequiredService<INativeIconFactory>(),
             WindowsThemeDetector.IsLightTaskbar,
-            showTrayIcon: !enableTaskbarPill));
+            showTrayIcon: showTrayIcon ?? !enableTaskbarPill));
         services.AddSingleton<IPopoverView>(sp => new PopoverPainter(
             enableNativeWindow: true,
             surfaceRenderer: sp.GetRequiredService<IPopoverSurfaceRenderer>()));

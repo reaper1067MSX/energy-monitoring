@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
 using VoltTray.Core.Telemetry;
 using VoltTray.UI.Models;
@@ -22,9 +23,9 @@ public partial class Win32UiIntegrationTests
         var anchor = new ViewRect(1700, 1032, 1732, 1064);
         var workArea = new ViewRect(0, 0, 1920, 1040);
 
-        DateTimeOffset now = new(2026, 11, 26, 12, 0, 0, TimeSpan.Zero);
+        var clock = new StrongBox<DateTimeOffset>(new DateTimeOffset(2026, 11, 26, 12, 0, 0, TimeSpan.Zero));
         using var tray = new TrayRenderer(isLightTaskbarProvider: () => false);
-        using var popover = new PopoverPainter(enableNativeWindow: true, clock: () => now);
+        using var popover = new PopoverPainter(enableNativeWindow: true, clock: () => clock.Value);
         using var pill = new TaskbarPillWindow(
             new TaskbarPillPlacementCalculator(),
             new TaskbarPillSurfaceRenderer(TrayIconRasterizer.CreateDefault()),
@@ -34,7 +35,7 @@ public partial class Win32UiIntegrationTests
 
         // Warm up one-time Win32/DWM/Shell initialization before measuring per-frame delta.
         RunFrameTick(tray, popover, pill, telemetry, anchor, workArea);
-        now = now.AddMilliseconds(400);
+        clock.Value = clock.Value.AddMilliseconds(400);
 
         uint gdiBeforePolling = GetGuiResources(processHandle, 0);
         for (int i = 0; i < 20; i++)
