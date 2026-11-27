@@ -30,8 +30,9 @@ public sealed class Win32HidUpsPort : IUpsDevicePort, IRawTelemetryPort
         string? preferredDevicePath = null,
         bool allowAutoDiscovery = true,
         IBatteryAutonomyEstimator? estimator = null,
-        IHidDeviceScanner? deviceScanner = null)
-        : this(preferredDevicePath, allowAutoDiscovery, estimator, deviceScanner, new Win32HidTransport(), negotiateOnConnect: true)
+        IHidDeviceScanner? deviceScanner = null,
+        UpsModelProfile? modelProfile = null)
+        : this(preferredDevicePath, allowAutoDiscovery, estimator, deviceScanner, new Win32HidTransport(), negotiateOnConnect: true, retryPolicy: null, modelProfile: modelProfile)
     {
     }
 
@@ -42,7 +43,8 @@ public sealed class Win32HidUpsPort : IUpsDevicePort, IRawTelemetryPort
         IHidDeviceScanner? deviceScanner,
         IHidTransport transport,
         bool negotiateOnConnect = false,
-        AsyncRetryPolicy? retryPolicy = null)
+        AsyncRetryPolicy? retryPolicy = null,
+        UpsModelProfile? modelProfile = null)
     {
         ArgumentNullException.ThrowIfNull(transport);
 
@@ -55,7 +57,8 @@ public sealed class Win32HidUpsPort : IUpsDevicePort, IRawTelemetryPort
             resolvedScanner,
             transport,
             resolvedEstimator,
-            negotiateOnConnect);
+            negotiateOnConnect,
+            modelProfile);
         _retryPolicy = retryPolicy ?? new AsyncRetryPolicy();
         _negotiatedProtocol = _sessionOpener.CreateDefaultNegotiatedProtocol();
     }

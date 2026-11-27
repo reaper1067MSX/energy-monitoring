@@ -24,12 +24,13 @@ public sealed class ProtocolNegotiator
 
     public NegotiatedUpsProtocol Negotiate(
         Func<string, byte[]?> queryRaw,
-        IBatteryAutonomyEstimator? estimator = null)
+        IBatteryAutonomyEstimator? estimator = null,
+        UpsModelProfile? modelProfile = null)
     {
         ArgumentNullException.ThrowIfNull(queryRaw);
 
         IBatteryAutonomyEstimator resolvedEstimator = estimator ?? new PeukertEstimator();
-        var baseCapabilities = new UpsCapabilities(
+        UpsCapabilities baseCapabilities = modelProfile?.ToCapabilities() ?? new UpsCapabilities(
             ModelName: null,
             NominalVoltageAc: null,
             NominalFrequencyHz: null,

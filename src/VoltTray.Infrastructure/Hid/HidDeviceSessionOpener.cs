@@ -18,6 +18,7 @@ internal sealed class HidDeviceSessionOpener
     private readonly IBatteryAutonomyEstimator _estimator;
     private readonly ProtocolNegotiator _protocolNegotiator = new();
     private readonly bool _negotiateOnConnect;
+    private readonly UpsModelProfile? _modelProfile;
 
     public HidDeviceSessionOpener(
         string? preferredDevicePath,
@@ -25,7 +26,8 @@ internal sealed class HidDeviceSessionOpener
         IHidDeviceScanner deviceScanner,
         IHidTransport transport,
         IBatteryAutonomyEstimator estimator,
-        bool negotiateOnConnect)
+        bool negotiateOnConnect,
+        UpsModelProfile? modelProfile = null)
     {
         _preferredDevicePath = preferredDevicePath;
         _allowAutoDiscovery = allowAutoDiscovery;
@@ -33,19 +35,22 @@ internal sealed class HidDeviceSessionOpener
         _transport = transport;
         _estimator = estimator;
         _negotiateOnConnect = negotiateOnConnect;
+        _modelProfile = modelProfile;
     }
 
     public NegotiatedUpsProtocol CreateDefaultNegotiatedProtocol()
     {
+        UpsCapabilities capabilities = _modelProfile?.ToCapabilities() ?? new UpsCapabilities(
+            ModelName: null,
+            NominalVoltageAc: null,
+            NominalFrequencyHz: null,
+            RatedWatts: null,
+            Bank: new BatteryBankSpec(),
+            DialectVerified: false);
+
         return new NegotiatedUpsProtocol(
             new VoltronicQsHexProtocol(VoltronicProtocolConstants.DialectT, _estimator),
-            new UpsCapabilities(
-                ModelName: null,
-                NominalVoltageAc: null,
-                NominalFrequencyHz: null,
-                RatedWatts: null,
-                Bank: new BatteryBankSpec(),
-                DialectVerified: false));
+            capabilities);
     }
 
     public Result<(string DevicePath, IHidConnection Connection, NegotiatedUpsProtocol Protocol)> OpenSession(
@@ -78,7 +83,8 @@ internal sealed class HidDeviceSessionOpener
         NegotiatedUpsProtocol negotiatedProtocol = _negotiateOnConnect
             ? _protocolNegotiator.Negotiate(
                 command => HidCommandExecutor.QuerySynchronously(openedConnection, command),
-                _estimator)
+                _estimator,
+                _modelProfile)
             : CreateDefaultNegotiatedProtocol();
 
         return Result<(string, IHidConnection, NegotiatedUpsProtocol)>.Success(

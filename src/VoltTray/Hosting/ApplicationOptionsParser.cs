@@ -1,5 +1,6 @@
 using VoltTray.Core.Diagnostics;
 using System.Globalization;
+using VoltTray.Core.Telemetry;
 using VoltTray.Infrastructure.Protocol;
 using VoltTray.Shared;
 
@@ -59,7 +60,12 @@ public static class ApplicationOptionsParser
 
         return state.IsInspectMode
             ? new InspectLaunchOptions(state.Inquiry, state.IncludeAllHidDevices, state.ExportPath)
-            : new TrayMonitorLaunchOptions(state.IsSimulation, state.IsDryRun, state.PollingIntervalMs, state.EnableTaskbarPill);
+            : new TrayMonitorLaunchOptions(
+                state.IsSimulation,
+                state.IsDryRun,
+                state.PollingIntervalMs,
+                state.EnableTaskbarPill,
+                state.SelectedModel);
     }
 
     private static IReadOnlyDictionary<string, CliFlagRule> BuildFlagRuleRegistry()
@@ -98,6 +104,11 @@ public static class ApplicationOptionsParser
                 Scope: CliOptionScope.TrayOnly,
                 RequiresValue: true,
                 Apply: ApplyInterval),
+            new(
+                Aliases: [CliConstants.ModelFlag],
+                Scope: CliOptionScope.TrayOnly,
+                RequiresValue: true,
+                Apply: ApplyModel),
             new(
                 Aliases: [CliConstants.TaskbarPillFlag],
                 Scope: CliOptionScope.TrayOnly,
@@ -156,6 +167,17 @@ public static class ApplicationOptionsParser
         }
 
         state.PollingIntervalMs = Math.Max(ApplicationDefaults.MinimumPollingIntervalMs, parsedInterval);
+        return null;
+    }
+
+    private static string? ApplyModel(CliParseState state, string? rawModel)
+    {
+        if (!UpsModelCatalog.TryParseCliKey(rawModel, out UpsModelPreset preset))
+        {
+            return $"Invalid value for {CliConstants.ModelFlag}: '{rawModel}'. Expected '{UpsModelConstants.Nt2401ProCliKey}' or '{UpsModelConstants.Fx2200LcdCliKey}'.";
+        }
+
+        state.SelectedModel = preset;
         return null;
     }
 

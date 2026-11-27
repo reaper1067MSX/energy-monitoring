@@ -101,4 +101,15 @@ public static class LocalizationConstants
     public const string MenuDarkModeEs = "Modo oscuro";
     public const string MenuExitEn = "Exit VoltTray...";
     public const string MenuExitEs = "Salir de VoltTray...";
+
+    public const string ModelSelectorTitleEn = "Select UPS Model";
+    public const string ModelSelectorTitleEs = "Seleccionar modelo de UPS";
+    public const string ModelSelectorBodyEn = "Choose your Forza UPS model to apply its exact electrical rating:";
+    public const string ModelSelectorBodyEs = "Elegí tu modelo de UPS Forza para aplicar su capacidad eléctrica exacta:";
+    public const string ModelSelectorNt2401En = "Forza NT-2401PRO (2400 VA / 1200 W · 2x 12V 9Ah)";
+    public const string ModelSelectorNt2401Es = "Forza NT-2401PRO (2400 VA / 1200 W · 2x 12V 9Ah)";
+    public const string ModelSelectorFx2200En = "Forza FX-2200 LCD (Legacy · 2200 VA / 1200 W · 2x 12V 9Ah)";
+    public const string ModelSelectorFx2200Es = "Forza FX-2200 LCD (Legacy · 2200 VA / 1200 W · 2x 12V 9Ah)";
+    public const string ModelSelectorCancelEn = "Use default (Forza NT-2401PRO)";
+    public const string ModelSelectorCancelEs = "Usar predeterminado (Forza NT-2401PRO)";
 }

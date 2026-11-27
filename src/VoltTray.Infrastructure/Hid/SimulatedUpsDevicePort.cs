@@ -13,11 +13,17 @@ public sealed class SimulatedUpsDevicePort : IUpsDevicePort, IRawTelemetryPort
     private readonly Random _random = new(HidConstants.DefaultRandomSeed);
     private readonly object _lock = new();
     private readonly VoltronicParser _parser = new();
+    private readonly UpsCapabilities? _modelCapabilities;
     private UpsTelemetry? _lastTelemetry;
     private bool _isConnected = true;
     private bool _beeperActive = true;
     private bool _selfTestActive;
     private DateTime _selfTestExpires = DateTime.MinValue;
+
+    public SimulatedUpsDevicePort(UpsModelProfile? modelProfile = null)
+    {
+        _modelCapabilities = modelProfile?.ToCapabilities();
+    }
 
     public bool IsConnected
     {
@@ -118,7 +124,9 @@ public sealed class SimulatedUpsDevicePort : IUpsDevicePort, IRawTelemetryPort
             };
 
             byte[] frameBytes = VoltronicBinaryFrameBuilder.Build(specification);
-            UpsTelemetry? parsed = _parser.Parse(frameBytes, _lastTelemetry, now);
+            UpsTelemetry? parsed = _modelCapabilities is not null
+                ? _parser.Parse(frameBytes, _modelCapabilities, _lastTelemetry, now)
+                : _parser.Parse(frameBytes, _lastTelemetry, now);
             if (parsed != null)
             {
                 _lastTelemetry = parsed;
