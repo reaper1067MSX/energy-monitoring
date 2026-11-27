@@ -248,4 +248,61 @@ public class UIRenderersTests
             Assert.True(r <= a && g <= a && b <= a);
         });
     }
+
+    [Fact]
+    public void SkiaPopoverSurfaceRenderer_RendersDistinctLightAndDarkSplitCockpitCards_AndHandlesUnavailableMetrics()
+    {
+        using ISvgIconLibrary library = new SkiaSvgIconLibrary();
+        using IPopoverSurfaceRenderer renderer = new SkiaPopoverSurfaceRenderer(library);
+
+        UpsTelemetry telemetry = UpsTelemetry.CreateDefault() with
+        {
+            TemperatureCelsius = null,
+            ActiveLoadWatts = null,
+            FaultReferenceVoltageAc = null,
+            EstimatedRuntimeMinutes = 25
+        };
+        PopoverViewModel vm = PopoverViewModel.FromTelemetry(telemetry, CultureInfo.GetCultureInfo("es-ES"));
+        int width = DesignTokens.Sizes.PopoverWidth;
+        int height = DesignTokens.Sizes.PopoverCardHeight;
+
+        byte[] darkBytes = renderer.RenderBgra32(new PopoverRenderState(vm, UITheme.Dark, width, height, PopoverActionId.SelfTest));
+        byte[] lightBytes = renderer.RenderBgra32(new PopoverRenderState(vm, UITheme.Light, width, height, PopoverActionId.ToggleBeeper));
+
+        Assert.Equal(width * height * 4, darkBytes.Length);
+        Assert.Equal(width * height * 4, lightBytes.Length);
+        Assert.NotEqual(darkBytes, lightBytes);
+
+        byte[] darkPng = renderer.RenderPng(new PopoverRenderState(vm, UITheme.Dark, width, height));
+        Assert.True(darkPng.Length > 1000);
+    }
+
+    [Fact]
+    public void PopoverPainter_PointerHitTesting_TriggersButtonEventsWithin44PxTargetsOnly()
+    {
+        using var painter = new PopoverPainter(enableNativeWindow: false);
+        UpsTelemetry telemetry = UpsTelemetry.CreateDefault();
+        var anchor = new ViewRect(1800, 1040, 1824, 1064);
+        var workArea = new ViewRect(0, 0, 1920, 1040);
+
+        int selfTestCount = 0;
+        int beeperCount = 0;
+        painter.OnSelfTestRequested += () => selfTestCount++;
+        painter.OnToggleBeeperRequested += () => beeperCount++;
+
+        painter.Show(telemetry, UITheme.Light, anchor, TaskbarEdge.Bottom, workArea);
+        var layout = new PopoverHitTestLayout(DesignTokens.Sizes.PopoverWidth, DesignTokens.Sizes.PopoverCardHeight);
+
+        Assert.True(painter.HandlePointerDown(layout.SelfTestButton.Left + 10, layout.SelfTestButton.Top + 10));
+        Assert.True(painter.HandlePointerUp(layout.SelfTestButton.Left + 10, layout.SelfTestButton.Top + 10));
+
+        Assert.True(painter.HandlePointerDown(layout.ToggleBeeperButton.Left + 10, layout.ToggleBeeperButton.Top + 10));
+        Assert.True(painter.HandlePointerUp(layout.ToggleBeeperButton.Left + 10, layout.ToggleBeeperButton.Top + 10));
+
+        Assert.False(painter.HandlePointerDown(20, 20));
+        Assert.False(painter.HandlePointerUp(20, 20));
+
+        Assert.Equal(1, selfTestCount);
+        Assert.Equal(1, beeperCount);
+    }
 }

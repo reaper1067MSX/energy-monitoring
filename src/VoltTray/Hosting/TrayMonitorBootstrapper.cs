@@ -20,6 +20,8 @@ public sealed class TrayMonitorBootstrapper : IDisposable
 {
     private readonly IUpsDevicePort _rawPort;
     private readonly IUpsDevicePort _decoratedPort;
+    private readonly ISvgIconLibrary _svgIconLibrary;
+    private readonly IPopoverSurfaceRenderer _popoverSurfaceRenderer;
     private readonly TrayRenderer _trayRenderer;
     private readonly PopoverPainter _popoverPainter;
     private readonly TaskbarPillWindow? _taskbarPill;
@@ -36,10 +38,12 @@ public sealed class TrayMonitorBootstrapper : IDisposable
         IExecutionBoundary executionBoundary = new SafeExecutionMiddleware(telemetryProbe);
         _rawPort = upsPortFactory();
         _decoratedPort = new DiagnosticUpsPortDecorator(_rawPort, telemetryProbe);
+        _svgIconLibrary = new SkiaSvgIconLibrary();
+        _popoverSurfaceRenderer = new SkiaPopoverSurfaceRenderer(_svgIconLibrary);
         ITrayIconRasterizer trayIconRasterizer = TrayIconRasterizer.CreateDefault();
         INativeIconFactory nativeIconFactory = new Win32NativeIconFactory();
         _trayRenderer = new TrayRenderer(trayIconRasterizer, nativeIconFactory, WindowsThemeDetector.IsLightTaskbar);
-        _popoverPainter = new PopoverPainter(enableNativeWindow: true);
+        _popoverPainter = new PopoverPainter(enableNativeWindow: true, surfaceRenderer: _popoverSurfaceRenderer);
 
         Lifecycle = new HostLifecycle(
             _decoratedPort,
@@ -51,7 +55,8 @@ public sealed class TrayMonitorBootstrapper : IDisposable
             screenPlacementProvider: null,
             telemetryProbe,
             executionBoundary,
-            delegateDiagnosticsToPort: true);
+            delegateDiagnosticsToPort: true,
+            appThemeProvider: WindowsThemeDetector.GetAppTheme);
 
         if (options.IsDryRun)
         {
@@ -82,6 +87,8 @@ public sealed class TrayMonitorBootstrapper : IDisposable
         Lifecycle.Dispose();
         _taskbarPill?.Dispose();
         _popoverPainter.Dispose();
+        _popoverSurfaceRenderer.Dispose();
+        _svgIconLibrary.Dispose();
         _trayRenderer.Dispose();
         _decoratedPort.Dispose();
         _rawPort.Dispose();

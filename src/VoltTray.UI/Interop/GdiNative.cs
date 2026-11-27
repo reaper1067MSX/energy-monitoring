@@ -190,4 +190,23 @@ internal static partial class GdiNative
 
     [LibraryImport("user32.dll", EntryPoint = "MessageBoxW", SetLastError = true, StringMarshalling = StringMarshalling.Utf16)]
     public static partial int MessageBox(IntPtr hWnd, string lpText, string lpCaption, uint uType);
+
+    [LibraryImport("gdi32.dll", SetLastError = true)]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    public static partial bool BitBlt(
+        IntPtr hdcDest,
+        int xDest,
+        int yDest,
+        int width,
+        int height,
+        IntPtr hdcSrc,
+        int xSrc,
+        int ySrc,
+        uint rop);
+
+    [LibraryImport("user32.dll", EntryPoint = "LoadCursorW", SetLastError = true)]
+    public static partial IntPtr LoadCursor(IntPtr hInstance, IntPtr lpCursorName);
+
+    [LibraryImport("user32.dll")]
+    public static partial IntPtr SetCursor(IntPtr hCursor);
 }

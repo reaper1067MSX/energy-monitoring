@@ -2,6 +2,7 @@ namespace VoltTray.UI.Interop;
 
 internal static class Win32UiConstants
 {
+    public const int DwmwaUseImmersiveDarkMode = 20;
     public const int DwmwaWindowCornerPreference = 33;
     public const int DwmwcpRound = 2;
 
@@ -38,10 +39,19 @@ internal static class Win32UiConstants
     public const uint WmTrayIcon = WmUser + 101;
     public const uint WmActivate = 0x0006;
     public const uint WmPaint = 0x000F;
+    public const uint WmEraseBkgnd = 0x0014;
     public const uint WmKeyDown = 0x0100;
+    public const uint WmMouseMove = 0x0200;
+    public const uint WmLButtonDown = 0x0201;
     public const uint WmLButtonUp = 0x0202;
     public const uint WmRButtonUp = 0x0205;
+    public const uint WmMouseLeave = 0x02A3;
     public const int WaInactive = 0;
+
+    public const uint SrcCopy = 0x00CC0020;
+    public const int IdcArrow = 32512;
+    public const int IdcHand = 32649;
+    public const string PopoverWindowClass = "VoltTray_OptionCPopover";
 
     public const int TransparentBkMode = 1;
     public const int PenStyleSolid = 0;

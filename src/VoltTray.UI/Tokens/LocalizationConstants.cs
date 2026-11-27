@@ -34,6 +34,17 @@ public static class LocalizationConstants
     public const string ActiveLoadSectionEn = "Active Load";
     public const string ActiveLoadSectionEs = "Carga Activa";
 
+    public const string InputLabelEn = "Input";
+    public const string InputLabelEs = "Entrada";
+    public const string OutputLabelEn = "Output";
+    public const string OutputLabelEs = "Salida";
+    public const string TemperatureLabelEn = "Temp";
+    public const string TemperatureLabelEs = "Temp";
+    public const string RuntimeLabelEn = "Runtime";
+    public const string RuntimeLabelEs = "Autonomía";
+    public const string LoadCapacitySuffixEn = "load";
+    public const string LoadCapacitySuffixEs = "carga";
+
     public const string BatteryTestEn = "Battery test";
     public const string BatteryTestEs = "Prueba de batería";
     public const string BatteryTestRunningEn = "Test in progress";
