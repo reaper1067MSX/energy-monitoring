@@ -80,6 +80,18 @@ public class TaskbarPillTests
             Assert.True(r <= a && g <= a && b <= a);
         });
         Assert.NotEqual(darkPixels, lightPixels);
+
+        UpsTelemetry onBattery = telemetry with
+        {
+            State = UpsOperationalState.OnBattery,
+            BatteryPercentage = 45,
+            LoadPercentage = 80
+        };
+        uint[] onBatteryPixels = renderer.RenderArgbPixels(onBattery, 144, 48, isLightTaskbar: false, dpi: 96);
+        Assert.NotEqual(darkPixels, onBatteryPixels);
+
+        byte[] png = renderer.RenderPng(onBattery, 144, 48, isLightTaskbar: false, dpi: 96);
+        Assert.True(png.Length > 200);
     }
 
     [Fact]

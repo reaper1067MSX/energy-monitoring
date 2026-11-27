@@ -24,6 +24,7 @@ public sealed class TrayMonitorBootstrapper : IDisposable
     private readonly IPopoverSurfaceRenderer _popoverSurfaceRenderer;
     private readonly TrayRenderer _trayRenderer;
     private readonly PopoverPainter _popoverPainter;
+    private readonly TaskbarPillSurfaceRenderer? _taskbarPillSurfaceRenderer;
     private readonly TaskbarPillWindow? _taskbarPill;
     private readonly TaskbarPillSubscriber? _taskbarPillSubscriber;
 
@@ -65,9 +66,10 @@ public sealed class TrayMonitorBootstrapper : IDisposable
 
         if (options.EnableTaskbarPill)
         {
+            _taskbarPillSurfaceRenderer = new TaskbarPillSurfaceRenderer(trayIconRasterizer, _svgIconLibrary);
             _taskbarPill = new TaskbarPillWindow(
                 new TaskbarPillPlacementCalculator(),
-                new TaskbarPillSurfaceRenderer(trayIconRasterizer),
+                _taskbarPillSurfaceRenderer,
                 new Win32FullscreenStateProvider(),
                 WindowsThemeDetector.IsLightTaskbar,
                 enableNativeWindow: true);
@@ -86,6 +88,7 @@ public sealed class TrayMonitorBootstrapper : IDisposable
         _taskbarPillSubscriber?.Dispose();
         Lifecycle.Dispose();
         _taskbarPill?.Dispose();
+        _taskbarPillSurfaceRenderer?.Dispose();
         _popoverPainter.Dispose();
         _popoverSurfaceRenderer.Dispose();
         _svgIconLibrary.Dispose();
