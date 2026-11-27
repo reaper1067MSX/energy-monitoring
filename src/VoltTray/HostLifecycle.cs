@@ -27,6 +27,7 @@ public sealed class HostLifecycle : IDisposable
     private readonly bool _delegateDiagnosticsToPort;
     private readonly SplitCockpitPresenter _presenter;
     private readonly IEventBus _eventBus;
+    private readonly Func<UITheme>? _appThemeProvider;
     private readonly List<IDisposable> _subscriptions = new();
     private CancellationTokenSource? _cts;
     private Task? _pollingTask;
@@ -57,7 +58,8 @@ public sealed class HostLifecycle : IDisposable
         InProcessTelemetryProbe? telemetryProbe = null,
         IExecutionBoundary? executionBoundary = null,
         bool delegateDiagnosticsToPort = false,
-        IEventBus? eventBus = null)
+        IEventBus? eventBus = null,
+        Func<UITheme>? appThemeProvider = null)
     {
         _upsPort = upsPort ?? throw new ArgumentNullException(nameof(upsPort));
         _trayRenderer = trayRenderer ?? new TrayRenderer();
@@ -67,6 +69,7 @@ public sealed class HostLifecycle : IDisposable
         _telemetryProbe = telemetryProbe ?? new InProcessTelemetryProbe();
         _executionBoundary = executionBoundary ?? new SafeExecutionMiddleware(_telemetryProbe);
         _delegateDiagnosticsToPort = delegateDiagnosticsToPort;
+        _appThemeProvider = appThemeProvider;
         _shutdownCoordinator = new ShutdownCoordinator(
             shutdownPort ?? new WindowsShutdownPort(),
             notificationPort ?? new WindowsNotificationPort());
@@ -200,7 +203,8 @@ public sealed class HostLifecycle : IDisposable
         }
 
         (ViewRect anchorRect, ViewRect workArea, TaskbarEdge edge) = ResolvePlacement();
-        _popoverPainter.Show(received.Telemetry, _popoverPainter.CurrentTheme, anchorRect, edge, workArea);
+        UITheme theme = _appThemeProvider?.Invoke() ?? _popoverPainter.CurrentTheme;
+        _popoverPainter.Show(received.Telemetry, theme, anchorRect, edge, workArea);
     }
 
     public Task<UpsTelemetry?> StepAsync(CancellationToken token = default, DateTimeOffset? now = null)
@@ -330,10 +334,11 @@ public sealed class HostLifecycle : IDisposable
     {
         (ViewRect anchorRect, ViewRect workArea, TaskbarEdge edge) = ResolvePlacement(anchorOverride);
         _lastAnchorRect = anchorRect;
+        UITheme theme = _appThemeProvider?.Invoke() ?? _popoverPainter.CurrentTheme;
 
         if (CurrentTelemetry != null)
         {
-            _presenter.TogglePopover(anchorRect, edge, workArea, _popoverPainter.CurrentTheme);
+            _presenter.TogglePopover(anchorRect, edge, workArea, theme);
             return;
         }
 
@@ -343,7 +348,7 @@ public sealed class HostLifecycle : IDisposable
             return;
         }
 
-        _popoverPainter.Show(UpsTelemetry.CreateDefault(), _popoverPainter.CurrentTheme, anchorRect, edge, workArea);
+        _popoverPainter.Show(UpsTelemetry.CreateDefault(), theme, anchorRect, edge, workArea);
     }
 
     private (ViewRect AnchorRect, ViewRect WorkArea, TaskbarEdge Edge) ResolvePlacement(ViewRect? anchorOverride = null)

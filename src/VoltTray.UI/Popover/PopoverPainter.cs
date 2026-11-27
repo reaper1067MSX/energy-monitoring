@@ -1,23 +1,30 @@
 using System.Runtime.InteropServices;
 using VoltTray.Core.Telemetry;
+using VoltTray.UI.Atoms;
 using VoltTray.UI.Interop;
 using VoltTray.UI.Models;
 using VoltTray.UI.Tokens;
-using VoltTray.UI.Tokens.Themes;
+using VoltTray.UI.Tokens.Primitives;
 
 namespace VoltTray.UI.Popover;
 
 /// <summary>
 /// Option C Split-Cockpit Matrix Popover painter and Win32 DWMWCP_ROUND window host.
-/// Enforces 372 px width, opaque DesignTokens surfaces, 350 ms hide/reopen debounce,
-/// keyboard navigation, and dynamic telemetry omission when Unavailable.
+/// Enforces 372 px width, SkiaSharp Split-Cockpit rendering, 350 ms hide/reopen debounce,
+/// pointer hit-testing, keyboard navigation, and dynamic telemetry omission when Unavailable.
 /// </summary>
 public sealed class PopoverPainter : IPopoverView
 {
     private readonly Func<DateTimeOffset> _clock;
     private readonly bool _enableNativeWindow;
+    private readonly IPopoverSurfaceRenderer _surfaceRenderer;
+    private readonly ISvgIconLibrary? _ownedIconLibrary;
+    private readonly bool _ownsSurfaceRenderer;
     private DateTimeOffset? _lastHiddenAt;
+    private long _lastShownTickMs;
     private IntPtr _hwnd;
+    private IntPtr _handCursor;
+    private IntPtr _arrowCursor;
     private WndProcDelegate? _wndProc;
 
     public bool IsVisible { get; private set; }
@@ -27,14 +34,31 @@ public sealed class PopoverPainter : IPopoverView
     public ViewRect CurrentIconRect { get; private set; }
     public ViewRect CurrentBounds { get; private set; }
     public int FocusedActionIndex { get; private set; }
+    public PopoverActionId HoveredAction { get; private set; }
+    public PopoverActionId PressedAction { get; private set; }
 
     public event Action? OnSelfTestRequested;
     public event Action? OnToggleBeeperRequested;
 
-    public PopoverPainter(bool enableNativeWindow = false, Func<DateTimeOffset>? clock = null)
+    public PopoverPainter(
+        bool enableNativeWindow = false,
+        Func<DateTimeOffset>? clock = null,
+        IPopoverSurfaceRenderer? surfaceRenderer = null)
     {
         _enableNativeWindow = enableNativeWindow;
         _clock = clock ?? (() => DateTimeOffset.UtcNow);
+
+        if (surfaceRenderer != null)
+        {
+            _surfaceRenderer = surfaceRenderer;
+            _ownsSurfaceRenderer = false;
+        }
+        else
+        {
+            _ownedIconLibrary = new SkiaSvgIconLibrary();
+            _surfaceRenderer = new SkiaPopoverSurfaceRenderer(_ownedIconLibrary);
+            _ownsSurfaceRenderer = true;
+        }
     }
 
     public bool IsToggleDebounced(DateTimeOffset? now = null)
@@ -55,12 +79,18 @@ public sealed class PopoverPainter : IPopoverView
             return;
         }
 
+        bool wasVisible = IsVisible;
         CurrentTelemetry = telemetry;
         CurrentTheme = theme;
         CurrentIconRect = iconRect;
         CurrentViewModel = PopoverViewModel.FromTelemetry(telemetry);
         CurrentBounds = CalculatePlacement(iconRect, edge, workArea, DesignTokens.Sizes.PopoverCardHeight);
         IsVisible = true;
+
+        if (!wasVisible)
+        {
+            _lastShownTickMs = Environment.TickCount64;
+        }
 
         if (_enableNativeWindow)
         {
@@ -76,10 +106,87 @@ public sealed class PopoverPainter : IPopoverView
         }
 
         IsVisible = false;
+        HoveredAction = PopoverActionId.None;
+        PressedAction = PopoverActionId.None;
+
         if (_hwnd != IntPtr.Zero)
         {
             GdiNative.ShowWindow(_hwnd, Win32UiConstants.SwHide);
         }
+    }
+
+    public bool HandlePointerMove(int x, int y)
+    {
+        if (!IsVisible)
+        {
+            return false;
+        }
+
+        PopoverActionId nextHovered = CreateHitTestLayout().HitTest(x, y);
+        if (nextHovered == HoveredAction)
+        {
+            return false;
+        }
+
+        HoveredAction = nextHovered;
+        InvalidateNativeWindow();
+        return true;
+    }
+
+    public bool HandlePointerDown(int x, int y)
+    {
+        if (!IsVisible)
+        {
+            return false;
+        }
+
+        PopoverActionId hit = CreateHitTestLayout().HitTest(x, y);
+        if (hit == PopoverActionId.None)
+        {
+            return false;
+        }
+
+        PressedAction = hit;
+        HoveredAction = hit;
+        FocusedActionIndex = hit == PopoverActionId.SelfTest ? 0 : 1;
+        InvalidateNativeWindow();
+        return true;
+    }
+
+    public bool HandlePointerUp(int x, int y)
+    {
+        if (!IsVisible)
+        {
+            return false;
+        }
+
+        PopoverActionId previousPressed = PressedAction;
+        PressedAction = PopoverActionId.None;
+        PopoverActionId hit = CreateHitTestLayout().HitTest(x, y);
+
+        if (previousPressed != PopoverActionId.None)
+        {
+            InvalidateNativeWindow();
+        }
+
+        if (previousPressed == PopoverActionId.None || hit != previousPressed)
+        {
+            return false;
+        }
+
+        if (hit == PopoverActionId.SelfTest)
+        {
+            TriggerSelfTest();
+            return true;
+        }
+
+        if (hit == PopoverActionId.ToggleBeeper)
+        {
+            TriggerToggleBeeper();
+            return true;
+        }
+
+        return false;
     }
 
     public bool HandleKeyDown(int virtualKey)
@@ -96,10 +203,7 @@ public sealed class PopoverPainter : IPopoverView
                 return true;
             case LocalizationConstants.VkTab:
                 FocusedActionIndex = FocusedActionIndex == 0 ? 1 : 0;
-                if (_hwnd != IntPtr.Zero)
-                {
-                    GdiNative.InvalidateRect(_hwnd, IntPtr.Zero, false);
-                }
+                InvalidateNativeWindow();
                 return true;
             case LocalizationConstants.VkReturn:
             case LocalizationConstants.VkSpace:
@@ -137,7 +241,28 @@ public sealed class PopoverPainter : IPopoverView
             GdiNative.DestroyWindow(_hwnd);
             _hwnd = IntPtr.Zero;
             IntPtr hInstance = GdiNative.GetModuleHandle(null);
-            GdiNative.UnregisterClass("VoltTray_OptionCPopover", hInstance);
+            GdiNative.UnregisterClass(Win32UiConstants.PopoverWindowClass, hInstance);
+        }
+
+        if (_ownsSurfaceRenderer)
+        {
+            _surfaceRenderer.Dispose();
+            _ownedIconLibrary?.Dispose();
+        }
+    }
+
+    private PopoverHitTestLayout CreateHitTestLayout()
+    {
+        int width = CurrentBounds.Width > 0 ? CurrentBounds.Width : LayoutTokens.PopoverWidth;
+        int height = CurrentBounds.Height > 0 ? CurrentBounds.Height : LayoutTokens.PopoverCardHeight;
+        return new PopoverHitTestLayout(width, height);
+    }
+
+    private void InvalidateNativeWindow()
+    {
+        if (_hwnd != IntPtr.Zero)
+        {
+            GdiNative.InvalidateRect(_hwnd, IntPtr.Zero, false);
         }
     }
 
@@ -150,6 +275,13 @@ public sealed class PopoverPainter : IPopoverView
             {
                 return;
             }
+
+            int darkMode = CurrentTheme == UITheme.Dark ? 1 : 0;
+            _ = GdiNative.DwmSetWindowAttribute(
+                _hwnd,
+                Win32UiConstants.DwmwaUseImmersiveDarkMode,
+                ref darkMode,
+                sizeof(int));
 
             GdiNative.SetWindowPos(
                 _hwnd,
@@ -177,16 +309,18 @@ public sealed class PopoverPainter : IPopoverView
         }
 
         _wndProc = PopoverWndProc;
-        const string className = "VoltTray_OptionCPopover";
+        _handCursor = GdiNative.LoadCursor(IntPtr.Zero, (IntPtr)Win32UiConstants.IdcHand);
+        _arrowCursor = GdiNative.LoadCursor(IntPtr.Zero, (IntPtr)Win32UiConstants.IdcArrow);
         IntPtr hInstance = GdiNative.GetModuleHandle(null);
 
-        fixed (char* classNamePtr = className)
+        fixed (char* classNamePtr = Win32UiConstants.PopoverWindowClass)
         {
             var wcx = new WindowClassExW
             {
                 Size = (uint)sizeof(WindowClassExW),
                 WindowProc = Marshal.GetFunctionPointerForDelegate(_wndProc),
                 Instance = hInstance,
+                Cursor = _arrowCursor,
                 ClassName = classNamePtr
             };
 
@@ -195,7 +329,7 @@ public sealed class PopoverPainter : IPopoverView
 
         _hwnd = GdiNative.CreateWindowEx(
             Win32UiConstants.WsExToolWindow | Win32UiConstants.WsExTopmost,
-            className,
+            Win32UiConstants.PopoverWindowClass,
             CurrentViewModel?.Title ?? nameof(PopoverPainter),
             Win32UiConstants.WsPopup,
             bounds.Left,
@@ -222,8 +356,39 @@ public sealed class PopoverPainter : IPopoverView
     {
         switch (msg)
         {
+            case Win32UiConstants.WmEraseBkgnd:
+                return (IntPtr)1;
             case Win32UiConstants.WmActivate when (wParam.ToInt64() & 0xFFFF) == Win32UiConstants.WaInactive:
-                Hide();
+                if (Environment.TickCount64 - _lastShownTickMs >= PopoverLayoutConstants.ShowGracePeriodMs)
+                {
+                    Hide();
+                }
+                return IntPtr.Zero;
+            case Win32UiConstants.WmMouseMove:
+            {
+                (int x, int y) = DecodePoint(lParam);
+                HandlePointerMove(x, y);
+                IntPtr cursor = HoveredAction != PopoverActionId.None ? _handCursor : _arrowCursor;
+                if (cursor != IntPtr.Zero)
+                {
+                    GdiNative.SetCursor(cursor);
+                }
+                return IntPtr.Zero;
+            }
+            case Win32UiConstants.WmLButtonDown:
+            {
+                (int x, int y) = DecodePoint(lParam);
+                HandlePointerDown(x, y);
+                return IntPtr.Zero;
+            }
+            case Win32UiConstants.WmLButtonUp:
+            {
+                (int x, int y) = DecodePoint(lParam);
+                HandlePointerUp(x, y);
+                return IntPtr.Zero;
+            }
+            case Win32UiConstants.WmMouseLeave:
+                HandlePointerMove(-1, -1);
                 return IntPtr.Zero;
             case Win32UiConstants.WmKeyDown:
                 HandleKeyDown((int)wParam.ToInt64());
@@ -236,40 +401,91 @@ public sealed class PopoverPainter : IPopoverView
         }
     }
 
-    private void PaintNativeWindow(IntPtr hWnd)
+    private static (int X, int Y) DecodePoint(IntPtr lParam)
+    {
+        long packed = lParam.ToInt64();
+        int x = unchecked((short)(packed & 0xFFFF));
+        int y = unchecked((short)((packed >> 16) & 0xFFFF));
+        return (x, y);
+    }
+
+    private unsafe void PaintNativeWindow(IntPtr hWnd)
     {
         IntPtr hdc = GdiNative.BeginPaint(hWnd, out PaintStruct paintStruct);
         try
         {
-            ThemePalette palette = DesignTokens.GetPalette(CurrentTheme);
-            IntPtr surfaceBrush = GdiNative.CreateSolidBrush(DesignTokens.ParseBgrColor(palette.Surface));
-            NativeRect fullRect = paintStruct.PaintRect;
-            GdiNative.FillRect(hdc, ref fullRect, surfaceBrush);
-            GdiNative.DeleteObject(surfaceBrush);
-
             if (CurrentViewModel is not PopoverViewModel vm)
             {
                 return;
             }
 
-            GdiNative.SetBkMode(hdc, Win32UiConstants.TransparentBkMode);
-            GdiNative.SetTextColor(hdc, DesignTokens.ParseBgrColor(palette.Text));
+            int width = CurrentBounds.Width > 0 ? CurrentBounds.Width : LayoutTokens.PopoverWidth;
+            int height = CurrentBounds.Height > 0 ? CurrentBounds.Height : LayoutTokens.PopoverCardHeight;
+            var renderState = new PopoverRenderState(
+                vm,
+                CurrentTheme,
+                width,
+                height,
+                HoveredAction,
+                PressedAction,
+                FocusedActionIndex);
 
-            var titleRect = new NativeRect(16, 14, CurrentBounds.Width - 16, 40);
-            GdiNative.DrawText(hdc, vm.Title, vm.Title.Length, ref titleRect, Win32UiConstants.DtLeft | Win32UiConstants.DtSingleLine);
-
-            GdiNative.SetTextColor(hdc, DesignTokens.ParseBgrColor(palette.TextMuted));
-            var subRect = new NativeRect(16, 38, CurrentBounds.Width - 16, 58);
-            GdiNative.DrawText(hdc, vm.BankSubtitle, vm.BankSubtitle.Length, ref subRect, Win32UiConstants.DtLeft | Win32UiConstants.DtSingleLine);
-
-            string summary = $"{vm.StatusLabel} · {vm.InputVoltageText} · {vm.RuntimeText}";
-            var summaryRect = new NativeRect(16, 76, CurrentBounds.Width - 16, 108);
-            GdiNative.SetTextColor(hdc, DesignTokens.ParseBgrColor(palette.Text));
-            GdiNative.DrawText(hdc, summary, summary.Length, ref summaryRect, Win32UiConstants.DtLeft | Win32UiConstants.DtSingleLine);
+            byte[] pixels = _surfaceRenderer.RenderBgra32(renderState);
+            BlitBgra32(hdc, width, height, pixels);
         }
         finally
         {
             GdiNative.EndPaint(hWnd, ref paintStruct);
+        }
+    }
+
+    private static unsafe void BlitBgra32(IntPtr hdcDest, int width, int height, byte[] pixels)
+    {
+        var bmi = new BitmapInfoHeader
+        {
+            Size = (uint)sizeof(BitmapInfoHeader),
+            Width = width,
+            Height = -height,
+            Planes = Win32UiConstants.ColorPlanesSingle,
+            BitCount = Win32UiConstants.BitsPerPixel32,
+            Compression = Win32UiConstants.BiRgb
+        };
+
+        IntPtr memDc = GdiNative.CreateCompatibleDC(hdcDest);
+        if (memDc == IntPtr.Zero)
+        {
+            return;
+        }
+
+        IntPtr dib = GdiNative.CreateDIBSection(memDc, ref bmi, Win32UiConstants.DibRgbColors, out IntPtr bits, IntPtr.Zero, 0);
+        if (dib == IntPtr.Zero || bits == IntPtr.Zero)
+        {
+            if (dib != IntPtr.Zero)
+            {
+                GdiNative.DeleteObject(dib);
+            }
+
+            GdiNative.DeleteDC(memDc);
+            return;
+        }
+
+        IntPtr oldBitmap = GdiNative.SelectObject(memDc, dib);
+        try
+        {
+            long expectedBytes = (long)width * height * PopoverLayoutConstants.BgraBytesPerPixel;
+            long copyBytes = Math.Min(expectedBytes, pixels.Length);
+            fixed (byte* src = pixels)
+            {
+                Buffer.MemoryCopy(src, (void*)bits, expectedBytes, copyBytes);
+            }
+
+            GdiNative.BitBlt(hdcDest, 0, 0, width, height, memDc, 0, 0, Win32UiConstants.SrcCopy);
+        }
+        finally
+        {
+            GdiNative.SelectObject(memDc, oldBitmap);
+            GdiNative.DeleteObject(dib);
+            GdiNative.DeleteDC(memDc);
         }
     }
 }
