@@ -116,27 +116,10 @@ internal sealed class TaskbarPillSurfaceRenderer : ITaskbarPillSurfaceRenderer, 
 
         float scale = Math.Max(TaskbarPillLayoutConstants.MinScale, dpi / (float)LayoutTokens.DefaultDpi);
         ThemePalette palette = isLightTaskbar ? LightThemeTokens.Palette : DarkThemeTokens.Palette;
-        SKColor accentColor = SKColor.Parse(DesignTokens.GetTrayStateColor(telemetry.State, isLightTaskbar));
-        SKColor surfaceColor = SKColor.Parse(palette.Surface)
-            .WithAlpha(isLightTaskbar ? TaskbarPillLayoutConstants.LightFillAlpha : TaskbarPillLayoutConstants.DarkFillAlpha);
-        SKColor borderColor = SKColor.Parse(palette.Border).WithAlpha(TaskbarPillLayoutConstants.BorderAlpha);
 
         float insetX = TaskbarPillLayoutConstants.HorizontalInsetPx * scale;
         float insetY = TaskbarPillLayoutConstants.VerticalInsetPx * scale;
         var pillRect = new SKRect(insetX, insetY, Math.Max(insetX + 4f, width - insetX), Math.Max(insetY + 4f, height - insetY));
-        float radius = TaskbarPillLayoutConstants.CornerRadiusPx * scale;
-
-        using var fillPaint = new SKPaint { Color = surfaceColor, IsAntialias = true };
-        using var borderPaint = new SKPaint
-        {
-            Color = borderColor,
-            Style = SKPaintStyle.Stroke,
-            StrokeWidth = TaskbarPillLayoutConstants.BorderStrokeWidth * scale,
-            IsAntialias = true
-        };
-
-        canvas.DrawRoundRect(pillRect, radius, radius, fillPaint);
-        canvas.DrawRoundRect(pillRect, radius, radius, borderPaint);
 
         float padX = TaskbarPillLayoutConstants.PaddingX * scale;
         float iconHeight = Math.Min(TaskbarPillLayoutConstants.IconHeightPx * scale, pillRect.Height - (4f * scale));

@@ -58,7 +58,7 @@ internal static class FluentBatterySvgBuilder
             svg.Append('\n');
         }
 
-        string? badge = BuildBadgeSvg(state, stroke, halo);
+        string? badge = BuildBadgeSvg(state, stroke, halo, fill);
         if (!string.IsNullOrEmpty(badge))
         {
             svg.Append(badge);
@@ -89,13 +89,13 @@ internal static class FluentBatterySvgBuilder
         _ => stroke
     };
 
-    private static string? BuildBadgeSvg(UpsOperationalState state, string stroke, string halo) => state switch
+    private static string? BuildBadgeSvg(UpsOperationalState state, string stroke, string halo, string fill) => state switch
     {
         UpsOperationalState.LineNormal => string.Format(
             CultureInfo.InvariantCulture,
             FluentBatterySvgConstants.ChargingBoltBadgeFormat,
             stroke,
-            halo),
+            fill),
         UpsOperationalState.ChargingAvr => string.Format(
             CultureInfo.InvariantCulture,
             FluentBatterySvgConstants.AvrWaveBadgeFormat,

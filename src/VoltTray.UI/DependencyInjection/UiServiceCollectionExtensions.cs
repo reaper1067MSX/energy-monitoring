@@ -22,7 +22,8 @@ public static class UiServiceCollectionExtensions
         services.AddSingleton<ITrayIconView>(sp => new TrayRenderer(
             sp.GetRequiredService<ITrayIconRasterizer>(),
             sp.GetRequiredService<INativeIconFactory>(),
-            WindowsThemeDetector.IsLightTaskbar));
+            WindowsThemeDetector.IsLightTaskbar,
+            showTrayIcon: !enableTaskbarPill));
         services.AddSingleton<IPopoverView>(sp => new PopoverPainter(
             enableNativeWindow: true,
             surfaceRenderer: sp.GetRequiredService<IPopoverSurfaceRenderer>()));

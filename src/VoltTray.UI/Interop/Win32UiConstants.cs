@@ -28,7 +28,7 @@ internal static class Win32UiConstants
     public const ushort BitsPerPixel32 = 32;
 
     public const uint PillHitTestAlpha = 0x01000000;
-    public const int PillDefaultWidthPx = 92;
+    public const int PillDefaultWidthPx = 80;
     public const int PillDefaultHeightPx = 34;
     public const int PillDefaultRightMarginFallbackPx = 220;
     public const int PillEdgeGapPx = 6;

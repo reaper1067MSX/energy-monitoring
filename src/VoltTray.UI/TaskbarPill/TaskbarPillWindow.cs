@@ -371,6 +371,9 @@ internal sealed class TaskbarPillWindow : ITaskbarPillView
 
                 PInvoke.RegisterClassEx(&wcx);
 
+                HWND shellTray = FindTopLevelWindow(Win32UiConstants.ShellTrayWndClass);
+                HWND ownerHwnd = IsWindows11Taskbar(shellTray) ? shellTray : default;
+
                 t_creatingInstance = this;
                 try
                 {
@@ -383,7 +386,7 @@ internal sealed class TaskbarPillWindow : ITaskbarPillView
                         0,
                         Win32UiConstants.PillDefaultWidthPx,
                         Win32UiConstants.PillDefaultHeightPx,
-                        default,
+                        ownerHwnd,
                         default,
                         hInstance,
                         null);
@@ -527,19 +530,7 @@ internal sealed class TaskbarPillWindow : ITaskbarPillView
                 blend,
                 UPDATE_LAYERED_WINDOW_FLAGS.ULW_ALPHA);
 
-            if (!_isParentedToShellTray)
-            {
-                PInvoke.SetWindowPos(
-                    _hwnd,
-                    new HWND((void*)-1),
-                    bounds.Left,
-                    bounds.Top,
-                    bounds.Width,
-                    bounds.Height,
-                    SET_WINDOW_POS_FLAGS.SWP_NOACTIVATE | SET_WINDOW_POS_FLAGS.SWP_SHOWWINDOW);
-                _isWindowShown = true;
-            }
-            else if (!_isWindowShown)
+            if (!_isWindowShown)
             {
                 PInvoke.ShowWindow(_hwnd, SHOW_WINDOW_CMD.SW_SHOWNOACTIVATE);
                 _isWindowShown = true;
