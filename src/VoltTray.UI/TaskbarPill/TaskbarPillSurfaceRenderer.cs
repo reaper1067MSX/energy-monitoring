@@ -42,14 +42,14 @@ internal sealed class TaskbarPillSurfaceRenderer : ITaskbarPillSurfaceRenderer, 
         _semiBoldTypeface = ResolveTypeface(SKFontStyleWeight.SemiBold);
     }
 
-    public uint[] RenderArgbPixels(UpsTelemetry telemetry, int width, int height, bool isLightTaskbar, int dpi)
+    public uint[] RenderArgbPixels(UpsTelemetry telemetry, int width, int height, bool isLightTaskbar, int dpi, bool isHovered = false)
     {
         ObjectDisposedException.ThrowIf(_disposed, this);
         ArgumentNullException.ThrowIfNull(telemetry);
         ArgumentOutOfRangeException.ThrowIfNegativeOrZero(width);
         ArgumentOutOfRangeException.ThrowIfNegativeOrZero(height);
 
-        using SKSurface surface = RenderSurface(telemetry, width, height, isLightTaskbar, dpi);
+        using SKSurface surface = RenderSurface(telemetry, width, height, isLightTaskbar, dpi, isHovered);
         var imageInfo = new SKImageInfo(width, height, SKColorType.Bgra8888, SKAlphaType.Premul);
         uint[] pixels = new uint[width * height];
 
@@ -74,14 +74,14 @@ internal sealed class TaskbarPillSurfaceRenderer : ITaskbarPillSurfaceRenderer, 
         return pixels;
     }
 
-    public byte[] RenderPng(UpsTelemetry telemetry, int width, int height, bool isLightTaskbar, int dpi)
+    public byte[] RenderPng(UpsTelemetry telemetry, int width, int height, bool isLightTaskbar, int dpi, bool isHovered = false)
     {
         ObjectDisposedException.ThrowIf(_disposed, this);
         ArgumentNullException.ThrowIfNull(telemetry);
         ArgumentOutOfRangeException.ThrowIfNegativeOrZero(width);
         ArgumentOutOfRangeException.ThrowIfNegativeOrZero(height);
 
-        using SKSurface surface = RenderSurface(telemetry, width, height, isLightTaskbar, dpi);
+        using SKSurface surface = RenderSurface(telemetry, width, height, isLightTaskbar, dpi, isHovered);
         using SKImage image = surface.Snapshot();
         using SKData data = image.Encode(SKEncodedImageFormat.Png, TaskbarPillLayoutConstants.PngQuality);
         return data.ToArray();
@@ -104,7 +104,7 @@ internal sealed class TaskbarPillSurfaceRenderer : ITaskbarPillSurfaceRenderer, 
         }
     }
 
-    private SKSurface RenderSurface(UpsTelemetry telemetry, int width, int height, bool isLightTaskbar, int dpi)
+    private SKSurface RenderSurface(UpsTelemetry telemetry, int width, int height, bool isLightTaskbar, int dpi, bool isHovered)
     {
         _ = _iconRasterizer.ResolvePhysicalSize(dpi);
         var imageInfo = new SKImageInfo(width, height, SKColorType.Bgra8888, SKAlphaType.Premul);
@@ -120,6 +120,16 @@ internal sealed class TaskbarPillSurfaceRenderer : ITaskbarPillSurfaceRenderer, 
         float insetX = TaskbarPillLayoutConstants.HorizontalInsetPx * scale;
         float insetY = TaskbarPillLayoutConstants.VerticalInsetPx * scale;
         var pillRect = new SKRect(insetX, insetY, Math.Max(insetX + 4f, width - insetX), Math.Max(insetY + 4f, height - insetY));
+
+        if (isHovered)
+        {
+            SKColor hoverColor = isLightTaskbar
+                ? new SKColor(0, 0, 0, TaskbarPillLayoutConstants.HoverLightAlpha)
+                : new SKColor(255, 255, 255, TaskbarPillLayoutConstants.HoverDarkAlpha);
+            float radius = TaskbarPillLayoutConstants.CornerRadiusPx * scale;
+            using var hoverPaint = new SKPaint { Color = hoverColor, IsAntialias = true };
+            canvas.DrawRoundRect(pillRect, radius, radius, hoverPaint);
+        }
 
         float padX = TaskbarPillLayoutConstants.PaddingX * scale;
         float iconHeight = Math.Min(TaskbarPillLayoutConstants.IconHeightPx * scale, pillRect.Height - (4f * scale));

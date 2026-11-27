@@ -15,21 +15,53 @@ internal static class FluentBatterySvgConstants
 
     public const string LightOnlineGreenColor = "#16a34a";
     public const string DarkOnlineGreenColor = "#4ade80";
+    public const string LightOnlineTopColor = "#22c55e";
+    public const string LightOnlineBottomColor = "#15803d";
+    public const string DarkOnlineTopColor = "#86efac";
+    public const string DarkOnlineBottomColor = "#22c55e";
+
     public const string LightOnBatteryColor = "#d97706";
     public const string DarkOnBatteryColor = "#fbbf24";
+    public const string LightOnBatteryTopColor = "#f59e0b";
+    public const string LightOnBatteryBottomColor = "#b45309";
+    public const string DarkOnBatteryTopColor = "#fde047";
+    public const string DarkOnBatteryBottomColor = "#f59e0b";
+
     public const string LightCriticalColor = "#dc2626";
     public const string DarkCriticalColor = "#f87171";
+    public const string LightCriticalTopColor = "#ef4444";
+    public const string LightCriticalBottomColor = "#b91c1c";
+    public const string DarkCriticalTopColor = "#fca5a5";
+    public const string DarkCriticalBottomColor = "#ef4444";
+
     public const string LightAvrColor = "#2563eb";
     public const string DarkAvrColor = "#60a5fa";
+    public const string LightAvrTopColor = "#3b82f6";
+    public const string LightAvrBottomColor = "#1d4ed8";
+    public const string DarkAvrTopColor = "#93c5fd";
+    public const string DarkAvrBottomColor = "#3b82f6";
+
     public const string LightPausedColor = "#64748b";
     public const string DarkPausedColor = "#94a3b8";
+    public const string LightPausedTopColor = "#94a3b8";
+    public const string LightPausedBottomColor = "#475569";
+    public const string DarkPausedTopColor = "#cbd5e1";
+    public const string DarkPausedBottomColor = "#64748b";
+
+    public const string GradientDefsFormat =
+        "  <defs><linearGradient id=\"bf\" x1=\"0\" y1=\"0\" x2=\"0\" y2=\"1\">" +
+        "<stop offset=\"0%\" stop-color=\"{0}\" /><stop offset=\"100%\" stop-color=\"{1}\" />" +
+        "</linearGradient></defs>";
 
     public const string ShellElementFormat =
         "  <rect x=\"1.5\" y=\"2.2\" width=\"22\" height=\"11.6\" rx=\"2.8\" stroke=\"{0}\" stroke-width=\"1.5\" fill=\"none\" />\n" +
         "  <path d=\"M25.6 5.6V10.4\" stroke=\"{0}\" stroke-width=\"1.8\" stroke-linecap=\"round\" />";
 
     public const string FillBarFormat =
-        "  <rect x=\"3.7\" y=\"4.4\" width=\"{0}\" height=\"7.2\" rx=\"1.2\" fill=\"{1}\" />";
+        "  <rect x=\"3.7\" y=\"4.4\" width=\"{0}\" height=\"7.2\" rx=\"1.2\" fill=\"url(#bf)\" />";
+
+    public const string SpecularHighlightFormat =
+        "  <rect x=\"4.1\" y=\"4.7\" width=\"{0}\" height=\"1.1\" rx=\"0.55\" fill=\"#ffffff\" fill-opacity=\"0.28\" />";
 
     public const string OnlinePlugBadgeFormat =
         "  <g stroke=\"{1}\" stroke-width=\"2.4\" stroke-linecap=\"round\" stroke-linejoin=\"round\" fill=\"{1}\">\n" +

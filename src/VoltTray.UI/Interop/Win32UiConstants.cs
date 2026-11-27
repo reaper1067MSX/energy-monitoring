@@ -39,4 +39,13 @@ internal static class Win32UiConstants
     public const uint MenuCmdToggleBeeper = 1004;
     public const uint MenuCmdExit = 1005;
     public const uint MenuCmdToggleTheme = 1006;
+
+    public const string TooltipsClassName = "tooltips_class32";
+    public const uint TtsAlwaysTip = 0x01u;
+    public const uint TtsNoPrefix = 0x02u;
+    public const uint TtmAddToolW = 0x0432u;
+    public const uint TtmUpdateTipTextW = 0x0439u;
+    public const uint TtmSetMaxTipWidth = 0x0418u;
+    public const uint TtfIdIsHwnd = 0x0001u;
+    public const uint TtfSubclass = 0x0010u;
 }

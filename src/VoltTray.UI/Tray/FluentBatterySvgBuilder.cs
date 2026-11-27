@@ -28,6 +28,7 @@ internal static class FluentBatterySvgBuilder
             ? FluentBatterySvgConstants.LightHaloColor
             : FluentBatterySvgConstants.DarkHaloColor;
         string fill = ResolveFillColor(state, isLightTaskbar, stroke);
+        (string topStop, string bottomStop) = ResolveGradientStops(state, isLightTaskbar);
 
         double barWidth = state == UpsOperationalState.CommunicationsLost || clampedPct == 0
             ? 0.0
@@ -38,12 +39,18 @@ internal static class FluentBatterySvgBuilder
                 2,
                 MidpointRounding.AwayFromZero);
 
-        var svg = new StringBuilder(512);
+        var svg = new StringBuilder(640);
         svg.AppendFormat(
             CultureInfo.InvariantCulture,
             "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 {0} {1}\" fill=\"none\">\n",
             FluentBatterySvgConstants.ViewBoxWidth,
             FluentBatterySvgConstants.ViewBoxHeight);
+
+        if (barWidth > 0.0)
+        {
+            svg.AppendFormat(CultureInfo.InvariantCulture, FluentBatterySvgConstants.GradientDefsFormat, topStop, bottomStop);
+            svg.Append('\n');
+        }
 
         svg.AppendFormat(CultureInfo.InvariantCulture, FluentBatterySvgConstants.ShellElementFormat, stroke);
         svg.Append('\n');
@@ -53,8 +60,14 @@ internal static class FluentBatterySvgBuilder
             svg.AppendFormat(
                 CultureInfo.InvariantCulture,
                 FluentBatterySvgConstants.FillBarFormat,
-                barWidth.ToString("0.##", CultureInfo.InvariantCulture),
-                fill);
+                barWidth.ToString("0.##", CultureInfo.InvariantCulture));
+            svg.Append('\n');
+
+            double highlightWidth = Math.Round(Math.Max(0.8, barWidth - 0.8), 2, MidpointRounding.AwayFromZero);
+            svg.AppendFormat(
+                CultureInfo.InvariantCulture,
+                FluentBatterySvgConstants.SpecularHighlightFormat,
+                highlightWidth.ToString("0.##", CultureInfo.InvariantCulture));
             svg.Append('\n');
         }
 
@@ -68,6 +81,26 @@ internal static class FluentBatterySvgBuilder
         svg.Append("</svg>");
         return svg.ToString();
     }
+
+    private static (string Top, string Bottom) ResolveGradientStops(UpsOperationalState state, bool isLightTaskbar) => state switch
+    {
+        UpsOperationalState.LineNormal => isLightTaskbar
+            ? (FluentBatterySvgConstants.LightOnlineTopColor, FluentBatterySvgConstants.LightOnlineBottomColor)
+            : (FluentBatterySvgConstants.DarkOnlineTopColor, FluentBatterySvgConstants.DarkOnlineBottomColor),
+        UpsOperationalState.OnBattery => isLightTaskbar
+            ? (FluentBatterySvgConstants.LightOnBatteryTopColor, FluentBatterySvgConstants.LightOnBatteryBottomColor)
+            : (FluentBatterySvgConstants.DarkOnBatteryTopColor, FluentBatterySvgConstants.DarkOnBatteryBottomColor),
+        UpsOperationalState.BatteryLow or UpsOperationalState.Fault => isLightTaskbar
+            ? (FluentBatterySvgConstants.LightCriticalTopColor, FluentBatterySvgConstants.LightCriticalBottomColor)
+            : (FluentBatterySvgConstants.DarkCriticalTopColor, FluentBatterySvgConstants.DarkCriticalBottomColor),
+        UpsOperationalState.ChargingAvr => isLightTaskbar
+            ? (FluentBatterySvgConstants.LightAvrTopColor, FluentBatterySvgConstants.LightAvrBottomColor)
+            : (FluentBatterySvgConstants.DarkAvrTopColor, FluentBatterySvgConstants.DarkAvrBottomColor),
+        UpsOperationalState.Paused => isLightTaskbar
+            ? (FluentBatterySvgConstants.LightPausedTopColor, FluentBatterySvgConstants.LightPausedBottomColor)
+            : (FluentBatterySvgConstants.DarkPausedTopColor, FluentBatterySvgConstants.DarkPausedBottomColor),
+        _ => (FluentBatterySvgConstants.DarkOnlineTopColor, FluentBatterySvgConstants.DarkOnlineBottomColor)
+    };
 
     private static string ResolveFillColor(UpsOperationalState state, bool isLightTaskbar, string stroke) => state switch
     {

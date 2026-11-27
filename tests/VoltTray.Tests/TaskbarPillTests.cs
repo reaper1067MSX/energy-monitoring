@@ -59,10 +59,17 @@ public class TaskbarPillTests
         var renderer = new TaskbarPillSurfaceRenderer(TrayIconRasterizer.CreateDefault());
         UpsTelemetry telemetry = UpsTelemetry.CreateDefault();
 
-        uint[] darkPixels = renderer.RenderArgbPixels(telemetry, 144, 48, isLightTaskbar: false, dpi: 96);
-        uint[] lightPixels = renderer.RenderArgbPixels(telemetry, 144, 48, isLightTaskbar: true, dpi: 96);
+        uint[] darkPixels = renderer.RenderArgbPixels(telemetry, 80, 34, isLightTaskbar: false, dpi: 96);
+        uint[] lightPixels = renderer.RenderArgbPixels(telemetry, 80, 34, isLightTaskbar: true, dpi: 96);
+        uint[] hoveredPixels = renderer.RenderArgbPixels(telemetry, 80, 34, isLightTaskbar: false, dpi: 96, isHovered: true);
+        Assert.NotEqual(darkPixels, hoveredPixels);
 
-        Assert.Equal(144 * 48, darkPixels.Length);
+        string tooltip = TaskbarPillWindow.FormatTooltipText(telemetry);
+        Assert.Contains("In 116.2V", tooltip, StringComparison.Ordinal);
+        Assert.Contains("Out 116.2V", tooltip, StringComparison.Ordinal);
+        Assert.Contains("Bat 100%", tooltip, StringComparison.Ordinal);
+
+        Assert.Equal(80 * 34, darkPixels.Length);
         Assert.All(darkPixels, px =>
         {
             byte a = (byte)(px >> 24);

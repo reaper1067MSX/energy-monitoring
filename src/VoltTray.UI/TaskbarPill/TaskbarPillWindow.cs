@@ -1,9 +1,12 @@
 using System.Collections.Concurrent;
+using System.Globalization;
 using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
 using Windows.Win32;
 using Windows.Win32.Foundation;
 using Windows.Win32.Graphics.Gdi;
+using Windows.Win32.UI.Controls;
+using Windows.Win32.UI.Input.KeyboardAndMouse;
 using Windows.Win32.UI.WindowsAndMessaging;
 using VoltTray.Core.Telemetry;
 using VoltTray.UI.Interop;
@@ -32,10 +35,14 @@ internal sealed class TaskbarPillWindow : ITaskbarPillView
     private readonly object _stateLock = new();
 
     private HWND _hwnd;
+    private HWND _tooltipHwnd;
     private UpsTelemetry? _lastTelemetry;
+    private string? _lastTooltipText;
     private bool _isParentedToShellTray;
     private System.Drawing.Point _parentOrigin;
     private bool _isWindowShown;
+    private bool _isHovered;
+    private bool _isTrackingMouseLeave;
     private bool _isDisposed;
 
     public event Action? OnPillLeftClicked;
@@ -174,12 +181,38 @@ internal sealed class TaskbarPillWindow : ITaskbarPillView
             return true;
         }
 
+        if (msg == PInvoke.WM_MOUSEMOVE)
+        {
+            HandleMouseMove();
+            return false;
+        }
+
+        if (msg == PInvoke.WM_MOUSELEAVE)
+        {
+            HandleMouseLeave();
+            return true;
+        }
+
         return false;
+    }
+
+    public static string FormatTooltipText(UpsTelemetry telemetry)
+    {
+        ArgumentNullException.ThrowIfNull(telemetry);
+
+        string metrics = string.Create(
+            CultureInfo.InvariantCulture,
+            $"In {telemetry.InputVoltageAc:F1}V · Out {telemetry.OutputVoltageAc:F1}V · Bat {Math.Clamp(telemetry.BatteryPercentage, 0, 100)}%");
+
+        return string.IsNullOrWhiteSpace(telemetry.BankSpec.Label)
+            ? metrics
+            : $"{telemetry.BankSpec.Label.Trim()} · {metrics}";
     }
 
     public unsafe void Dispose()
     {
         HWND hwndToDestroy;
+        HWND tooltipToDestroy;
         lock (_stateLock)
         {
             if (_isDisposed)
@@ -191,7 +224,14 @@ internal sealed class TaskbarPillWindow : ITaskbarPillView
             IsVisible = false;
             _isWindowShown = false;
             hwndToDestroy = _hwnd;
+            tooltipToDestroy = _tooltipHwnd;
             _hwnd = default;
+            _tooltipHwnd = default;
+        }
+
+        if (!tooltipToDestroy.IsNull)
+        {
+            PInvoke.DestroyWindow(tooltipToDestroy);
         }
 
         if (!hwndToDestroy.IsNull)
@@ -244,9 +284,11 @@ internal sealed class TaskbarPillWindow : ITaskbarPillView
             bounds.Width,
             bounds.Height,
             _isLightTaskbarProvider(),
-            dpi);
+            dpi,
+            _isHovered);
 
         PresentLayeredFrame(bounds, pixels);
+        UpdateTooltipText(FormatTooltipText(telemetry));
     }
 
     private void HideNativeWindowOnOwningThread()
@@ -400,6 +442,7 @@ internal sealed class TaskbarPillWindow : ITaskbarPillView
             if (!_hwnd.IsNull)
             {
                 Instances[(nint)_hwnd.Value] = this;
+                InitializeTooltipWindow(hInstance);
             }
 
             AnchorToShellTray();
@@ -407,6 +450,120 @@ internal sealed class TaskbarPillWindow : ITaskbarPillView
         catch (Exception ex) when (ex is DllNotFoundException or EntryPointNotFoundException or PlatformNotSupportedException)
         {
             // Headless / non-interactive environment fallback.
+        }
+    }
+
+    private unsafe void InitializeTooltipWindow(HMODULE hInstance)
+    {
+        fixed (char* tooltipClassPtr = Win32UiConstants.TooltipsClassName)
+        {
+            _tooltipHwnd = PInvoke.CreateWindowEx(
+                WINDOW_EX_STYLE.WS_EX_TOPMOST | WINDOW_EX_STYLE.WS_EX_TOOLWINDOW,
+                new PCWSTR(tooltipClassPtr),
+                default,
+                WINDOW_STYLE.WS_POPUP | (WINDOW_STYLE)(Win32UiConstants.TtsAlwaysTip | Win32UiConstants.TtsNoPrefix),
+                0,
+                0,
+                0,
+                0,
+                _hwnd,
+                default,
+                hInstance,
+                null);
+        }
+
+        if (_tooltipHwnd.IsNull)
+        {
+            return;
+        }
+
+        PInvoke.SendMessage(_tooltipHwnd, Win32UiConstants.TtmSetMaxTipWidth, default, new LPARAM(320));
+
+        fixed (char* initialTextPtr = string.Empty)
+        {
+            var toolInfo = new TTTOOLINFOW
+            {
+                cbSize = (uint)sizeof(TTTOOLINFOW),
+                uFlags = (TOOLTIP_FLAGS)(Win32UiConstants.TtfIdIsHwnd | Win32UiConstants.TtfSubclass),
+                hwnd = _hwnd,
+                uId = (nuint)_hwnd.Value,
+                lpszText = new PWSTR(initialTextPtr)
+            };
+
+            PInvoke.SendMessage(_tooltipHwnd, Win32UiConstants.TtmAddToolW, default, new LPARAM((nint)(&toolInfo)));
+        }
+    }
+
+    private unsafe void UpdateTooltipText(string text)
+    {
+        if (_tooltipHwnd.IsNull || _hwnd.IsNull || string.Equals(_lastTooltipText, text, StringComparison.Ordinal))
+        {
+            return;
+        }
+
+        _lastTooltipText = text;
+        fixed (char* textPtr = text)
+        {
+            var toolInfo = new TTTOOLINFOW
+            {
+                cbSize = (uint)sizeof(TTTOOLINFOW),
+                hwnd = _hwnd,
+                uId = (nuint)_hwnd.Value,
+                lpszText = new PWSTR(textPtr)
+            };
+
+            PInvoke.SendMessage(_tooltipHwnd, Win32UiConstants.TtmUpdateTipTextW, default, new LPARAM((nint)(&toolInfo)));
+        }
+    }
+
+    private void HandleMouseMove()
+    {
+        bool needsRender = false;
+        lock (_stateLock)
+        {
+            if (!_isHovered)
+            {
+                _isHovered = true;
+                needsRender = true;
+            }
+
+            if (_enableNativeWindow && !_hwnd.IsNull && !_isTrackingMouseLeave)
+            {
+                var tme = new TRACKMOUSEEVENT
+                {
+                    cbSize = (uint)Marshal.SizeOf<TRACKMOUSEEVENT>(),
+                    dwFlags = TRACKMOUSEEVENT_FLAGS.TME_LEAVE,
+                    hwndTrack = _hwnd
+                };
+                if (PInvoke.TrackMouseEvent(ref tme))
+                {
+                    _isTrackingMouseLeave = true;
+                }
+            }
+        }
+
+        if (needsRender)
+        {
+            ApplyTelemetryOnOwningThread();
+        }
+    }
+
+    private void HandleMouseLeave()
+    {
+        bool needsRender = false;
+        lock (_stateLock)
+        {
+            _isTrackingMouseLeave = false;
+            if (_isHovered)
+            {
+                _isHovered = false;
+                needsRender = true;
+            }
+        }
+
+        if (needsRender)
+        {
+            ApplyTelemetryOnOwningThread();
         }
     }
 
