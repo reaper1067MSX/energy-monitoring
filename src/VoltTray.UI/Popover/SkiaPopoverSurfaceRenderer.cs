@@ -9,7 +9,7 @@ using VoltTray.UI.Tokens.Themes;
 
 namespace VoltTray.UI.Popover;
 
-public sealed class SkiaPopoverSurfaceRenderer : IPopoverSurfaceRenderer
+internal sealed class SkiaPopoverSurfaceRenderer : IPopoverSurfaceRenderer
 {
     private readonly ISvgIconLibrary _svgIconLibrary;
     private readonly SKTypeface _regularTypeface;

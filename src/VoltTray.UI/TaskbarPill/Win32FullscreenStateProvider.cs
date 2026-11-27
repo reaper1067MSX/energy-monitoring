@@ -3,7 +3,7 @@ using Windows.Win32.UI.Shell;
 
 namespace VoltTray.UI.TaskbarPill;
 
-public sealed class Win32FullscreenStateProvider : IFullscreenStateProvider
+internal sealed class Win32FullscreenStateProvider : IFullscreenStateProvider
 {
     public unsafe bool IsFullscreenActive()
     {

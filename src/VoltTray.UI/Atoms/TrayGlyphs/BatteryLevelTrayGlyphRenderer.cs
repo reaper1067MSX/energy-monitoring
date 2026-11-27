@@ -4,7 +4,7 @@ using VoltTray.UI.Models;
 
 namespace VoltTray.UI.Atoms.TrayGlyphs;
 
-public sealed class BatteryLevelTrayGlyphRenderer : ITrayStateGlyphRenderer
+internal sealed class BatteryLevelTrayGlyphRenderer : ITrayStateGlyphRenderer
 {
     public IReadOnlyCollection<UpsOperationalState> SupportedStates { get; } =
     [

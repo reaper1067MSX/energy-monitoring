@@ -17,7 +17,7 @@ namespace VoltTray.UI.TaskbarPill;
 /// Layered Win32 taskbar pill widget anchored inside Shell_TrayWnd (with HWND_TOPMOST fallback),
 /// marshaling UI updates onto the owning HWND thread and handling DPI, fullscreen, and TaskbarCreated.
 /// </summary>
-public sealed class TaskbarPillWindow : ITaskbarPillView
+internal sealed class TaskbarPillWindow : ITaskbarPillView
 {
     private static readonly ConcurrentDictionary<nint, TaskbarPillWindow> Instances = new();
 

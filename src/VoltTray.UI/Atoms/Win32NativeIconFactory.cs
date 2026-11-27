@@ -8,7 +8,7 @@ namespace VoltTray.UI.Atoms;
 /// <summary>
 /// Converts 32-bpp ARGB pixel buffers into Win32 HICON handles via CreateDIBSection.
 /// </summary>
-public sealed class Win32NativeIconFactory : INativeIconFactory
+internal sealed class Win32NativeIconFactory : INativeIconFactory
 {
     public unsafe IntPtr CreateFromArgbPixels(uint[] pixels, int size)
     {

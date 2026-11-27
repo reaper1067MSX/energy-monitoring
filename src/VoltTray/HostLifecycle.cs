@@ -14,7 +14,7 @@ using VoltTray.UI.Models;
 
 namespace VoltTray;
 
-public sealed class HostLifecycle : IDisposable
+public sealed class HostLifecycle : IHostLifecycle
 {
     private readonly IUpsDevicePort _upsPort;
     private readonly ShutdownCoordinator _shutdownCoordinator;
@@ -22,7 +22,7 @@ public sealed class HostLifecycle : IDisposable
     private readonly IPopoverView _popoverPainter;
     private readonly IExitDialogView _exitDialog;
     private readonly IScreenPlacementProvider _screenPlacementProvider;
-    private readonly InProcessTelemetryProbe _telemetryProbe;
+    private readonly ITelemetryDiagnosticSink _telemetryProbe;
     private readonly IExecutionBoundary _executionBoundary;
     private readonly bool _delegateDiagnosticsToPort;
     private readonly SplitCockpitPresenter _presenter;
@@ -56,7 +56,7 @@ public sealed class HostLifecycle : IDisposable
         IPopoverView? popoverPainter = null,
         IExitDialogView? exitDialog = null,
         IScreenPlacementProvider? screenPlacementProvider = null,
-        InProcessTelemetryProbe? telemetryProbe = null,
+        ITelemetryDiagnosticSink? telemetryProbe = null,
         IExecutionBoundary? executionBoundary = null,
         bool delegateDiagnosticsToPort = false,
         IEventBus? eventBus = null,

@@ -6,7 +6,7 @@ namespace VoltTray.Infrastructure.Protocol;
 /// <summary>
 /// Probes legacy Megatec ASCII devices via Q1\r status framing and F\r / I\r capability enrichment.
 /// </summary>
-public sealed class MegatecQ1DialectProbe : IProtocolDialectProbe
+internal sealed class MegatecQ1DialectProbe : IProtocolDialectProbe
 {
     public NegotiatedUpsProtocol? TryProbe(
         Func<string, byte[]?> queryRaw,

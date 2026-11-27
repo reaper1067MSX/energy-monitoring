@@ -15,7 +15,7 @@ namespace VoltTray.UI.TaskbarPill;
 /// Renders a crisp, anti-aliased 32-bpp premultiplied ARGB TrafficMonitor-style taskbar pill
 /// using SkiaSharp and embedded SVG state icons over an alpha >= 1 hit-testable interior.
 /// </summary>
-public sealed class TaskbarPillSurfaceRenderer : ITaskbarPillSurfaceRenderer, IDisposable
+internal sealed class TaskbarPillSurfaceRenderer : ITaskbarPillSurfaceRenderer, IDisposable
 {
     private readonly ITrayIconRasterizer _iconRasterizer;
     private readonly ISvgIconLibrary _svgIconLibrary;

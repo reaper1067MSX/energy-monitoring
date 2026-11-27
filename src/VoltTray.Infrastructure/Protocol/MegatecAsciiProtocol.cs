@@ -10,7 +10,7 @@ namespace VoltTray.Infrastructure.Protocol;
 /// Megatec ASCII protocol strategy supporting dialect 'V' (QS\r -> (...)) and 'Q1' (Q1\r -> (...)),
 /// including F\r / I\r capability probing and qx_multiply_battvolt per-cell voltage scaling.
 /// </summary>
-public sealed class MegatecAsciiProtocol : IUpsProtocolStrategy
+internal sealed class MegatecAsciiProtocol : IUpsProtocolStrategy
 {
     private readonly IBatteryAutonomyEstimator _estimator;
     private readonly double _capacityFactor;

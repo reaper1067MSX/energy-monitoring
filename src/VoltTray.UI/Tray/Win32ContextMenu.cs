@@ -11,7 +11,7 @@ namespace VoltTray.UI.Tray;
 /// Native Win32 system tray context menu powered by CreatePopupMenu/TrackPopupMenuEx
 /// with localized EN/ES labels, bold default Open action, and MockMenuHandler support.
 /// </summary>
-public sealed class Win32ContextMenu : IContextMenuView
+internal sealed class Win32ContextMenu : IContextMenuView
 {
     private readonly bool _enableNativeMenu;
 

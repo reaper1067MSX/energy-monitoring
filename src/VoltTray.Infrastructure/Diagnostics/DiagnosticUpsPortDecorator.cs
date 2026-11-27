@@ -8,7 +8,7 @@ namespace VoltTray.Infrastructure.Diagnostics;
 /// Decorates an <see cref="IUpsDevicePort"/> to record raw HID frames (preserving 0x00 bytes)
 /// and run Framing/Physics/UI-Drift plausibility guards before telemetry reaches callers.
 /// </summary>
-public sealed class DiagnosticUpsPortDecorator : IUpsDevicePort
+internal sealed class DiagnosticUpsPortDecorator : IUpsDevicePort
 {
     private readonly IUpsDevicePort _innerPort;
     private readonly InProcessTelemetryProbe _telemetryProbe;

@@ -8,7 +8,7 @@ namespace VoltTray.UI.Atoms;
 /// Loads embedded handoff SVG assets once, caches parsed SKSvg graphs,
 /// and renders crisp anti-aliased premultiplied ARGB graphics via SkiaSharp.
 /// </summary>
-public sealed class SkiaSvgIconLibrary : ISvgIconLibrary
+internal sealed class SkiaSvgIconLibrary : ISvgIconLibrary
 {
     private readonly Assembly _resourceAssembly = typeof(SkiaSvgIconLibrary).Assembly;
     private readonly Dictionary<string, SKSvg?> _cache = new(StringComparer.OrdinalIgnoreCase);

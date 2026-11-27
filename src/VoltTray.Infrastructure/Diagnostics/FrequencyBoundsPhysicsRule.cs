@@ -3,7 +3,7 @@ using VoltTray.Shared;
 
 namespace VoltTray.Infrastructure.Diagnostics;
 
-public sealed class FrequencyBoundsPhysicsRule : ITelemetryPhysicsRule
+internal sealed class FrequencyBoundsPhysicsRule : ITelemetryPhysicsRule
 {
     public TelemetryAnomalyKind? Evaluate(UpsTelemetry candidate, UpsTelemetry? lastKnownGood)
     {

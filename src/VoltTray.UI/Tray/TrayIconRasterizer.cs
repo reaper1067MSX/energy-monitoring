@@ -13,7 +13,7 @@ namespace VoltTray.UI.Tray;
 /// Composes a 32-bpp ARGB tray icon by delegating state-specific glyph drawing
 /// to injected ITrayStateGlyphRenderer strategies over a PixelBuffer.
 /// </summary>
-public sealed class TrayIconRasterizer : ITrayIconRasterizer
+internal sealed class TrayIconRasterizer : ITrayIconRasterizer
 {
     private readonly IReadOnlyDictionary<UpsOperationalState, ITrayStateGlyphRenderer> _glyphRenderers;
     private readonly ITrayStateGlyphRenderer _fallbackRenderer;
