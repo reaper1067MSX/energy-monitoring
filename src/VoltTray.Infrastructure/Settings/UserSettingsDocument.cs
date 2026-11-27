@@ -4,4 +4,5 @@ internal sealed class UserSettingsDocument
 {
     public string? SelectedModel { get; set; }
     public string? IconMode { get; set; }
+    public string? ThemePreference { get; set; }
 }

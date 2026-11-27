@@ -6,4 +6,6 @@ public interface IUserSettingsStore
     void SaveSelectedModel(UpsModelPreset preset);
     TrayIconMode? LoadIconMode();
     void SaveIconMode(TrayIconMode mode);
+    ThemePreference LoadThemePreference();
+    void SaveThemePreference(ThemePreference preference);
 }

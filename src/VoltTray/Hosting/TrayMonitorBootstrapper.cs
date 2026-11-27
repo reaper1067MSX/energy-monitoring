@@ -39,6 +39,7 @@ public sealed class TrayMonitorBootstrapper : IDisposable
         using ServiceProvider probeProvider = services.BuildServiceProvider();
         IUserSettingsStore initialStore = probeProvider.GetRequiredService<IUserSettingsStore>();
         _iconMode = ResolveInitialIconMode(options, initialStore);
+        ThemePreference initialThemePreference = initialStore.LoadThemePreference();
 
         services.AddVoltTrayUi(enableTaskbarPill: true, showTrayIcon: _iconMode == TrayIconMode.Short);
 
@@ -57,7 +58,9 @@ public sealed class TrayMonitorBootstrapper : IDisposable
             appThemeProvider: WindowsThemeDetector.GetAppTheme,
             contextMenu: sp.GetRequiredService<IContextMenuView>(),
             isCompactIconModeProvider: () => _iconMode == TrayIconMode.Short,
-            toggleIconModeAction: ToggleIconMode));
+            toggleIconModeAction: ToggleIconMode,
+            initialThemePreference: initialThemePreference,
+            onThemePreferenceChanged: pref => sp.GetRequiredService<IUserSettingsStore>().SaveThemePreference(pref)));
 
         services.AddSingleton(sp => new TaskbarPillSubscriber(
             sp.GetRequiredService<IHostLifecycle>().EventBus,

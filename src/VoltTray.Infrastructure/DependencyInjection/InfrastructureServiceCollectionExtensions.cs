@@ -1,8 +1,10 @@
 using Microsoft.Extensions.DependencyInjection;
 using VoltTray.Core.Diagnostics;
+using VoltTray.Core.History;
 using VoltTray.Core.Safety;
 using VoltTray.Core.Telemetry;
 using VoltTray.Infrastructure.Diagnostics;
+using VoltTray.Infrastructure.History;
 using VoltTray.Infrastructure.OS;
 using VoltTray.Infrastructure.Settings;
 
@@ -26,6 +28,8 @@ public static class InfrastructureServiceCollectionExtensions
         services.AddSingleton<ISafetyShutdownPort, WindowsShutdownPort>();
         services.AddSingleton<INotificationPort, WindowsNotificationPort>();
         services.AddSingleton<IUserSettingsStore>(_ => new JsonUserSettingsStore());
+        services.AddSingleton<ITelemetryHistoryStore>(_ => new SqliteTelemetryHistoryStore());
+        services.AddSingleton<ITelemetryHistoryTracker, TelemetryHistoryTracker>();
 
         return services;
     }
