@@ -151,4 +151,45 @@ public class ArchitectureBoundaryTests
 
         Assert.Empty(violations);
     }
+
+    [Fact]
+    public void LayerServiceImplementations_RemainInternal_ExceptExplicitCompositionEntryPoints()
+    {
+        Assembly[] layerAssemblies =
+        [
+            typeof(DesignTokens).Assembly,
+            typeof(VoltronicParser).Assembly
+        ];
+
+        HashSet<string> allowedPublicEntryPoints = new(StringComparer.Ordinal)
+        {
+            "TrayRenderer",
+            "PopoverPainter",
+            "ExitDialog",
+            "Win32ScreenPlacementProvider",
+            "InProcessTelemetryProbe",
+            "SafeExecutionMiddleware",
+            "WindowsShutdownPort",
+            "WindowsNotificationPort",
+            "SimulatedUpsDevicePort",
+            "Win32HidUpsPort",
+            "ReadOnlyUpsProbe"
+        };
+
+        string[] unexpectedPublicServices = layerAssemblies
+            .SelectMany(assembly => assembly.GetTypes())
+            .Where(type =>
+                type.IsClass &&
+                !type.IsAbstract &&
+                type.IsPublic &&
+                type.GetInterfaces().Any(iface =>
+                    iface.Namespace != null &&
+                    iface.Namespace.StartsWith("VoltTray.", StringComparison.Ordinal)) &&
+                !allowedPublicEntryPoints.Contains(type.Name))
+            .Select(type => type.FullName ?? type.Name)
+            .OrderBy(name => name, StringComparer.Ordinal)
+            .ToArray();
+
+        Assert.Empty(unexpectedPublicServices);
+    }
 }
