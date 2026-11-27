@@ -62,8 +62,8 @@ public static class LocalizationConstants
     public const string RuntimeMicroLabelEs = "AUTONOMÍA PEUKERT";
     public const string CapacityLabelEn = "Capacity";
     public const string CapacityLabelEs = "Capacidad";
-    public const string Cell1Label = "C1";
-    public const string Cell2Label = "C2";
+    public const string Cell1Label = "Bat 1";
+    public const string Cell2Label = "Bat 2";
 
     public const string BatteryTestEn = "Battery test";
     public const string BatteryTestEs = "Prueba de batería";

@@ -87,7 +87,7 @@ public sealed record PopoverViewModel(
 
         string regulationModeText = FormatRegulationMode(telemetry.State, isSpanish);
         string? cellsSummaryText = telemetry.Cell1VoltageDc > 0 && telemetry.Cell2VoltageDc > 0
-            ? FormattableString.Invariant($"C1 {telemetry.Cell1VoltageDc:F2}V · C2 {telemetry.Cell2VoltageDc:F2}V")
+            ? FormattableString.Invariant($"{LocalizationConstants.Cell1Label} {telemetry.Cell1VoltageDc:F2}V · {LocalizationConstants.Cell2Label} {telemetry.Cell2VoltageDc:F2}V")
             : null;
         string? cell1Text = telemetry.Cell1VoltageDc > 0
             ? FormattableString.Invariant($"{telemetry.Cell1VoltageDc:F2} V")

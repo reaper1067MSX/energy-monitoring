@@ -105,7 +105,7 @@ public static class VoltronicProtocolConstants
     // Nominal Physical & Scaling Constants
     public const double VoltageDivisor = 51.0 * 256.0;
     public const double BatteryVoltageDivisor = 510.0;
-    public const double DefaultRatedWatts = 900.0;
+    public const double DefaultRatedWatts = 1200.0;
     public const double MainsDivergenceThreshold = 0.05;
 
     // Default Simulation Baseline Frame Bytes (Forza FX-2200 Profile)
