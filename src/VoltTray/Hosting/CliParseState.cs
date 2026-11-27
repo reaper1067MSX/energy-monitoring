@@ -8,6 +8,7 @@ internal sealed class CliParseState
     public bool IsInspectMode { get; set; }
     public bool IsSimulation { get; set; }
     public bool IsDryRun { get; set; }
+    public bool EnableTaskbarPill { get; set; }
     public int PollingIntervalMs { get; set; } = ApplicationDefaults.DefaultPollingIntervalMs;
     public bool IncludeAllHidDevices { get; set; }
     public UpsDiagnosticInquiry Inquiry { get; set; } = UpsDiagnosticInquiry.QuickStatus;

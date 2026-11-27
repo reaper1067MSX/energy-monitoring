@@ -29,6 +29,7 @@ public sealed class TrayRenderer : ITrayIconView
 
     public event Action? OnTrayIconClicked;
     public event Action? OnContextMenuRequested;
+    public event Action? OnTaskbarCreated;
 
     public IntPtr CurrentHIcon
     {
@@ -105,6 +106,7 @@ public sealed class TrayRenderer : ITrayIconView
         if (_taskbarCreatedMessage != 0 && msg == _taskbarCreatedMessage)
         {
             Recreate();
+            OnTaskbarCreated?.Invoke();
             return true;
         }
 
@@ -113,10 +115,20 @@ public sealed class TrayRenderer : ITrayIconView
             uint evt = (uint)(lParam.ToInt64() & 0xFFFF);
             if (evt == Win32UiConstants.WmLButtonUp)
             {
+                if (_hwnd != IntPtr.Zero)
+                {
+                    GdiNative.SetForegroundWindow(_hwnd);
+                }
+
                 OnTrayIconClicked?.Invoke();
             }
             else if (evt == Win32UiConstants.WmRButtonUp)
             {
+                if (_hwnd != IntPtr.Zero)
+                {
+                    GdiNative.SetForegroundWindow(_hwnd);
+                }
+
                 OnContextMenuRequested?.Invoke();
             }
         }

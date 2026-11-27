@@ -136,6 +136,8 @@ public sealed class PopoverPainter : IPopoverView
         {
             GdiNative.DestroyWindow(_hwnd);
             _hwnd = IntPtr.Zero;
+            IntPtr hInstance = GdiNative.GetModuleHandle(null);
+            GdiNative.UnregisterClass("VoltTray_OptionCPopover", hInstance);
         }
     }
 
@@ -151,15 +153,17 @@ public sealed class PopoverPainter : IPopoverView
 
             GdiNative.SetWindowPos(
                 _hwnd,
-                IntPtr.Zero,
+                (IntPtr)Win32UiConstants.HwndTopmost,
                 bounds.Left,
                 bounds.Top,
                 bounds.Width,
                 bounds.Height,
-                Win32UiConstants.SwpShowWindow);
-            GdiNative.InvalidateRect(_hwnd, IntPtr.Zero, true);
+                Win32UiConstants.SwpNoActivate);
+            GdiNative.ShowWindow(_hwnd, Win32UiConstants.SwShow);
+            GdiNative.SetForegroundWindow(_hwnd);
+            GdiNative.InvalidateRect(_hwnd, IntPtr.Zero, false);
         }
-        catch
+        catch (Exception ex) when (ex is DllNotFoundException or EntryPointNotFoundException or PlatformNotSupportedException)
         {
             // Headless / non-interactive fallback.
         }

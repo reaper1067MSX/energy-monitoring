@@ -4,6 +4,19 @@ namespace VoltTray.UI.Tokens;
 
 public static class ColorUtilities
 {
+    public static uint ParsePremultipliedArgbColor(string hex, byte alpha = 0xFF)
+    {
+        string clean = hex.TrimStart('#');
+        byte r = byte.Parse(clean[..2], NumberStyles.HexNumber, CultureInfo.InvariantCulture);
+        byte g = byte.Parse(clean.Substring(2, 2), NumberStyles.HexNumber, CultureInfo.InvariantCulture);
+        byte b = byte.Parse(clean.Substring(4, 2), NumberStyles.HexNumber, CultureInfo.InvariantCulture);
+
+        byte pr = (byte)(((r * alpha) + 127) / 255);
+        byte pg = (byte)(((g * alpha) + 127) / 255);
+        byte pb = (byte)(((b * alpha) + 127) / 255);
+        return ((uint)alpha << 24) | ((uint)pr << 16) | ((uint)pg << 8) | pb;
+    }
+
     public static uint ParseArgbColor(string hex, byte alpha = 0xFF)
     {
         string clean = hex.TrimStart('#');
