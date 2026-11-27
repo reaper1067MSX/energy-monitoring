@@ -37,4 +37,5 @@ internal static class Win32UiConstants
     public const uint MenuCmdBatteryTest = 1003;
     public const uint MenuCmdToggleBeeper = 1004;
     public const uint MenuCmdExit = 1005;
+    public const uint MenuCmdToggleTheme = 1006;
 }

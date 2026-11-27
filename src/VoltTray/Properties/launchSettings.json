@@ -15,6 +15,13 @@
         "DOTNET_ENVIRONMENT": "Development"
       }
     },
+    "VoltTray (Simulación + Pill)": {
+      "commandName": "Project",
+      "commandLineArgs": "--simulate --taskbar-pill",
+      "environmentVariables": {
+        "DOTNET_ENVIRONMENT": "Development"
+      }
+    },
     "VoltTray (Dry-Run Seguro)": {
       "commandName": "Project",
       "commandLineArgs": "--dry-run",

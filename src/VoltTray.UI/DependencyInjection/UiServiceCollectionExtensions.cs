@@ -14,7 +14,7 @@ public static class UiServiceCollectionExtensions
         ArgumentNullException.ThrowIfNull(services);
 
         services.AddSingleton<ISvgIconLibrary, SkiaSvgIconLibrary>();
-        services.AddSingleton<ITrayIconRasterizer>(_ => TrayIconRasterizer.CreateDefault());
+        services.AddSingleton<ITrayIconRasterizer>(sp => new TrayIconRasterizer(sp.GetRequiredService<ISvgIconLibrary>()));
         services.AddSingleton<INativeIconFactory, Win32NativeIconFactory>();
         services.AddSingleton<IPopoverSurfaceRenderer>(sp => new SkiaPopoverSurfaceRenderer(sp.GetRequiredService<ISvgIconLibrary>()));
         services.AddSingleton<IScreenPlacementProvider, Win32ScreenPlacementProvider>();

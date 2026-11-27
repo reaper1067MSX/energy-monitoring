@@ -56,6 +56,7 @@ internal sealed class Win32ContextMenu : IContextMenuView
             string usbLabel = isSpanish ? LocalizationConstants.MenuUsbMonitoringEs : LocalizationConstants.MenuUsbMonitoringEn;
             string testLabel = isSpanish ? LocalizationConstants.MenuBatteryTestEs : LocalizationConstants.MenuBatteryTestEn;
             string beeperLabel = isSpanish ? LocalizationConstants.MenuMuteAlarmEs : LocalizationConstants.MenuMuteAlarmEn;
+            string darkModeLabel = isSpanish ? LocalizationConstants.MenuDarkModeEs : LocalizationConstants.MenuDarkModeEn;
             string exitLabel = isSpanish ? LocalizationConstants.MenuExitEs : LocalizationConstants.MenuExitEn;
 
             AppendStringItem(menuHandle, MENU_ITEM_FLAGS.MF_STRING, Win32UiConstants.MenuCmdOpen, openLabel);
@@ -71,6 +72,9 @@ internal sealed class Win32ContextMenu : IContextMenuView
 
             MENU_ITEM_FLAGS beeperFlags = MENU_ITEM_FLAGS.MF_STRING | (state.IsBeeperMuted ? MENU_ITEM_FLAGS.MF_CHECKED : 0);
             AppendStringItem(menuHandle, beeperFlags, Win32UiConstants.MenuCmdToggleBeeper, beeperLabel);
+
+            MENU_ITEM_FLAGS themeFlags = MENU_ITEM_FLAGS.MF_STRING | (state.IsDarkTheme ? MENU_ITEM_FLAGS.MF_CHECKED : 0);
+            AppendStringItem(menuHandle, themeFlags, Win32UiConstants.MenuCmdToggleTheme, darkModeLabel);
 
             PInvoke.AppendMenu(menuHandle, MENU_ITEM_FLAGS.MF_SEPARATOR, 0, default);
             AppendStringItem(menuHandle, MENU_ITEM_FLAGS.MF_STRING, Win32UiConstants.MenuCmdExit, exitLabel);
@@ -111,6 +115,7 @@ internal sealed class Win32ContextMenu : IContextMenuView
                 Win32UiConstants.MenuCmdToggleUsb => ContextMenuAction.ToggleUsbMonitoring,
                 Win32UiConstants.MenuCmdBatteryTest => ContextMenuAction.BatteryTest,
                 Win32UiConstants.MenuCmdToggleBeeper => ContextMenuAction.ToggleBeeper,
+                Win32UiConstants.MenuCmdToggleTheme => ContextMenuAction.ToggleTheme,
                 Win32UiConstants.MenuCmdExit => ContextMenuAction.Exit,
                 _ => ContextMenuAction.None
             };

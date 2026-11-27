@@ -77,6 +77,8 @@ public static class LocalizationConstants
     public const string MenuBatteryTestEs = "Prueba de batería (10s)";
     public const string MenuMuteAlarmEn = "Mute alarm";
     public const string MenuMuteAlarmEs = "Silenciar alarma";
+    public const string MenuDarkModeEn = "Dark mode";
+    public const string MenuDarkModeEs = "Modo oscuro";
     public const string MenuExitEn = "Exit VoltTray...";
     public const string MenuExitEs = "Salir de VoltTray...";
 }
