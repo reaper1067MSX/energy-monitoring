@@ -22,13 +22,13 @@ public static class UiServiceCollectionExtensions
         services.AddSingleton<ITrayIconView>(sp => new TrayRenderer(
             sp.GetRequiredService<ITrayIconRasterizer>(),
             sp.GetRequiredService<INativeIconFactory>(),
-            WindowsThemeDetector.IsLightTaskbar));
+            WindowsThemeDetector.IsLightTaskbar,
+            showTrayIcon: !enableTaskbarPill));
         services.AddSingleton<IPopoverView>(sp => new PopoverPainter(
             enableNativeWindow: true,
             surfaceRenderer: sp.GetRequiredService<IPopoverSurfaceRenderer>()));
         services.AddSingleton<IContextMenuView>(_ => new Win32ContextMenu(enableNativeMenu: true));
         services.AddSingleton<IExitDialogView>(_ => new ExitDialog(enableNativeDialog: true));
-        services.AddSingleton<IModelSelectorDialogView>(_ => new ModelSelectorDialog(enableNativeDialog: true));
 
         if (enableTaskbarPill)
         {

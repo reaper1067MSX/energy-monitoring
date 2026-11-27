@@ -17,6 +17,7 @@ internal static class Win32UiConstants
     public const string StartButtonClass = "Start";
     public const string ReBarWindowClass = "ReBarWindow32";
     public const string TaskSwWindowClass = "MSTaskSwWClass";
+    public const string Win11CompositionBridgeClass = "Windows.UI.Composition.DesktopWindowContentBridge";
 
     public const int Dpi100 = 96;
     public const int Dpi125 = 120;
@@ -27,8 +28,8 @@ internal static class Win32UiConstants
     public const ushort BitsPerPixel32 = 32;
 
     public const uint PillHitTestAlpha = 0x01000000;
-    public const int PillDefaultWidthPx = 144;
-    public const int PillDefaultHeightPx = 48;
+    public const int PillDefaultWidthPx = 80;
+    public const int PillDefaultHeightPx = 34;
     public const int PillDefaultRightMarginFallbackPx = 220;
     public const int PillEdgeGapPx = 6;
 
@@ -38,4 +39,13 @@ internal static class Win32UiConstants
     public const uint MenuCmdToggleBeeper = 1004;
     public const uint MenuCmdExit = 1005;
     public const uint MenuCmdToggleTheme = 1006;
+
+    public const string TooltipsClassName = "tooltips_class32";
+    public const uint TtsAlwaysTip = 0x01u;
+    public const uint TtsNoPrefix = 0x02u;
+    public const uint TtmAddToolW = 0x0432u;
+    public const uint TtmUpdateTipTextW = 0x0439u;
+    public const uint TtmSetMaxTipWidth = 0x0418u;
+    public const uint TtfIdIsHwnd = 0x0001u;
+    public const uint TtfSubclass = 0x0010u;
 }

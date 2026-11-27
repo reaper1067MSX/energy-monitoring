@@ -328,4 +328,25 @@ public class UIRenderersTests
         menu.MockMenuHandler = s => s.IsBeeperMuted ? ContextMenuAction.ToggleBeeper : ContextMenuAction.Open;
         Assert.Equal(ContextMenuAction.ToggleBeeper, menu.Show(state));
     }
+
+    [Fact]
+    public void FluentBatterySvgBuilder_GeneratesStyleAViewBox_ProportionalBar_AndDistinctStateBadges()
+    {
+        string fullOnline = FluentBatterySvgBuilder.BuildIconSvg(UpsOperationalState.LineNormal, 100, isLightTaskbar: false);
+        string halfBattery = FluentBatterySvgBuilder.BuildIconSvg(UpsOperationalState.OnBattery, 50, isLightTaskbar: true);
+        string zeroBattery = FluentBatterySvgBuilder.BuildIconSvg(UpsOperationalState.BatteryLow, 0, isLightTaskbar: true);
+        string noComm = FluentBatterySvgBuilder.BuildIconSvg(UpsOperationalState.CommunicationsLost, 100, isLightTaskbar: false);
+
+        Assert.Contains("viewBox=\"0 0 28 16\"", fullOnline, StringComparison.Ordinal);
+        Assert.Contains("width=\"17.6\"", fullOnline, StringComparison.Ordinal);
+        Assert.Contains("url(#bf)", fullOnline, StringComparison.Ordinal);
+        Assert.Contains("M13.4 1.2L8.9 8.2H12.4L11.4 14L16.1 6.8H12.6L13.4 1.2Z", fullOnline, StringComparison.Ordinal);
+
+        Assert.Contains("width=\"8.8\"", halfBattery, StringComparison.Ordinal);
+        Assert.Contains("#f59e0b", halfBattery, StringComparison.Ordinal);
+
+        Assert.DoesNotContain("rx=\"1.2\"", zeroBattery, StringComparison.Ordinal);
+        Assert.DoesNotContain("rx=\"1.2\"", noComm, StringComparison.Ordinal);
+        Assert.Contains("M10.2 5.7L14.8 10.3", noComm, StringComparison.Ordinal);
+    }
 }

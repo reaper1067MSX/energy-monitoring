@@ -23,6 +23,7 @@ public sealed class TrayRenderer : ITrayIconView
     private readonly ITrayIconRasterizer _rasterizer;
     private readonly INativeIconFactory _iconFactory;
     private readonly Func<bool> _isLightTaskbarProvider;
+    private readonly bool _showTrayIcon;
     private readonly object _lock = new();
     private IntPtr _currentHIcon = IntPtr.Zero;
     private bool _isDisposed;
@@ -53,11 +54,13 @@ public sealed class TrayRenderer : ITrayIconView
     public TrayRenderer(
         ITrayIconRasterizer? rasterizer = null,
         INativeIconFactory? iconFactory = null,
-        Func<bool>? isLightTaskbarProvider = null)
+        Func<bool>? isLightTaskbarProvider = null,
+        bool showTrayIcon = true)
     {
         _rasterizer = rasterizer ?? TrayIconRasterizer.CreateDefault();
         _iconFactory = iconFactory ?? new Win32NativeIconFactory();
         _isLightTaskbarProvider = isLightTaskbarProvider ?? WindowsThemeDetector.IsLightTaskbar;
+        _showTrayIcon = showTrayIcon;
         InitializeHostWindow();
     }
 
@@ -183,7 +186,7 @@ public sealed class TrayRenderer : ITrayIconView
             _iconFactory.DestroyIcon(_currentHIcon);
             _currentHIcon = hNew;
 
-            if (!_hwnd.IsNull && _currentHIcon != IntPtr.Zero)
+            if (_showTrayIcon && !_hwnd.IsNull && _currentHIcon != IntPtr.Zero)
             {
                 if (!_iconAdded)
                 {

@@ -42,14 +42,14 @@ internal sealed class TaskbarPillSurfaceRenderer : ITaskbarPillSurfaceRenderer, 
         _semiBoldTypeface = ResolveTypeface(SKFontStyleWeight.SemiBold);
     }
 
-    public uint[] RenderArgbPixels(UpsTelemetry telemetry, int width, int height, bool isLightTaskbar, int dpi)
+    public uint[] RenderArgbPixels(UpsTelemetry telemetry, int width, int height, bool isLightTaskbar, int dpi, bool isHovered = false)
     {
         ObjectDisposedException.ThrowIf(_disposed, this);
         ArgumentNullException.ThrowIfNull(telemetry);
         ArgumentOutOfRangeException.ThrowIfNegativeOrZero(width);
         ArgumentOutOfRangeException.ThrowIfNegativeOrZero(height);
 
-        using SKSurface surface = RenderSurface(telemetry, width, height, isLightTaskbar, dpi);
+        using SKSurface surface = RenderSurface(telemetry, width, height, isLightTaskbar, dpi, isHovered);
         var imageInfo = new SKImageInfo(width, height, SKColorType.Bgra8888, SKAlphaType.Premul);
         uint[] pixels = new uint[width * height];
 
@@ -74,14 +74,14 @@ internal sealed class TaskbarPillSurfaceRenderer : ITaskbarPillSurfaceRenderer, 
         return pixels;
     }
 
-    public byte[] RenderPng(UpsTelemetry telemetry, int width, int height, bool isLightTaskbar, int dpi)
+    public byte[] RenderPng(UpsTelemetry telemetry, int width, int height, bool isLightTaskbar, int dpi, bool isHovered = false)
     {
         ObjectDisposedException.ThrowIf(_disposed, this);
         ArgumentNullException.ThrowIfNull(telemetry);
         ArgumentOutOfRangeException.ThrowIfNegativeOrZero(width);
         ArgumentOutOfRangeException.ThrowIfNegativeOrZero(height);
 
-        using SKSurface surface = RenderSurface(telemetry, width, height, isLightTaskbar, dpi);
+        using SKSurface surface = RenderSurface(telemetry, width, height, isLightTaskbar, dpi, isHovered);
         using SKImage image = surface.Snapshot();
         using SKData data = image.Encode(SKEncodedImageFormat.Png, TaskbarPillLayoutConstants.PngQuality);
         return data.ToArray();
@@ -104,7 +104,7 @@ internal sealed class TaskbarPillSurfaceRenderer : ITaskbarPillSurfaceRenderer, 
         }
     }
 
-    private SKSurface RenderSurface(UpsTelemetry telemetry, int width, int height, bool isLightTaskbar, int dpi)
+    private SKSurface RenderSurface(UpsTelemetry telemetry, int width, int height, bool isLightTaskbar, int dpi, bool isHovered)
     {
         _ = _iconRasterizer.ResolvePhysicalSize(dpi);
         var imageInfo = new SKImageInfo(width, height, SKColorType.Bgra8888, SKAlphaType.Premul);
@@ -116,36 +116,31 @@ internal sealed class TaskbarPillSurfaceRenderer : ITaskbarPillSurfaceRenderer, 
 
         float scale = Math.Max(TaskbarPillLayoutConstants.MinScale, dpi / (float)LayoutTokens.DefaultDpi);
         ThemePalette palette = isLightTaskbar ? LightThemeTokens.Palette : DarkThemeTokens.Palette;
-        SKColor accentColor = SKColor.Parse(DesignTokens.GetTrayStateColor(telemetry.State, isLightTaskbar));
-        SKColor surfaceColor = SKColor.Parse(palette.Surface)
-            .WithAlpha(isLightTaskbar ? TaskbarPillLayoutConstants.LightFillAlpha : TaskbarPillLayoutConstants.DarkFillAlpha);
-        SKColor borderColor = SKColor.Parse(palette.Border).WithAlpha(TaskbarPillLayoutConstants.BorderAlpha);
 
         float insetX = TaskbarPillLayoutConstants.HorizontalInsetPx * scale;
         float insetY = TaskbarPillLayoutConstants.VerticalInsetPx * scale;
         var pillRect = new SKRect(insetX, insetY, Math.Max(insetX + 4f, width - insetX), Math.Max(insetY + 4f, height - insetY));
-        float radius = TaskbarPillLayoutConstants.CornerRadiusPx * scale;
 
-        using var fillPaint = new SKPaint { Color = surfaceColor, IsAntialias = true };
-        using var borderPaint = new SKPaint
+        if (isHovered)
         {
-            Color = borderColor,
-            Style = SKPaintStyle.Stroke,
-            StrokeWidth = TaskbarPillLayoutConstants.BorderStrokeWidth * scale,
-            IsAntialias = true
-        };
-
-        canvas.DrawRoundRect(pillRect, radius, radius, fillPaint);
-        canvas.DrawRoundRect(pillRect, radius, radius, borderPaint);
+            SKColor hoverColor = isLightTaskbar
+                ? new SKColor(0, 0, 0, TaskbarPillLayoutConstants.HoverLightAlpha)
+                : new SKColor(255, 255, 255, TaskbarPillLayoutConstants.HoverDarkAlpha);
+            float radius = TaskbarPillLayoutConstants.CornerRadiusPx * scale;
+            using var hoverPaint = new SKPaint { Color = hoverColor, IsAntialias = true };
+            canvas.DrawRoundRect(pillRect, radius, radius, hoverPaint);
+        }
 
         float padX = TaskbarPillLayoutConstants.PaddingX * scale;
-        float iconSize = Math.Min(TaskbarPillLayoutConstants.IconSizePx * scale, pillRect.Height - (4f * scale));
+        float iconHeight = Math.Min(TaskbarPillLayoutConstants.IconHeightPx * scale, pillRect.Height - (4f * scale));
+        float iconWidth = TaskbarPillLayoutConstants.IconWidthPx * scale;
         float iconLeft = pillRect.Left + padX;
-        float iconTop = pillRect.MidY - (iconSize / 2f);
-        var iconRect = new SKRect(iconLeft, iconTop, iconLeft + iconSize, iconTop + iconSize);
+        float iconTop = pillRect.MidY - (iconHeight / 2f);
+        var iconRect = new SKRect(iconLeft, iconTop, iconLeft + iconWidth, iconTop + iconHeight);
 
-        string iconName = ResolveStateIcon(telemetry.State);
-        _svgIconLibrary.TryDraw(canvas, iconName, iconRect, accentColor);
+        string iconCacheKey = FluentBatterySvgBuilder.BuildCacheKey(telemetry.State, telemetry.BatteryPercentage, isLightTaskbar);
+        string iconSvgMarkup = FluentBatterySvgBuilder.BuildIconSvg(telemetry.State, telemetry.BatteryPercentage, isLightTaskbar);
+        _svgIconLibrary.TryDrawMarkup(canvas, iconCacheKey, iconSvgMarkup, iconRect);
 
         float textLeft = iconRect.Right + (TaskbarPillLayoutConstants.IconTextGapPx * scale);
         float contentRight = pillRect.Right - padX;
@@ -155,68 +150,14 @@ internal sealed class TaskbarPillSurfaceRenderer : ITaskbarPillSurfaceRenderer, 
         }
 
         string primaryText = FormatPrimaryText(telemetry);
-        string secondaryText = string.Create(CultureInfo.InvariantCulture, $" · {Math.Clamp(telemetry.LoadPercentage, 0, 100)}%");
-
         using var primaryFont = new SKFont(_semiBoldTypeface, TaskbarPillLayoutConstants.PrimaryFontSize * scale);
-        using var secondaryFont = new SKFont(_regularTypeface, TaskbarPillLayoutConstants.SecondaryFontSize * scale);
         using var primaryPaint = new SKPaint { Color = SKColor.Parse(palette.Text), IsAntialias = true };
-        using var secondaryPaint = new SKPaint { Color = SKColor.Parse(palette.TextMuted), IsAntialias = true };
 
-        float barHeight = TaskbarPillLayoutConstants.BarHeightPx * scale;
-        float barGap = TaskbarPillLayoutConstants.BarTopGapPx * scale;
-        float textCenterY = pillRect.MidY - ((barHeight + barGap) / 2f) - (TaskbarPillLayoutConstants.TextVerticalBiasPx * scale);
         SKFontMetrics metrics = primaryFont.Metrics;
-        float baseline = textCenterY - ((metrics.Ascent + metrics.Descent) / 2f);
-
+        float baseline = pillRect.MidY - ((metrics.Ascent + metrics.Descent) / 2f);
         canvas.DrawText(primaryText, textLeft, baseline, SKTextAlign.Left, primaryFont, primaryPaint);
 
-        float primaryWidth = primaryFont.MeasureText(primaryText);
-        float secondaryX = textLeft + primaryWidth;
-        float secondaryWidth = secondaryFont.MeasureText(secondaryText);
-        if (secondaryX + secondaryWidth <= contentRight)
-        {
-            canvas.DrawText(secondaryText, secondaryX, baseline, SKTextAlign.Left, secondaryFont, secondaryPaint);
-        }
-
-        float barTop = textCenterY + (primaryFont.Size * 0.45f) + barGap;
-        barTop = Math.Min(barTop, pillRect.Bottom - barHeight - (4f * scale));
-        var trackRect = new SKRect(textLeft, barTop, contentRight, barTop + barHeight);
-        float barRadius = TaskbarPillLayoutConstants.BarCornerRadiusPx * scale;
-
-        using var trackPaint = new SKPaint
-        {
-            Color = SKColor.Parse(palette.Border).WithAlpha(TaskbarPillLayoutConstants.TrackAlpha),
-            IsAntialias = true
-        };
-        canvas.DrawRoundRect(trackRect, barRadius, barRadius, trackPaint);
-
-        int battery = Math.Clamp(telemetry.BatteryPercentage, 0, 100);
-        if (battery > 0 && telemetry.State != UpsOperationalState.CommunicationsLost)
-        {
-            float fillWidth = Math.Max(barHeight, trackRect.Width * (battery / 100f));
-            var barFillRect = new SKRect(
-                trackRect.Left,
-                trackRect.Top,
-                Math.Min(trackRect.Right, trackRect.Left + fillWidth),
-                trackRect.Bottom);
-            using var barFillPaint = new SKPaint { Color = accentColor, IsAntialias = true };
-            canvas.DrawRoundRect(barFillRect, barRadius, barRadius, barFillPaint);
-        }
-
         return surface;
-    }
-
-    private static string ResolveStateIcon(UpsOperationalState state)
-    {
-        return state switch
-        {
-            UpsOperationalState.LineNormal => SvgIconConstants.TrayOnline,
-            UpsOperationalState.OnBattery or UpsOperationalState.BatteryLow => SvgIconConstants.TrayOnBattery,
-            UpsOperationalState.ChargingAvr => SvgIconConstants.TrayAvr,
-            UpsOperationalState.Fault => SvgIconConstants.TrayFault,
-            UpsOperationalState.Paused => SvgIconConstants.ActionPause,
-            _ => SvgIconConstants.TrayNoComm
-        };
     }
 
     private static string FormatPrimaryText(UpsTelemetry telemetry)

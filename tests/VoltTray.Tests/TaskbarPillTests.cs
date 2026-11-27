@@ -30,13 +30,15 @@ public class TaskbarPillTests
             TrayNotifyRect: new ViewRect(0, 0, 0, 0),
             StartButtonRect: new ViewRect(760, 1036, 800, 1076),
             WidgetRect: new ViewRect(8, 1036, 160, 1076),
-            AppListRect: new ViewRect(800, 1036, 1120, 1076));
+            AppListRect: new ViewRect(800, 1036, 1120, 1076),
+            PillWidth: 80,
+            PillHeight: 34);
 
         ViewRect bounds = calculator.Calculate(coldBootSnapshot);
-        Assert.Equal(144, bounds.Width);
-        Assert.Equal(48, bounds.Height);
-        Assert.Equal(1920 - 220 - 144, bounds.Left);
-        Assert.Equal(1032, bounds.Top);
+        Assert.Equal(80, bounds.Width);
+        Assert.Equal(34, bounds.Height);
+        Assert.Equal(1920 - 220 - 80, bounds.Left);
+        Assert.Equal(1039, bounds.Top);
         Assert.True(bounds.Left >= coldBootSnapshot.AppListRect!.Value.Right + 6);
 
         var tightSnapshot = new TaskbarPillLayoutSnapshot(
@@ -57,10 +59,17 @@ public class TaskbarPillTests
         var renderer = new TaskbarPillSurfaceRenderer(TrayIconRasterizer.CreateDefault());
         UpsTelemetry telemetry = UpsTelemetry.CreateDefault();
 
-        uint[] darkPixels = renderer.RenderArgbPixels(telemetry, 144, 48, isLightTaskbar: false, dpi: 96);
-        uint[] lightPixels = renderer.RenderArgbPixels(telemetry, 144, 48, isLightTaskbar: true, dpi: 96);
+        uint[] darkPixels = renderer.RenderArgbPixels(telemetry, 80, 34, isLightTaskbar: false, dpi: 96);
+        uint[] lightPixels = renderer.RenderArgbPixels(telemetry, 80, 34, isLightTaskbar: true, dpi: 96);
+        uint[] hoveredPixels = renderer.RenderArgbPixels(telemetry, 80, 34, isLightTaskbar: false, dpi: 96, isHovered: true);
+        Assert.NotEqual(darkPixels, hoveredPixels);
 
-        Assert.Equal(144 * 48, darkPixels.Length);
+        string tooltip = TaskbarPillWindow.FormatTooltipText(telemetry);
+        Assert.Contains("In 116.2V", tooltip, StringComparison.Ordinal);
+        Assert.Contains("Out 116.2V", tooltip, StringComparison.Ordinal);
+        Assert.Contains("Bat 100%", tooltip, StringComparison.Ordinal);
+
+        Assert.Equal(80 * 34, darkPixels.Length);
         Assert.All(darkPixels, px =>
         {
             byte a = (byte)(px >> 24);
@@ -113,8 +122,8 @@ public class TaskbarPillTests
         UpsTelemetry telemetry = UpsTelemetry.CreateDefault();
         pill.Update(telemetry);
         Assert.True(pill.IsVisible);
-        Assert.Equal(144, pill.CurrentBounds.Width);
-        Assert.Equal(48, pill.CurrentBounds.Height);
+        Assert.Equal(80, pill.CurrentBounds.Width);
+        Assert.Equal(34, pill.CurrentBounds.Height);
 
         const uint wmLButtonUp = 0x0202;
         const uint wmRButtonUp = 0x0205;
@@ -127,8 +136,8 @@ public class TaskbarPillTests
 
         Assert.True(pill.HandleWindowMessage(wmDpiChanged, (IntPtr)144, IntPtr.Zero));
         Assert.Equal(144, pill.CurrentDpi);
-        Assert.Equal(216, pill.CurrentBounds.Width);
-        Assert.Equal(72, pill.CurrentBounds.Height);
+        Assert.Equal(120, pill.CurrentBounds.Width);
+        Assert.Equal(51, pill.CurrentBounds.Height);
 
         pill.HandleTaskbarCreated();
         Assert.Equal(1, pill.TaskbarRecoveryCount);

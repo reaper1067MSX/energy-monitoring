@@ -24,11 +24,26 @@ internal sealed class SkiaSvgIconLibrary : ISvgIconLibrary
         }
 
         SKSvg? svg = GetOrLoad(iconName);
-        if (svg?.Picture is not SKPicture picture)
+        return svg?.Picture is SKPicture picture && DrawPicture(canvas, picture, destination, tintColor);
+    }
+
+    public bool TryDrawMarkup(SKCanvas canvas, string cacheKey, string svgMarkup, SKRect destination)
+    {
+        ArgumentNullException.ThrowIfNull(canvas);
+        if (string.IsNullOrWhiteSpace(cacheKey) ||
+            string.IsNullOrWhiteSpace(svgMarkup) ||
+            destination.Width <= 0 ||
+            destination.Height <= 0)
         {
             return false;
         }
 
+        SKSvg? svg = GetOrLoadMarkup(cacheKey, svgMarkup);
+        return svg?.Picture is SKPicture picture && DrawPicture(canvas, picture, destination, tintColor: null);
+    }
+
+    private static bool DrawPicture(SKCanvas canvas, SKPicture picture, SKRect destination, SKColor? tintColor)
+    {
         SKRect cullRect = picture.CullRect;
         if (cullRect.Width <= 0 || cullRect.Height <= 0)
         {
@@ -129,6 +144,24 @@ internal sealed class SkiaSvgIconLibrary : ISvgIconLibrary
             }
 
             _cache[iconName] = loaded;
+            return loaded;
+        }
+    }
+
+    private SKSvg? GetOrLoadMarkup(string cacheKey, string svgMarkup)
+    {
+        lock (_cacheLock)
+        {
+            ObjectDisposedException.ThrowIf(_isDisposed, this);
+
+            if (_cache.TryGetValue(cacheKey, out SKSvg? cached))
+            {
+                return cached;
+            }
+
+            var loaded = new SKSvg();
+            loaded.FromSvg(svgMarkup);
+            _cache[cacheKey] = loaded;
             return loaded;
         }
     }
