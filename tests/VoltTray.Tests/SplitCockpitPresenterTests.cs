@@ -80,6 +80,7 @@ public class SplitCockpitPresenterTests
 
     [Theory]
     [InlineData(14, 900, 126)]
+    [InlineData(18, 1200, 216)]
     [InlineData(0, 900, 0)]
     [InlineData(100, 900, 900)]
     [InlineData(50, 900, 450)]

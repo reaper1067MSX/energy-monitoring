@@ -13,7 +13,7 @@ public class VoltronicParserTests
     private const double ExpectedGoldenInputVoltageAc = 117.3;
     private const double ExpectedGoldenOutputVoltageAc = 117.3;
     private const int ExpectedGoldenLoadPercentage = 14;
-    private const int ExpectedGoldenActiveLoadWatts = 126;
+    private const int ExpectedGoldenActiveLoadWatts = 168;
     private const double ExpectedGoldenFrequencyHz = 60.0;
     private const double ExpectedGoldenBatteryVoltageDc = 27.41;
     private const double ExpectedGoldenCellVoltageDc = 13.70;

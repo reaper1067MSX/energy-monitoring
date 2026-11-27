@@ -28,7 +28,7 @@ public sealed record UpsTelemetry(
             FaultReferenceVoltageAc: 116.2,
             OutputVoltageAc: 116.2,
             LoadPercentage: 14,
-            ActiveLoadWatts: 126,
+            ActiveLoadWatts: 168,
             FrequencyHz: 60.0,
             BatteryVoltageDc: 27.41,
             Cell1VoltageDc: 13.70,

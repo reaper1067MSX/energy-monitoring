@@ -44,6 +44,8 @@ public static class LocalizationConstants
     public const string RuntimeLabelEs = "Autonomía";
     public const string LoadCapacitySuffixEn = "load";
     public const string LoadCapacitySuffixEs = "carga";
+    public const string LoadOfSeparatorEn = "of";
+    public const string LoadOfSeparatorEs = "de";
     public const string LastFaultLabelEn = "Last fault";
     public const string LastFaultLabelEs = "Últ. falla";
     public const string ModeLabelEn = "Mode";
@@ -54,6 +56,14 @@ public static class LocalizationConstants
     public const string ModeAvrEs = "AVR Boost";
     public const string ModeInverterEn = "Inverter";
     public const string ModeInverterEs = "Inversor";
+    public const string InputAcMicroLabelEn = "INPUT AC";
+    public const string InputAcMicroLabelEs = "ENTRADA AC";
+    public const string RuntimeMicroLabelEn = "PEUKERT RUNTIME";
+    public const string RuntimeMicroLabelEs = "AUTONOMÍA PEUKERT";
+    public const string CapacityLabelEn = "Capacity";
+    public const string CapacityLabelEs = "Capacidad";
+    public const string Cell1Label = "Bat 1";
+    public const string Cell2Label = "Bat 2";
 
     public const string BatteryTestEn = "Battery test";
     public const string BatteryTestEs = "Prueba de batería";

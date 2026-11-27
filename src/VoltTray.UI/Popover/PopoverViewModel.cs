@@ -32,7 +32,10 @@ public sealed record PopoverViewModel(
     bool IsTestInProgress,
     string RegulationModeText = LocalizationConstants.UnavailablePlaceholder,
     string? CellsSummaryText = null,
-    string? BankEnergyWhText = null)
+    string? BankEnergyWhText = null,
+    string? Cell1Text = null,
+    string? Cell2Text = null,
+    string? ActiveLoadCeilingText = null)
 {
     public static PopoverViewModel FromTelemetry(UpsTelemetry telemetry, CultureInfo? culture = null)
     {
@@ -67,10 +70,30 @@ public sealed record PopoverViewModel(
         string? wattsText = telemetry.ActiveLoadWatts.HasValue
             ? FormattableString.Invariant($"{telemetry.ActiveLoadWatts.Value} W")
             : null;
+        string? activeLoadCeilingText = null;
+        if (telemetry.ActiveLoadWatts is int activeWatts)
+        {
+            if (telemetry.LoadPercentage > 0)
+            {
+                int inferredRated = (int)(Math.Round((activeWatts * 100.0 / telemetry.LoadPercentage) / 50.0) * 50);
+                string prep = isSpanish ? LocalizationConstants.LoadOfSeparatorEs : LocalizationConstants.LoadOfSeparatorEn;
+                activeLoadCeilingText = FormattableString.Invariant($"({activeWatts} W {prep} {inferredRated}W)");
+            }
+            else
+            {
+                activeLoadCeilingText = FormattableString.Invariant($"({activeWatts} W)");
+            }
+        }
 
         string regulationModeText = FormatRegulationMode(telemetry.State, isSpanish);
         string? cellsSummaryText = telemetry.Cell1VoltageDc > 0 && telemetry.Cell2VoltageDc > 0
-            ? FormattableString.Invariant($"C1 {telemetry.Cell1VoltageDc:F2}V · C2 {telemetry.Cell2VoltageDc:F2}V")
+            ? FormattableString.Invariant($"{LocalizationConstants.Cell1Label} {telemetry.Cell1VoltageDc:F2}V · {LocalizationConstants.Cell2Label} {telemetry.Cell2VoltageDc:F2}V")
+            : null;
+        string? cell1Text = telemetry.Cell1VoltageDc > 0
+            ? FormattableString.Invariant($"{telemetry.Cell1VoltageDc:F2} V")
+            : null;
+        string? cell2Text = telemetry.Cell2VoltageDc > 0
+            ? FormattableString.Invariant($"{telemetry.Cell2VoltageDc:F2} V")
             : null;
         string? bankEnergyWhText = telemetry.BankSpec.RatedCapacityAh is double ratedAh && ratedAh > 0
             ? FormattableString.Invariant($"{(int)Math.Round(telemetry.BankSpec.NominalVoltageDc * ratedAh)} Wh")
@@ -107,7 +130,10 @@ public sealed record PopoverViewModel(
             IsTestInProgress: telemetry.IsTestInProgress,
             RegulationModeText: regulationModeText,
             CellsSummaryText: cellsSummaryText,
-            BankEnergyWhText: bankEnergyWhText);
+            BankEnergyWhText: bankEnergyWhText,
+            Cell1Text: cell1Text,
+            Cell2Text: cell2Text,
+            ActiveLoadCeilingText: activeLoadCeilingText);
     }
 
     private static string DeriveEmblem(string title)

@@ -69,7 +69,7 @@ public class SplitCockpitPresenter
         return (half, half);
     }
 
-    public static int CalculateActiveLoadWatts(int loadPercentage, int ratedWatts = 900)
+    public static int CalculateActiveLoadWatts(int loadPercentage, int ratedWatts = 1200)
     {
         int clamped = Math.Clamp(loadPercentage, 0, 100);
         return (int)Math.Round((double)clamped * ratedWatts / 100.0, MidpointRounding.AwayFromZero);

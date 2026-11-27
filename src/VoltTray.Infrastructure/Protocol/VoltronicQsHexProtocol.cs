@@ -35,7 +35,12 @@ internal sealed class VoltronicQsHexProtocol : IUpsProtocolStrategy
         UpsTelemetry? previous,
         DateTimeOffset now)
     {
-        return _parser.Parse(frame, capabilities, previous, now);
+        UpsCapabilities effectiveCapabilities =
+            capabilities.RatedWatts is null && capabilities.Bank.SeriesBatteryCount >= 2
+                ? capabilities with { RatedWatts = (int)VoltronicProtocolConstants.DefaultRatedWatts }
+                : capabilities;
+
+        return _parser.Parse(frame, effectiveCapabilities, previous, now);
     }
 
     public void ResetSelfTest()

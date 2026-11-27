@@ -9,4 +9,5 @@ public sealed record PopoverRenderState(
     int Height,
     PopoverActionId HoveredAction = PopoverActionId.None,
     PopoverActionId PressedAction = PopoverActionId.None,
-    int FocusedActionIndex = 0);
+    int FocusedActionIndex = 0,
+    bool UseAcrylicBackdrop = false);

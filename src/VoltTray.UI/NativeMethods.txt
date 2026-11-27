@@ -9,6 +9,7 @@ DeleteObject
 BitBlt
 CreateDIBSection
 DwmSetWindowAttribute
+DwmExtendFrameIntoClientArea
 Shell_NotifyIcon
 Shell_NotifyIconGetRect
 MonitorFromRect
@@ -69,4 +70,5 @@ NOTIFY_ICON_MESSAGE
 NOTIFY_ICON_DATA_FLAGS
 DWMWINDOWATTRIBUTE
 DWM_WINDOW_CORNER_PREFERENCE
+DWM_SYSTEMBACKDROP_TYPE
 TRACK_POPUP_MENU_FLAGS

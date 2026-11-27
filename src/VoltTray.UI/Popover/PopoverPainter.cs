@@ -5,6 +5,7 @@ using Windows.Win32;
 using Windows.Win32.Foundation;
 using Windows.Win32.Graphics.Dwm;
 using Windows.Win32.Graphics.Gdi;
+using Windows.Win32.UI.Controls;
 using Windows.Win32.UI.WindowsAndMessaging;
 using VoltTray.Core.Telemetry;
 using VoltTray.UI.Atoms;
@@ -374,6 +375,25 @@ public sealed class PopoverPainter : IPopoverView
                 DWMWINDOWATTRIBUTE.DWMWA_WINDOW_CORNER_PREFERENCE,
                 &roundPreference,
                 sizeof(int));
+
+            if (Environment.OSVersion.Version.Build >= PopoverLayoutConstants.Win11AcrylicBuild)
+            {
+                var margins = new MARGINS
+                {
+                    cxLeftWidth = -1,
+                    cxRightWidth = -1,
+                    cyTopHeight = -1,
+                    cyBottomHeight = -1
+                };
+                _ = PInvoke.DwmExtendFrameIntoClientArea(_hwnd, in margins);
+
+                int backdropType = (int)DWM_SYSTEMBACKDROP_TYPE.DWMSBT_TRANSIENTWINDOW;
+                _ = PInvoke.DwmSetWindowAttribute(
+                    _hwnd,
+                    DWMWINDOWATTRIBUTE.DWMWA_SYSTEMBACKDROP_TYPE,
+                    &backdropType,
+                    sizeof(int));
+            }
         }
     }
 
@@ -471,7 +491,8 @@ public sealed class PopoverPainter : IPopoverView
                 height,
                 HoveredAction,
                 PressedAction,
-                FocusedActionIndex);
+                FocusedActionIndex,
+                UseAcrylicBackdrop: Environment.OSVersion.Version.Build >= PopoverLayoutConstants.Win11AcrylicBuild);
 
             byte[] pixels = _surfaceRenderer.RenderBgra32(renderState);
             BlitBgra32(hdc, width, height, pixels);
