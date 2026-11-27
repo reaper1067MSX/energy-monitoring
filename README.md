@@ -74,3 +74,12 @@ Las dependencias apuntan siempre hacia el núcleo (`Shared <- Core <- Infrastruc
 | **Popover Split-Cockpit** | Tarjeta de `372×356 px` con esquinas redondeadas `DWMWCP_ROUND`, detección automática de tema (`AppsUseLightTheme`), omisión limpia de métricas `Unavailable` y botones reales de `44 px` con hover y navegación por teclado. |
 | **Ícono de bandeja y Taskbar Pill** | Glifo dinámico de 32-bpp ARGB adaptado a `SystemUsesLightTheme` y DPI (`16/20/24/32 px`), más píldora opcional `--taskbar-pill` anclada en `Shell_TrayWnd` con ocultamiento automático en pantalla completa. |
 | **Interop y memoria** | Cero `[DllImport]` en `src/` (`[LibraryImport]` únicamente), serialización invariante lista para Native AOT y **~6.7 MB** de memoria privada medida en ejecución simulada. |
+
+---
+
+## Próximas Iteraciones (Roadmap)
+
+| Área | Alcance planificado |
+|---|---|
+| **Apagado por umbral crítico de batería (%)** | Notificación previa visible al usuario antes de ejecutar el apagado ordenado del sistema, disparado al alcanzar un porcentaje crítico de batería (valor fijo seguro por defecto inicialmente, ajustable luego por el usuario). |
+| **Opciones y personalización de temas** | Ventana/apartado de configuración persistente para ajustar umbrales de seguridad, elegir y personalizar temas visuales (Claro, Oscuro, Automático) y gestionar preferencias de píldora y notificaciones. |
