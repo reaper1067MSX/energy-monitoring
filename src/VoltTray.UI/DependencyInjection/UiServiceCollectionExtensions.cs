@@ -28,7 +28,6 @@ public static class UiServiceCollectionExtensions
             surfaceRenderer: sp.GetRequiredService<IPopoverSurfaceRenderer>()));
         services.AddSingleton<IContextMenuView>(_ => new Win32ContextMenu(enableNativeMenu: true));
         services.AddSingleton<IExitDialogView>(_ => new ExitDialog(enableNativeDialog: true));
-        services.AddSingleton<IModelSelectorDialogView>(_ => new ModelSelectorDialog(enableNativeDialog: true));
 
         if (enableTaskbarPill)
         {

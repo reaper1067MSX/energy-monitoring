@@ -3,8 +3,6 @@ using VoltTray.Core.Telemetry;
 using VoltTray.Infrastructure.DependencyInjection;
 using VoltTray.Infrastructure.Hid;
 using VoltTray.Shared;
-using VoltTray.UI.DependencyInjection;
-using VoltTray.UI.Dialogs;
 
 namespace VoltTray.Hosting;
 
@@ -67,7 +65,6 @@ public sealed class TrayMonitorModeStrategy : IApplicationModeStrategy
     {
         var services = new ServiceCollection();
         services.AddVoltTrayInfrastructure(() => new SimulatedUpsDevicePort());
-        services.AddVoltTrayUi(enableTaskbarPill: false);
         using ServiceProvider setupProvider = services.BuildServiceProvider();
 
         IUserSettingsStore settingsStore = setupProvider.GetRequiredService<IUserSettingsStore>();
@@ -80,16 +77,6 @@ public sealed class TrayMonitorModeStrategy : IApplicationModeStrategy
         if (settingsStore.LoadSelectedModel() is UpsModelPreset savedPreset)
         {
             return UpsModelCatalog.GetProfile(savedPreset);
-        }
-
-        if (!options.IsSimulation)
-        {
-            IModelSelectorDialogView selectorDialog = setupProvider.GetRequiredService<IModelSelectorDialogView>();
-            if (selectorDialog.Show() is UpsModelPreset chosenPreset)
-            {
-                settingsStore.SaveSelectedModel(chosenPreset);
-                return UpsModelCatalog.GetProfile(chosenPreset);
-            }
         }
 
         return UpsModelCatalog.GetProfile(UpsModelPreset.ForzaNt2401Pro);
