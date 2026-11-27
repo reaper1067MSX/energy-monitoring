@@ -4,6 +4,7 @@ using System.Globalization;
 using System.Runtime.CompilerServices;
 using SkiaSharp;
 using VoltTray.Core.Battery;
+using VoltTray.Core.History;
 using VoltTray.Core.Telemetry;
 using VoltTray.UI.Atoms;
 using VoltTray.UI.Dialogs;
@@ -368,5 +369,66 @@ public class UiRenderersTests
 
         Assert.DoesNotContain("stroke-dasharray=\"57.81\"", noComm, StringComparison.Ordinal);
         Assert.Contains("M9 9L15 15M15 9L9 15", noComm, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void PopoverLayoutA_ComputesSemanticKpis_SwitchesHistoryTabsOnClick_AndRendersAllTabs()
+    {
+        DateOnly today = DateOnly.FromDateTime(DateTime.Now);
+        var history = new TelemetryHistorySnapshot(
+            TodayEnergyKwh: 1.8,
+            SessionPeakWatts: 412,
+            TodayMinInputAc: 115.0,
+            TodayMaxInputAc: 121.0,
+            TodayAvrCount: 2,
+            TodayOutageCount: 1,
+            RecentDays:
+            [
+                new DailyTelemetrySummary(today.AddDays(-2), 3.4, 540, 112.0, 122.0, 2, 0, 0),
+                new DailyTelemetrySummary(today, 1.8, 412, 115.0, 121.0, 2, 1, 180)
+            ],
+            RecentOutages:
+            [
+                new PowerOutageEvent(DateTimeOffset.Now.AddHours(-2), 180, 24.6, 2)
+            ]);
+
+        UpsTelemetry telemetry = UpsTelemetry.CreateDefault() with { LoadPercentage = 18, ActiveLoadWatts = 216 };
+        PopoverViewModel vm = PopoverViewModel.FromTelemetry(telemetry, CultureInfo.InvariantCulture, history);
+
+        Assert.Equal("984 W", vm.FreeWattsText);
+        Assert.Equal("412 W", vm.SessionMaxWattsText);
+        Assert.Equal("1.8 kWh", vm.TodayUsageText);
+        Assert.Equal("115–121V", vm.AcRangeText);
+        Assert.Equal("2 AVR · 1 Out", vm.GridEventsText);
+        Assert.Equal(MetricSeverity.Medium, vm.GridEventsSeverity);
+        Assert.Equal("Float", vm.ChargeStageText);
+
+        using var painter = new PopoverPainter(enableNativeWindow: false);
+        painter.Show(telemetry, UITheme.Dark, new ViewRect(1800, 1040, 1824, 1064), TaskbarEdge.Bottom, new ViewRect(0, 0, 1920, 1040), history);
+        var layout = new PopoverHitTestLayout(DesignTokens.Sizes.PopoverWidth, DesignTokens.Sizes.PopoverCardHeight);
+
+        Assert.Equal(HistoryViewTab.FiveDays, painter.ActiveHistoryTab);
+
+        Assert.True(painter.HandlePointerDown(layout.HistoryTabMonth.Left + 5, layout.HistoryTabMonth.Top + 5));
+        Assert.True(painter.HandlePointerUp(layout.HistoryTabMonth.Left + 5, layout.HistoryTabMonth.Top + 5));
+        Assert.Equal(HistoryViewTab.Month, painter.ActiveHistoryTab);
+
+        Assert.True(painter.HandlePointerDown(layout.HistoryTabOutages.Left + 5, layout.HistoryTabOutages.Top + 5));
+        Assert.True(painter.HandlePointerUp(layout.HistoryTabOutages.Left + 5, layout.HistoryTabOutages.Top + 5));
+        Assert.Equal(HistoryViewTab.OutageDays, painter.ActiveHistoryTab);
+
+        using var svgLib = new SkiaSvgIconLibrary();
+        using var renderer = new SkiaPopoverSurfaceRenderer(svgLib);
+        foreach (HistoryViewTab tab in Enum.GetValues<HistoryViewTab>())
+        {
+            byte[] png = renderer.RenderPng(new PopoverRenderState(
+                vm,
+                UITheme.Dark,
+                DesignTokens.Sizes.PopoverWidth,
+                DesignTokens.Sizes.PopoverCardHeight,
+                UseAcrylicBackdrop: true,
+                ActiveHistoryTab: tab));
+            Assert.True(png.Length > 1000);
+        }
     }
 }

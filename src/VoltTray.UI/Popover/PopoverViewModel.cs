@@ -1,4 +1,5 @@
 using System.Globalization;
+using VoltTray.Core.History;
 using VoltTray.Core.Telemetry;
 using VoltTray.Shared;
 using VoltTray.UI.Tokens;
@@ -35,9 +36,24 @@ public sealed record PopoverViewModel(
     string? BankEnergyWhText = null,
     string? Cell1Text = null,
     string? Cell2Text = null,
-    string? ActiveLoadCeilingText = null)
+    string? ActiveLoadCeilingText = null,
+    string? AcRangeText = null,
+    string? GridEventsText = null,
+    MetricSeverity GridEventsSeverity = MetricSeverity.Nominal,
+    string ChargeStageText = LocalizationConstants.StageFloatLabel,
+    MetricSeverity ChargeStageSeverity = MetricSeverity.Nominal,
+    string? FreeWattsText = null,
+    MetricSeverity FreeWattsSeverity = MetricSeverity.Nominal,
+    string? SessionMaxWattsText = null,
+    MetricSeverity SessionMaxSeverity = MetricSeverity.Nominal,
+    string? TodayUsageText = null,
+    MetricSeverity TodayUsageSeverity = MetricSeverity.Nominal,
+    TelemetryHistorySnapshot? History = null)
 {
-    public static PopoverViewModel FromTelemetry(UpsTelemetry telemetry, CultureInfo? culture = null)
+    public static PopoverViewModel FromTelemetry(
+        UpsTelemetry telemetry,
+        CultureInfo? culture = null,
+        TelemetryHistorySnapshot? history = null)
     {
         CultureInfo resolvedCulture = culture ?? CultureInfo.CurrentUICulture;
         bool isSpanish = resolvedCulture.TwoLetterISOLanguageName
@@ -107,6 +123,50 @@ public sealed record PopoverViewModel(
             ? (isSpanish ? LocalizationConstants.UnmuteAlarmEs : LocalizationConstants.UnmuteAlarmEn)
             : (isSpanish ? LocalizationConstants.MuteAlarmEs : LocalizationConstants.MuteAlarmEn);
 
+        string acRangeText = history?.TodayMinInputAc is double minAc && history.TodayMaxInputAc is double maxAc
+            ? FormattableString.Invariant($"{minAc:0}–{maxAc:0}V")
+            : FormattableString.Invariant($"{telemetry.InputVoltageAc:0}V");
+
+        int todayAvr = history?.TodayAvrCount ?? 0;
+        int todayOutages = history?.TodayOutageCount ?? 0;
+        string gridEventsText = FormattableString.Invariant($"{todayAvr} AVR · {todayOutages} Out");
+        MetricSeverity gridEventsSeverity = todayOutages >= 3
+            ? MetricSeverity.Critical
+            : (todayOutages > 0 || todayAvr > 0 ? MetricSeverity.Medium : MetricSeverity.Nominal);
+
+        bool isDischarging = telemetry.State is UpsOperationalState.OnBattery or UpsOperationalState.BatteryLow;
+        double perBatteryV = telemetry.BankSpec.SeriesBatteryCount > 0
+            ? telemetry.BatteryVoltageDc / telemetry.BankSpec.SeriesBatteryCount
+            : telemetry.BatteryVoltageDc;
+        string chargeStageText = isDischarging
+            ? LocalizationConstants.StageDischargingLabel
+            : (perBatteryV >= HistoryDomainConstants.FloatVoltagePerBatteryThreshold
+                ? LocalizationConstants.StageFloatLabel
+                : LocalizationConstants.StageChargingLabel);
+        MetricSeverity chargeStageSeverity = isDischarging ? MetricSeverity.Medium : MetricSeverity.Nominal;
+
+        int ratedCeiling = telemetry.ActiveLoadWatts is int aw && telemetry.LoadPercentage > 0
+            ? (int)(Math.Round((aw * 100.0 / telemetry.LoadPercentage) / 50.0) * 50)
+            : 1200;
+        int currentWatts = telemetry.ActiveLoadWatts ?? 0;
+        int freeWatts = Math.Max(0, ratedCeiling - currentWatts);
+        string freeWattsText = FormattableString.Invariant($"{freeWatts} W");
+        MetricSeverity freeWattsSeverity = freeWatts <= 240
+            ? MetricSeverity.Critical
+            : (freeWatts <= 540 ? MetricSeverity.Medium : MetricSeverity.Nominal);
+
+        int sessionMaxWatts = Math.Max(currentWatts, history?.SessionPeakWatts ?? 0);
+        string sessionMaxText = FormattableString.Invariant($"{sessionMaxWatts} W");
+        MetricSeverity sessionMaxSeverity = sessionMaxWatts >= 960
+            ? MetricSeverity.Critical
+            : (sessionMaxWatts >= 660 ? MetricSeverity.Medium : MetricSeverity.Nominal);
+
+        double todayKwh = history?.TodayEnergyKwh ?? 0.0;
+        string todayUsageText = FormattableString.Invariant($"{todayKwh:F1} kWh");
+        MetricSeverity todayUsageSeverity = todayKwh >= 5.0
+            ? MetricSeverity.Critical
+            : (todayKwh >= 3.0 ? MetricSeverity.Medium : MetricSeverity.Nominal);
+
         return new PopoverViewModel(
             Title: title,
             Emblem: emblem,
@@ -133,7 +193,19 @@ public sealed record PopoverViewModel(
             BankEnergyWhText: bankEnergyWhText,
             Cell1Text: cell1Text,
             Cell2Text: cell2Text,
-            ActiveLoadCeilingText: activeLoadCeilingText);
+            ActiveLoadCeilingText: activeLoadCeilingText,
+            AcRangeText: acRangeText,
+            GridEventsText: gridEventsText,
+            GridEventsSeverity: gridEventsSeverity,
+            ChargeStageText: chargeStageText,
+            ChargeStageSeverity: chargeStageSeverity,
+            FreeWattsText: freeWattsText,
+            FreeWattsSeverity: freeWattsSeverity,
+            SessionMaxWattsText: sessionMaxText,
+            SessionMaxSeverity: sessionMaxSeverity,
+            TodayUsageText: todayUsageText,
+            TodayUsageSeverity: todayUsageSeverity,
+            History: history);
     }
 
     private static string DeriveEmblem(string title)

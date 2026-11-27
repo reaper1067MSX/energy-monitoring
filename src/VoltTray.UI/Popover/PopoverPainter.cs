@@ -7,6 +7,7 @@ using Windows.Win32.Graphics.Dwm;
 using Windows.Win32.Graphics.Gdi;
 using Windows.Win32.UI.Controls;
 using Windows.Win32.UI.WindowsAndMessaging;
+using VoltTray.Core.History;
 using VoltTray.Core.Telemetry;
 using VoltTray.UI.Atoms;
 using VoltTray.UI.Interop;
@@ -48,6 +49,7 @@ public sealed class PopoverPainter : IPopoverView
     public int FocusedActionIndex { get; private set; }
     public PopoverActionId HoveredAction { get; private set; }
     public PopoverActionId PressedAction { get; private set; }
+    public HistoryViewTab ActiveHistoryTab { get; private set; } = HistoryViewTab.FiveDays;
 
     public event Action? OnSelfTestRequested;
     public event Action? OnToggleBeeperRequested;
@@ -85,6 +87,15 @@ public sealed class PopoverPainter : IPopoverView
     }
 
     public void Show(UpsTelemetry telemetry, UITheme theme, ViewRect iconRect, TaskbarEdge edge, ViewRect workArea)
+        => Show(telemetry, theme, iconRect, edge, workArea, history: null);
+
+    public void Show(
+        UpsTelemetry telemetry,
+        UITheme theme,
+        ViewRect iconRect,
+        TaskbarEdge edge,
+        ViewRect workArea,
+        TelemetryHistorySnapshot? history)
     {
         if (IsToggleDebounced())
         {
@@ -95,7 +106,7 @@ public sealed class PopoverPainter : IPopoverView
         CurrentTelemetry = telemetry;
         CurrentTheme = theme;
         CurrentIconRect = iconRect;
-        CurrentViewModel = PopoverViewModel.FromTelemetry(telemetry);
+        CurrentViewModel = PopoverViewModel.FromTelemetry(telemetry, history: history);
         CurrentBounds = CalculatePlacement(iconRect, edge, workArea, DesignTokens.Sizes.PopoverCardHeight);
         IsVisible = true;
 
@@ -195,6 +206,18 @@ public sealed class PopoverPainter : IPopoverView
         if (hit == PopoverActionId.ToggleBeeper)
         {
             TriggerToggleBeeper();
+            return true;
+        }
+
+        if (hit is PopoverActionId.HistoryTab5Days or PopoverActionId.HistoryTabMonth or PopoverActionId.HistoryTabOutages)
+        {
+            ActiveHistoryTab = hit switch
+            {
+                PopoverActionId.HistoryTabMonth => HistoryViewTab.Month,
+                PopoverActionId.HistoryTabOutages => HistoryViewTab.OutageDays,
+                _ => HistoryViewTab.FiveDays
+            };
+            InvalidateNativeWindow();
             return true;
         }
 
@@ -492,7 +515,8 @@ public sealed class PopoverPainter : IPopoverView
                 HoveredAction,
                 PressedAction,
                 FocusedActionIndex,
-                UseAcrylicBackdrop: Environment.OSVersion.Version.Build >= PopoverLayoutConstants.Win11AcrylicBuild);
+                UseAcrylicBackdrop: Environment.OSVersion.Version.Build >= PopoverLayoutConstants.Win11AcrylicBuild,
+                ActiveHistoryTab: ActiveHistoryTab);
 
             byte[] pixels = _surfaceRenderer.RenderBgra32(renderState);
             BlitBgra32(hdc, width, height, pixels);

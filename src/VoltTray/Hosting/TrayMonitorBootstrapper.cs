@@ -1,5 +1,6 @@
 using Microsoft.Extensions.DependencyInjection;
 using VoltTray.Core.Diagnostics;
+using VoltTray.Core.History;
 using VoltTray.Core.Safety;
 using VoltTray.Core.Telemetry;
 using VoltTray.Infrastructure.DependencyInjection;
@@ -60,7 +61,8 @@ public sealed class TrayMonitorBootstrapper : IDisposable
             isCompactIconModeProvider: () => _iconMode == TrayIconMode.Short,
             toggleIconModeAction: ToggleIconMode,
             initialThemePreference: initialThemePreference,
-            onThemePreferenceChanged: pref => sp.GetRequiredService<IUserSettingsStore>().SaveThemePreference(pref)));
+            onThemePreferenceChanged: pref => sp.GetRequiredService<IUserSettingsStore>().SaveThemePreference(pref),
+            historyTracker: sp.GetRequiredService<ITelemetryHistoryTracker>()));
 
         services.AddSingleton(sp => new TaskbarPillSubscriber(
             sp.GetRequiredService<IHostLifecycle>().EventBus,

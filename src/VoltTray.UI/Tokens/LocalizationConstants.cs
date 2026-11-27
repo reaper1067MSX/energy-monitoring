@@ -103,4 +103,26 @@ public static class LocalizationConstants
     public const string MenuCompactIconEs = "Ícono compacto (Anillo)";
     public const string MenuExitEn = "Exit VoltTray...";
     public const string MenuExitEs = "Salir de VoltTray...";
+
+    public const string AcRangeLabel = "AC Range";
+    public const string EventsLabel = "Events";
+    public const string StageLabel = "Stage";
+    public const string StageFloatLabel = "Float";
+    public const string StageChargingLabel = "Charging";
+    public const string StageDischargingLabel = "Discharging";
+    public const string FreeKpiLabel = "FREE";
+    public const string SessionMaxKpiLabel = "SESSION MAX";
+    public const string TodayKpiLabel = "TODAY";
+    public const string HistorySectionTitle = "Energy & Grid History";
+    public const string HistoryTab5DaysLabel = "5 Days";
+    public const string HistoryTabMonthLabel = "Month";
+    public const string HistoryTabOutagesLabel = "Outage Days";
+    public const string DailyEnergyLabel = "Daily Energy (kWh)";
+    public const string PcOffLegendLabel = "— = PC off";
+    public const string MonthlyCalendarLabel = "Monthly Calendar (kWh/day)";
+    public const string TotalKwhKpiLabel = "TOTAL kWh";
+    public const string AvgPerDayKpiLabel = "AVG / DAY";
+    public const string AvrFixesKpiLabel = "AVR FIXES";
+    public const string OutagesKpiLabel = "OUTAGES";
+    public const string NoOutagesRecordedLabel = "No outages recorded";
 }

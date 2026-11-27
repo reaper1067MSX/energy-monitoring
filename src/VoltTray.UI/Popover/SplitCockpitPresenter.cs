@@ -1,4 +1,5 @@
 using VoltTray.UI.Tray;
+using VoltTray.Core.History;
 using VoltTray.Core.Telemetry;
 using VoltTray.Shared;
 using VoltTray.UI.Models;
@@ -44,7 +45,12 @@ public class SplitCockpitPresenter
             resolvedModelName));
     }
 
-    public void TogglePopover(ViewRect iconRect, TaskbarEdge edge, ViewRect workArea, UITheme theme)
+    public void TogglePopover(
+        ViewRect iconRect,
+        TaskbarEdge edge,
+        ViewRect workArea,
+        UITheme theme,
+        TelemetryHistorySnapshot? history = null)
     {
         if (_popover.IsVisible)
         {
@@ -52,7 +58,7 @@ public class SplitCockpitPresenter
         }
         else if (CurrentTelemetry != null)
         {
-            _popover.Show(CurrentTelemetry, theme, iconRect, edge, workArea);
+            _popover.Show(CurrentTelemetry, theme, iconRect, edge, workArea, history);
         }
     }
 
