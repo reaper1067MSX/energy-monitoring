@@ -30,6 +30,7 @@ public sealed class HostLifecycle : IHostLifecycle
     private readonly Func<UITheme>? _appThemeProvider;
     private readonly IContextMenuView? _contextMenu;
     private readonly List<IDisposable> _subscriptions = new();
+    private UITheme? _themeOverride;
     private CancellationTokenSource? _cts;
     private Task? _pollingTask;
     private Timer? _pauseTimer;
@@ -206,8 +207,7 @@ public sealed class HostLifecycle : IHostLifecycle
         }
 
         (ViewRect anchorRect, ViewRect workArea, TaskbarEdge edge) = ResolvePlacement();
-        UITheme theme = _appThemeProvider?.Invoke() ?? _popoverPainter.CurrentTheme;
-        _popoverPainter.Show(received.Telemetry, theme, anchorRect, edge, workArea);
+        _popoverPainter.Show(received.Telemetry, ResolveAppTheme(), anchorRect, edge, workArea);
     }
 
     public Task<UpsTelemetry?> StepAsync(CancellationToken token = default, DateTimeOffset? now = null)
@@ -330,14 +330,15 @@ public sealed class HostLifecycle : IHostLifecycle
     {
         if (_contextMenu == null)
         {
-            ShowExitDialog(_appThemeProvider?.Invoke() ?? _popoverPainter.CurrentTheme);
+            ShowExitDialog(ResolveAppTheme());
             return;
         }
 
         var state = new ContextMenuState(
             IsPaused,
             CurrentTelemetry?.IsBeeperMuted ?? false,
-            CurrentTelemetry?.IsTestInProgress ?? false);
+            CurrentTelemetry?.IsTestInProgress ?? false,
+            ResolveAppTheme() == UITheme.Dark);
 
         ContextMenuAction action = _contextMenu.Show(state, _trayRenderer.WindowHandle);
         switch (action)
@@ -361,11 +362,21 @@ public sealed class HostLifecycle : IHostLifecycle
             case ContextMenuAction.ToggleBeeper:
                 HandleToggleBeeperRequested();
                 break;
+            case ContextMenuAction.ToggleTheme:
+                _themeOverride = ResolveAppTheme() == UITheme.Dark ? UITheme.Light : UITheme.Dark;
+                if (_popoverPainter.IsVisible && CurrentTelemetry != null)
+                {
+                    (ViewRect anchorRect, ViewRect workArea, TaskbarEdge edge) = ResolvePlacement();
+                    _popoverPainter.Show(CurrentTelemetry, _themeOverride.Value, anchorRect, edge, workArea);
+                }
+                break;
             case ContextMenuAction.Exit:
-                ShowExitDialog(_appThemeProvider?.Invoke() ?? _popoverPainter.CurrentTheme);
+                ShowExitDialog(ResolveAppTheme());
                 break;
         }
     }
+
+    private UITheme ResolveAppTheme() => _themeOverride ?? _appThemeProvider?.Invoke() ?? _popoverPainter.CurrentTheme;
 
     private void HandleTrayIconClicked() => HandleTrayIconClicked(anchorOverride: null);
 
@@ -373,7 +384,7 @@ public sealed class HostLifecycle : IHostLifecycle
     {
         (ViewRect anchorRect, ViewRect workArea, TaskbarEdge edge) = ResolvePlacement(anchorOverride);
         _lastAnchorRect = anchorRect;
-        UITheme theme = _appThemeProvider?.Invoke() ?? _popoverPainter.CurrentTheme;
+        UITheme theme = ResolveAppTheme();
 
         if (CurrentTelemetry != null)
         {

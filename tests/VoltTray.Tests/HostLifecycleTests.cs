@@ -388,6 +388,20 @@ public class HostLifecycleTests
         menu.MockMenuHandler = _ => ContextMenuAction.ToggleBeeper;
         lifecycle.OpenContextMenuFromTray();
 
+        // Popover is currently visible (Dark); toggling theme updates it immediately to Light
+        menu.MockMenuHandler = _ => ContextMenuAction.ToggleTheme;
+        lifecycle.OpenContextMenuFromTray();
+        Assert.Equal(UITheme.Light, popover.CurrentTheme);
+
+        // Close popover, toggle theme back to Dark, and reopen to verify persisted override
+        menu.MockMenuHandler = _ => ContextMenuAction.Open;
+        lifecycle.OpenContextMenuFromTray();
+        menu.MockMenuHandler = _ => ContextMenuAction.ToggleTheme;
+        lifecycle.OpenContextMenuFromTray();
+        menu.MockMenuHandler = _ => ContextMenuAction.Open;
+        lifecycle.OpenContextMenuFromTray();
+        Assert.Equal(UITheme.Dark, popover.CurrentTheme);
+
         bool exitRequested = false;
         lifecycle.ExitAction = () => exitRequested = true;
         exitDialog.Result = ExitDialogResult.Close;
