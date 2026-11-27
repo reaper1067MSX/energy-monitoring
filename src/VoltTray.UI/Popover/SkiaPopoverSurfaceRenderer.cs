@@ -414,11 +414,18 @@ internal sealed class SkiaPopoverSurfaceRenderer : IPopoverSurfaceRenderer
         string sectionLabel = isSpanish ? LocalizationConstants.ActiveLoadSectionEs : LocalizationConstants.ActiveLoadSectionEn;
         DrawTextBaselineCentered(canvas, sectionLabel, iconRect.Right + 6f, iconRect.MidY, sectionFont, textPaint);
 
-        string loadSummary = vm.ActiveLoadWattsText is null
-            ? vm.LoadPercentageText
-            : $"{vm.LoadPercentageText} · {vm.ActiveLoadWattsText}";
         using var summaryPaint = new SKPaint { Color = barColor, IsAntialias = true };
-        DrawTextRightAligned(canvas, loadSummary, innerRight, iconRect.MidY, sectionFont, summaryPaint);
+        if (!string.IsNullOrWhiteSpace(vm.ActiveLoadCeilingText))
+        {
+            using var ceilingFont = new SKFont(_regularTypeface, PopoverLayoutConstants.FontMetricSize);
+            float ceilingWidth = ceilingFont.MeasureText(vm.ActiveLoadCeilingText);
+            DrawTextRightAligned(canvas, vm.ActiveLoadCeilingText, innerRight, iconRect.MidY, ceilingFont, mutedPaint);
+            DrawTextRightAligned(canvas, vm.LoadPercentageText, innerRight - ceilingWidth - 5f, iconRect.MidY, sectionFont, summaryPaint);
+        }
+        else
+        {
+            DrawTextRightAligned(canvas, vm.LoadPercentageText, innerRight, iconRect.MidY, sectionFont, summaryPaint);
+        }
 
         float barTop = bounds.Top + 39f;
         var trackRect = new SKRect(innerLeft, barTop, innerRight, barTop + PopoverLayoutConstants.BarHeight);

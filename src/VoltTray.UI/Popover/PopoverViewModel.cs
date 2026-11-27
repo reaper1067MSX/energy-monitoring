@@ -34,7 +34,8 @@ public sealed record PopoverViewModel(
     string? CellsSummaryText = null,
     string? BankEnergyWhText = null,
     string? Cell1Text = null,
-    string? Cell2Text = null)
+    string? Cell2Text = null,
+    string? ActiveLoadCeilingText = null)
 {
     public static PopoverViewModel FromTelemetry(UpsTelemetry telemetry, CultureInfo? culture = null)
     {
@@ -69,6 +70,20 @@ public sealed record PopoverViewModel(
         string? wattsText = telemetry.ActiveLoadWatts.HasValue
             ? FormattableString.Invariant($"{telemetry.ActiveLoadWatts.Value} W")
             : null;
+        string? activeLoadCeilingText = null;
+        if (telemetry.ActiveLoadWatts is int activeWatts)
+        {
+            if (telemetry.LoadPercentage > 0)
+            {
+                int inferredRated = (int)(Math.Round((activeWatts * 100.0 / telemetry.LoadPercentage) / 50.0) * 50);
+                string prep = isSpanish ? LocalizationConstants.LoadOfSeparatorEs : LocalizationConstants.LoadOfSeparatorEn;
+                activeLoadCeilingText = FormattableString.Invariant($"({activeWatts} W {prep} {inferredRated}W)");
+            }
+            else
+            {
+                activeLoadCeilingText = FormattableString.Invariant($"({activeWatts} W)");
+            }
+        }
 
         string regulationModeText = FormatRegulationMode(telemetry.State, isSpanish);
         string? cellsSummaryText = telemetry.Cell1VoltageDc > 0 && telemetry.Cell2VoltageDc > 0
@@ -117,7 +132,8 @@ public sealed record PopoverViewModel(
             CellsSummaryText: cellsSummaryText,
             BankEnergyWhText: bankEnergyWhText,
             Cell1Text: cell1Text,
-            Cell2Text: cell2Text);
+            Cell2Text: cell2Text,
+            ActiveLoadCeilingText: activeLoadCeilingText);
     }
 
     private static string DeriveEmblem(string title)

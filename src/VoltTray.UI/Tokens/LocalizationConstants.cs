@@ -44,6 +44,8 @@ public static class LocalizationConstants
     public const string RuntimeLabelEs = "Autonomía";
     public const string LoadCapacitySuffixEn = "load";
     public const string LoadCapacitySuffixEs = "carga";
+    public const string LoadOfSeparatorEn = "of";
+    public const string LoadOfSeparatorEs = "de";
     public const string LastFaultLabelEn = "Last fault";
     public const string LastFaultLabelEs = "Últ. falla";
     public const string ModeLabelEn = "Mode";
