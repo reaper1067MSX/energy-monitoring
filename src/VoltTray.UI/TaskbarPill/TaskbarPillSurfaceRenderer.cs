@@ -139,13 +139,15 @@ internal sealed class TaskbarPillSurfaceRenderer : ITaskbarPillSurfaceRenderer, 
         canvas.DrawRoundRect(pillRect, radius, radius, borderPaint);
 
         float padX = TaskbarPillLayoutConstants.PaddingX * scale;
-        float iconSize = Math.Min(TaskbarPillLayoutConstants.IconSizePx * scale, pillRect.Height - (4f * scale));
+        float iconHeight = Math.Min(TaskbarPillLayoutConstants.IconHeightPx * scale, pillRect.Height - (4f * scale));
+        float iconWidth = TaskbarPillLayoutConstants.IconWidthPx * scale;
         float iconLeft = pillRect.Left + padX;
-        float iconTop = pillRect.MidY - (iconSize / 2f);
-        var iconRect = new SKRect(iconLeft, iconTop, iconLeft + iconSize, iconTop + iconSize);
+        float iconTop = pillRect.MidY - (iconHeight / 2f);
+        var iconRect = new SKRect(iconLeft, iconTop, iconLeft + iconWidth, iconTop + iconHeight);
 
-        string iconName = ResolveStateIcon(telemetry.State);
-        _svgIconLibrary.TryDraw(canvas, iconName, iconRect, accentColor);
+        string iconCacheKey = FluentBatterySvgBuilder.BuildCacheKey(telemetry.State, telemetry.BatteryPercentage, isLightTaskbar);
+        string iconSvgMarkup = FluentBatterySvgBuilder.BuildIconSvg(telemetry.State, telemetry.BatteryPercentage, isLightTaskbar);
+        _svgIconLibrary.TryDrawMarkup(canvas, iconCacheKey, iconSvgMarkup, iconRect);
 
         float textLeft = iconRect.Right + (TaskbarPillLayoutConstants.IconTextGapPx * scale);
         float contentRight = pillRect.Right - padX;
@@ -204,19 +206,6 @@ internal sealed class TaskbarPillSurfaceRenderer : ITaskbarPillSurfaceRenderer, 
         }
 
         return surface;
-    }
-
-    private static string ResolveStateIcon(UpsOperationalState state)
-    {
-        return state switch
-        {
-            UpsOperationalState.LineNormal => SvgIconConstants.TrayOnline,
-            UpsOperationalState.OnBattery or UpsOperationalState.BatteryLow => SvgIconConstants.TrayOnBattery,
-            UpsOperationalState.ChargingAvr => SvgIconConstants.TrayAvr,
-            UpsOperationalState.Fault => SvgIconConstants.TrayFault,
-            UpsOperationalState.Paused => SvgIconConstants.ActionPause,
-            _ => SvgIconConstants.TrayNoComm
-        };
     }
 
     private static string FormatPrimaryText(UpsTelemetry telemetry)

@@ -9,7 +9,8 @@ internal static class TaskbarPillLayoutConstants
     public const float HorizontalInsetPx = 2f;
     public const float CornerRadiusPx = 8f;
     public const float PaddingX = 9f;
-    public const float IconSizePx = 18f;
+    public const float IconWidthPx = 26f;
+    public const float IconHeightPx = 15f;
     public const float IconTextGapPx = 7f;
     public const float PrimaryFontSize = 12.5f;
     public const float SecondaryFontSize = 10.5f;
