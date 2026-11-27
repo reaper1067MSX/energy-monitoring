@@ -124,6 +124,23 @@ internal sealed class SkiaPopoverSurfaceRenderer : IPopoverSurfaceRenderer
         DrawLoadBand(canvas, loadBandRect, vm, palette, isSpanish, state.UseAcrylicBackdrop, isLight);
 
         var layout = new PopoverHitTestLayout(width, height);
+        int historyTop = loadBandTop + PopoverLayoutConstants.LoadBandHeight + PopoverLayoutConstants.SectionGap;
+        var historyRect = new SKRect(
+            PopoverLayoutConstants.OuterMargin,
+            historyTop,
+            PopoverLayoutConstants.OuterMargin + contentWidth,
+            historyTop + PopoverLayoutConstants.HistoryCardHeight);
+        DrawInsetCard(canvas, historyRect, palette, state.UseAcrylicBackdrop, isLight);
+        HistoryCardRenderer.Draw(
+            canvas,
+            historyRect,
+            layout,
+            state.ActiveHistoryTab,
+            vm.History,
+            palette,
+            _regularTypeface,
+            _semiBoldTypeface,
+            _boldTypeface);
         DrawActionButton(
             canvas,
             layout.SelfTestButton,
@@ -295,19 +312,32 @@ internal sealed class SkiaPopoverSurfaceRenderer : IPopoverSurfaceRenderer
         DrawTextRightAligned(canvas, vm.RegulationModeText, innerRight, row2Y - 4f, metricStrongFont, modePaint);
 
         float row3Y = bounds.Top + 148f;
-        if (!string.IsNullOrWhiteSpace(vm.TemperatureText))
+        if (!string.IsNullOrWhiteSpace(vm.AcRangeText))
         {
-            var tempIconRect = new SKRect(innerLeft, row3Y - 10f, innerLeft + 12f, row3Y + 2f);
+            canvas.DrawText(LocalizationConstants.AcRangeLabel, innerLeft, row3Y, SKTextAlign.Left, metricFont, mutedPaint);
+            DrawTextRightAligned(canvas, vm.AcRangeText, innerRight, row3Y - 4f, metricStrongFont, textPaint);
+        }
+
+        float row4Y = bounds.Top + 168f;
+        if (!string.IsNullOrWhiteSpace(vm.GridEventsText))
+        {
+            canvas.DrawText(LocalizationConstants.EventsLabel, innerLeft, row4Y, SKTextAlign.Left, metricFont, mutedPaint);
+            using var eventsPaint = new SKPaint { Color = ResolveSeverityColor(vm.GridEventsSeverity, palette), IsAntialias = true };
+            DrawTextRightAligned(canvas, vm.GridEventsText, innerRight, row4Y - 4f, metricStrongFont, eventsPaint);
+        }
+        else if (!string.IsNullOrWhiteSpace(vm.TemperatureText))
+        {
+            var tempIconRect = new SKRect(innerLeft, row4Y - 10f, innerLeft + 12f, row4Y + 2f);
             _svgIconLibrary.TryDraw(canvas, SvgIconConstants.TelemetryTemperature, tempIconRect, ParseColor(palette.TextMuted));
             string tempLabel = isSpanish ? LocalizationConstants.TemperatureLabelEs : LocalizationConstants.TemperatureLabelEn;
-            canvas.DrawText(tempLabel, tempIconRect.Right + 4f, row3Y, SKTextAlign.Left, metricFont, mutedPaint);
-            DrawTextRightAligned(canvas, vm.TemperatureText, innerRight, row3Y - 4f, metricStrongFont, textPaint);
+            canvas.DrawText(tempLabel, tempIconRect.Right + 4f, row4Y, SKTextAlign.Left, metricFont, mutedPaint);
+            DrawTextRightAligned(canvas, vm.TemperatureText, innerRight, row4Y - 4f, metricStrongFont, textPaint);
         }
         else if (!string.IsNullOrWhiteSpace(vm.FaultReferenceText))
         {
             string faultLabel = isSpanish ? LocalizationConstants.LastFaultLabelEs : LocalizationConstants.LastFaultLabelEn;
-            canvas.DrawText(faultLabel, innerLeft, row3Y, SKTextAlign.Left, metricFont, mutedPaint);
-            DrawTextRightAligned(canvas, vm.FaultReferenceText, innerRight, row3Y - 4f, metricFont, mutedPaint);
+            canvas.DrawText(faultLabel, innerLeft, row4Y, SKTextAlign.Left, metricFont, mutedPaint);
+            DrawTextRightAligned(canvas, vm.FaultReferenceText, innerRight, row4Y - 4f, metricFont, mutedPaint);
         }
     }
 
@@ -360,16 +390,21 @@ internal sealed class SkiaPopoverSurfaceRenderer : IPopoverSurfaceRenderer
         float dividerY = bounds.Top + 94f;
         DrawInnerDivider(canvas, innerLeft, innerRight, dividerY, palette);
 
+        float stageY = bounds.Top + 111f;
+        canvas.DrawText(LocalizationConstants.StageLabel, innerLeft, stageY, SKTextAlign.Left, metricFont, mutedPaint);
+        using var stagePaint = new SKPaint { Color = ResolveSeverityColor(vm.ChargeStageSeverity, palette), IsAntialias = true };
+        DrawTextRightAligned(canvas, vm.ChargeStageText, innerRight, stageY - 4f, metricStrongFont, stagePaint);
+
         if (!string.IsNullOrWhiteSpace(vm.Cell1Text))
         {
-            float row1Y = bounds.Top + 112f;
+            float row1Y = bounds.Top + 130f;
             canvas.DrawText(LocalizationConstants.Cell1Label, innerLeft, row1Y, SKTextAlign.Left, metricFont, mutedPaint);
             DrawTextRightAligned(canvas, vm.Cell1Text, innerRight, row1Y - 4f, metricStrongFont, accentPaint);
         }
 
         if (!string.IsNullOrWhiteSpace(vm.Cell2Text))
         {
-            float row2Y = bounds.Top + 131f;
+            float row2Y = bounds.Top + 149f;
             canvas.DrawText(LocalizationConstants.Cell2Label, innerLeft, row2Y, SKTextAlign.Left, metricFont, mutedPaint);
             DrawTextRightAligned(canvas, vm.Cell2Text, innerRight, row2Y - 4f, metricStrongFont, accentPaint);
         }
@@ -378,7 +413,7 @@ internal sealed class SkiaPopoverSurfaceRenderer : IPopoverSurfaceRenderer
         string footer = vm.BankEnergyWhText is not null
             ? $"{vm.BankEnergyWhText} · {vm.LoadPercentageText} {loadSuffix}"
             : $"{vm.LoadPercentageText} {loadSuffix}";
-        canvas.DrawText(EllipsizeText(footer, metricFont, innerRight - innerLeft), innerLeft, bounds.Top + 152f, SKTextAlign.Left, metricFont, mutedPaint);
+        canvas.DrawText(EllipsizeText(footer, metricFont, innerRight - innerLeft), innerLeft, bounds.Top + 170f, SKTextAlign.Left, metricFont, mutedPaint);
     }
 
     private void DrawLoadBand(
@@ -451,7 +486,41 @@ internal sealed class SkiaPopoverSurfaceRenderer : IPopoverSurfaceRenderer
             using var fillPaint = new SKPaint { Shader = shader, IsAntialias = true };
             canvas.DrawRoundRect(fillRect, LayoutTokens.BarRadius, LayoutTokens.BarRadius, fillPaint);
         }
+
+        float kpiDividerY = bounds.Top + 55f;
+        DrawInnerDivider(canvas, innerLeft, innerRight, kpiDividerY, palette);
+
+        using var microFont = new SKFont(_semiBoldTypeface, PopoverLayoutConstants.FontMicroLabelSize);
+        using var kpiValFont = new SKFont(_boldTypeface, PopoverLayoutConstants.FontMetricSize);
+        float colW = (innerRight - innerLeft) / 3f;
+
+        DrawLoadKpi(canvas, innerLeft, bounds.Top, LocalizationConstants.FreeKpiLabel, vm.FreeWattsText ?? LocalizationConstants.UnavailablePlaceholder, ResolveSeverityColor(vm.FreeWattsSeverity, palette), microFont, kpiValFont, mutedPaint);
+        DrawLoadKpi(canvas, innerLeft + colW, bounds.Top, LocalizationConstants.SessionMaxKpiLabel, vm.SessionMaxWattsText ?? LocalizationConstants.UnavailablePlaceholder, ResolveSeverityColor(vm.SessionMaxSeverity, palette), microFont, kpiValFont, mutedPaint);
+        DrawLoadKpi(canvas, innerLeft + (colW * 2f), bounds.Top, LocalizationConstants.TodayKpiLabel, vm.TodayUsageText ?? LocalizationConstants.UnavailablePlaceholder, ResolveSeverityColor(vm.TodayUsageSeverity, palette), microFont, kpiValFont, mutedPaint);
     }
+
+    private static void DrawLoadKpi(
+        SKCanvas canvas,
+        float x,
+        float bandTop,
+        string label,
+        string value,
+        SKColor valueColor,
+        SKFont microFont,
+        SKFont valueFont,
+        SKPaint mutedPaint)
+    {
+        canvas.DrawText(label, x, bandTop + 70f, SKTextAlign.Left, microFont, mutedPaint);
+        using var valPaint = new SKPaint { Color = valueColor, IsAntialias = true };
+        canvas.DrawText(value, x, bandTop + 86f, SKTextAlign.Left, valueFont, valPaint);
+    }
+
+    private static SKColor ResolveSeverityColor(MetricSeverity severity, ThemePalette palette) => severity switch
+    {
+        MetricSeverity.Critical => ParseColor(palette.Danger),
+        MetricSeverity.Medium => ParseColor(palette.Warning),
+        _ => ParseColor(palette.Ok)
+    };
 
     private void DrawActionButton(
         SKCanvas canvas,

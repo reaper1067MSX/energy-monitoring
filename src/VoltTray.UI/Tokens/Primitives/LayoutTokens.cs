@@ -11,7 +11,7 @@ public static class LayoutTokens
 
     public const int DefaultDpi = 96;
     public const int PopoverWidth = 372;
-    public const int PopoverCardHeight = 396;
+    public const int PopoverCardHeight = 592;
     public const int PopoverEdgeMarginPx = 8;
     public const int PopoverDebounceMs = 350;
     public const int DialogWidth = 560;

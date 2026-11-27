@@ -1,3 +1,4 @@
+using VoltTray.Core.History;
 using VoltTray.Core.Telemetry;
 using VoltTray.UI.Models;
 
@@ -12,5 +13,7 @@ public interface IPopoverView : IDisposable
     event Action? OnToggleBeeperRequested;
 
     void Show(UpsTelemetry telemetry, UITheme theme, ViewRect iconRect, TaskbarEdge edge, ViewRect workArea);
+    void Show(UpsTelemetry telemetry, UITheme theme, ViewRect iconRect, TaskbarEdge edge, ViewRect workArea, TelemetryHistorySnapshot? history)
+        => Show(telemetry, theme, iconRect, edge, workArea);
     void Hide();
 }

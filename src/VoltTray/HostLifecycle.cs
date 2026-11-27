@@ -1,6 +1,7 @@
 using VoltTray.UI.Tray;
 using VoltTray.UI.Popover;
 using VoltTray.Core.Telemetry;
+using VoltTray.Core.History;
 using VoltTray.Core.Safety;
 using VoltTray.Core.Diagnostics;
 using VoltTray.Core.Events;
@@ -32,6 +33,7 @@ public sealed class HostLifecycle : IHostLifecycle
     private readonly Func<bool>? _isCompactIconModeProvider;
     private readonly Action? _toggleIconModeAction;
     private readonly Action<ThemePreference>? _onThemePreferenceChanged;
+    private readonly ITelemetryHistoryTracker? _historyTracker;
     private readonly List<IDisposable> _subscriptions = new();
     private ThemePreference _themePreference;
     private CancellationTokenSource? _cts;
@@ -69,7 +71,8 @@ public sealed class HostLifecycle : IHostLifecycle
         Func<bool>? isCompactIconModeProvider = null,
         Action? toggleIconModeAction = null,
         ThemePreference initialThemePreference = ThemePreference.Auto,
-        Action<ThemePreference>? onThemePreferenceChanged = null)
+        Action<ThemePreference>? onThemePreferenceChanged = null,
+        ITelemetryHistoryTracker? historyTracker = null)
     {
         _upsPort = upsPort ?? throw new ArgumentNullException(nameof(upsPort));
         _trayRenderer = trayRenderer ?? new TrayRenderer();
@@ -85,6 +88,7 @@ public sealed class HostLifecycle : IHostLifecycle
         _toggleIconModeAction = toggleIconModeAction;
         _themePreference = initialThemePreference;
         _onThemePreferenceChanged = onThemePreferenceChanged;
+        _historyTracker = historyTracker;
         _shutdownCoordinator = new ShutdownCoordinator(
             shutdownPort ?? new WindowsShutdownPort(),
             notificationPort ?? new WindowsNotificationPort());
@@ -212,13 +216,14 @@ public sealed class HostLifecycle : IHostLifecycle
 
     private void RefreshVisiblePopover(TelemetryReceived received)
     {
+        TelemetryHistorySnapshot? snapshot = _historyTracker?.RecordSample(received.Telemetry);
         if (!_popoverPainter.IsVisible)
         {
             return;
         }
 
         (ViewRect anchorRect, ViewRect workArea, TaskbarEdge edge) = ResolvePlacement();
-        _popoverPainter.Show(received.Telemetry, ResolveAppTheme(), anchorRect, edge, workArea);
+        _popoverPainter.Show(received.Telemetry, ResolveAppTheme(), anchorRect, edge, workArea, snapshot);
     }
 
     public Task<UpsTelemetry?> StepAsync(CancellationToken token = default, DateTimeOffset? now = null)
@@ -297,6 +302,7 @@ public sealed class HostLifecycle : IHostLifecycle
         _cts = null;
         _pauseTimer?.Dispose();
         _pauseTimer = null;
+        _historyTracker?.Flush();
         _upsPort.Disconnect();
     }
 
@@ -384,7 +390,7 @@ public sealed class HostLifecycle : IHostLifecycle
                 if (_popoverPainter.IsVisible && CurrentTelemetry != null)
                 {
                     (ViewRect anchorRect, ViewRect workArea, TaskbarEdge edge) = ResolvePlacement();
-                    _popoverPainter.Show(CurrentTelemetry, targetTheme, anchorRect, edge, workArea);
+                    _popoverPainter.Show(CurrentTelemetry, targetTheme, anchorRect, edge, workArea, _historyTracker?.GetSnapshot());
                 }
                 break;
             case ContextMenuAction.ToggleIconMode:
@@ -413,7 +419,7 @@ public sealed class HostLifecycle : IHostLifecycle
 
         if (CurrentTelemetry != null)
         {
-            _presenter.TogglePopover(anchorRect, edge, workArea, theme);
+            _presenter.TogglePopover(anchorRect, edge, workArea, theme, _historyTracker?.GetSnapshot());
             return;
         }
 
@@ -423,7 +429,7 @@ public sealed class HostLifecycle : IHostLifecycle
             return;
         }
 
-        _popoverPainter.Show(UpsTelemetry.CreateDefault(), theme, anchorRect, edge, workArea);
+        _popoverPainter.Show(UpsTelemetry.CreateDefault(), theme, anchorRect, edge, workArea, _historyTracker?.GetSnapshot());
     }
 
     private (ViewRect AnchorRect, ViewRect WorkArea, TaskbarEdge Edge) ResolvePlacement(ViewRect? anchorOverride = null)

@@ -10,4 +10,5 @@ public sealed record PopoverRenderState(
     PopoverActionId HoveredAction = PopoverActionId.None,
     PopoverActionId PressedAction = PopoverActionId.None,
     int FocusedActionIndex = 0,
-    bool UseAcrylicBackdrop = false);
+    bool UseAcrylicBackdrop = false,
+    HistoryViewTab ActiveHistoryTab = HistoryViewTab.FiveDays);
