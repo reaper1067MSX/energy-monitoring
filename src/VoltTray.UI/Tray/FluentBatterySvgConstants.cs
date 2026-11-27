@@ -13,6 +13,8 @@ internal static class FluentBatterySvgConstants
     public const string LightHaloColor = "#f3f4f6";
     public const string DarkHaloColor = "#18181b";
 
+    public const string LightOnlineGreenColor = "#16a34a";
+    public const string DarkOnlineGreenColor = "#4ade80";
     public const string LightOnBatteryColor = "#d97706";
     public const string DarkOnBatteryColor = "#fbbf24";
     public const string LightCriticalColor = "#dc2626";
@@ -40,6 +42,10 @@ internal static class FluentBatterySvgConstants
         "    <path d=\"M9.7 4.1H15.3V6.3C15.3 7.7 14.1 8.9 12.7 8.9H12.3C10.9 8.9 9.7 7.7 9.7 6.3V4.1Z\" stroke=\"none\" />\n" +
         "    <path d=\"M12.5 8.8V11.2\" fill=\"none\" />\n" +
         "  </g>";
+
+    public const string ChargingBoltBadgeFormat =
+        "  <path d=\"M13.4 1.2L8.9 8.2H12.4L11.4 14L16.1 6.8H12.6L13.4 1.2Z\" stroke=\"{1}\" stroke-width=\"2.2\" stroke-linejoin=\"round\" fill=\"{1}\" />\n" +
+        "  <path d=\"M13.4 1.2L8.9 8.2H12.4L11.4 14L16.1 6.8H12.6L13.4 1.2Z\" fill=\"{0}\" />";
 
     public const string AvrWaveBadgeFormat =
         "  <path d=\"M8.2 8.2C9.2 5.4 10.4 5.4 11.4 8.2C12.4 11 13.6 11 14.6 8.2C15.2 6.6 16 6.2 16.8 7\" stroke=\"{1}\" stroke-width=\"3.2\" stroke-linecap=\"round\" fill=\"none\" />\n" +

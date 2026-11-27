@@ -303,19 +303,28 @@ internal sealed class TaskbarPillWindow : ITaskbarPillView
 
         HWND notifyWnd = !shellTray.IsNull ? FindChildWindow(shellTray, Win32UiConstants.TrayNotifyWndClass) : default;
         HWND startWnd = !shellTray.IsNull ? FindChildWindow(shellTray, Win32UiConstants.StartButtonClass) : default;
-        HWND rebarWnd = !shellTray.IsNull ? FindChildWindow(shellTray, Win32UiConstants.ReBarWindowClass) : default;
-        HWND taskSwWnd = !rebarWnd.IsNull ? FindChildWindow(rebarWnd, Win32UiConstants.TaskSwWindowClass) : default;
+
+        ViewRect? appListRect = null;
+        if (!IsWindows11Taskbar(shellTray))
+        {
+            HWND rebarWnd = !shellTray.IsNull ? FindChildWindow(shellTray, Win32UiConstants.ReBarWindowClass) : default;
+            HWND taskSwWnd = !rebarWnd.IsNull ? FindChildWindow(rebarWnd, Win32UiConstants.TaskSwWindowClass) : default;
+            appListRect = TryGetRect(taskSwWnd);
+        }
 
         return new TaskbarPillLayoutSnapshot(
             taskbarRect,
             TryGetRect(notifyWnd),
             TryGetRect(startWnd),
             WidgetRect: null,
-            AppListRect: TryGetRect(taskSwWnd),
+            AppListRect: appListRect,
             PillWidth: pillWidth,
             PillHeight: pillHeight,
             RightMarginFallbackPx: fallbackMargin);
     }
+
+    private static bool IsWindows11Taskbar(HWND shellTray) =>
+        !shellTray.IsNull && !FindChildWindow(shellTray, Win32UiConstants.Win11CompositionBridgeClass).IsNull;
 
     private static unsafe HWND FindTopLevelWindow(string className)
     {
@@ -406,7 +415,7 @@ internal sealed class TaskbarPillWindow : ITaskbarPillView
         }
 
         HWND shellTray = FindTopLevelWindow(Win32UiConstants.ShellTrayWndClass);
-        if (!shellTray.IsNull)
+        if (!shellTray.IsNull && !IsWindows11Taskbar(shellTray))
         {
             PInvoke.SetParent(_hwnd, shellTray);
             _isParentedToShellTray = PInvoke.GetParent(_hwnd) == shellTray;
@@ -518,7 +527,19 @@ internal sealed class TaskbarPillWindow : ITaskbarPillView
                 blend,
                 UPDATE_LAYERED_WINDOW_FLAGS.ULW_ALPHA);
 
-            if (!_isWindowShown)
+            if (!_isParentedToShellTray)
+            {
+                PInvoke.SetWindowPos(
+                    _hwnd,
+                    new HWND((void*)-1),
+                    bounds.Left,
+                    bounds.Top,
+                    bounds.Width,
+                    bounds.Height,
+                    SET_WINDOW_POS_FLAGS.SWP_NOACTIVATE | SET_WINDOW_POS_FLAGS.SWP_SHOWWINDOW);
+                _isWindowShown = true;
+            }
+            else if (!_isWindowShown)
             {
                 PInvoke.ShowWindow(_hwnd, SHOW_WINDOW_CMD.SW_SHOWNOACTIVATE);
                 _isWindowShown = true;

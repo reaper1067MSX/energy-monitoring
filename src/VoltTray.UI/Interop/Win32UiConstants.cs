@@ -17,6 +17,7 @@ internal static class Win32UiConstants
     public const string StartButtonClass = "Start";
     public const string ReBarWindowClass = "ReBarWindow32";
     public const string TaskSwWindowClass = "MSTaskSwWClass";
+    public const string Win11CompositionBridgeClass = "Windows.UI.Composition.DesktopWindowContentBridge";
 
     public const int Dpi100 = 96;
     public const int Dpi125 = 120;
@@ -27,8 +28,8 @@ internal static class Win32UiConstants
     public const ushort BitsPerPixel32 = 32;
 
     public const uint PillHitTestAlpha = 0x01000000;
-    public const int PillDefaultWidthPx = 144;
-    public const int PillDefaultHeightPx = 48;
+    public const int PillDefaultWidthPx = 92;
+    public const int PillDefaultHeightPx = 34;
     public const int PillDefaultRightMarginFallbackPx = 220;
     public const int PillEdgeGapPx = 6;
 

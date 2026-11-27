@@ -30,13 +30,15 @@ public class TaskbarPillTests
             TrayNotifyRect: new ViewRect(0, 0, 0, 0),
             StartButtonRect: new ViewRect(760, 1036, 800, 1076),
             WidgetRect: new ViewRect(8, 1036, 160, 1076),
-            AppListRect: new ViewRect(800, 1036, 1120, 1076));
+            AppListRect: new ViewRect(800, 1036, 1120, 1076),
+            PillWidth: 92,
+            PillHeight: 34);
 
         ViewRect bounds = calculator.Calculate(coldBootSnapshot);
-        Assert.Equal(144, bounds.Width);
-        Assert.Equal(48, bounds.Height);
-        Assert.Equal(1920 - 220 - 144, bounds.Left);
-        Assert.Equal(1032, bounds.Top);
+        Assert.Equal(92, bounds.Width);
+        Assert.Equal(34, bounds.Height);
+        Assert.Equal(1920 - 220 - 92, bounds.Left);
+        Assert.Equal(1039, bounds.Top);
         Assert.True(bounds.Left >= coldBootSnapshot.AppListRect!.Value.Right + 6);
 
         var tightSnapshot = new TaskbarPillLayoutSnapshot(
@@ -113,8 +115,8 @@ public class TaskbarPillTests
         UpsTelemetry telemetry = UpsTelemetry.CreateDefault();
         pill.Update(telemetry);
         Assert.True(pill.IsVisible);
-        Assert.Equal(144, pill.CurrentBounds.Width);
-        Assert.Equal(48, pill.CurrentBounds.Height);
+        Assert.Equal(92, pill.CurrentBounds.Width);
+        Assert.Equal(34, pill.CurrentBounds.Height);
 
         const uint wmLButtonUp = 0x0202;
         const uint wmRButtonUp = 0x0205;
@@ -127,8 +129,8 @@ public class TaskbarPillTests
 
         Assert.True(pill.HandleWindowMessage(wmDpiChanged, (IntPtr)144, IntPtr.Zero));
         Assert.Equal(144, pill.CurrentDpi);
-        Assert.Equal(216, pill.CurrentBounds.Width);
-        Assert.Equal(72, pill.CurrentBounds.Height);
+        Assert.Equal(138, pill.CurrentBounds.Width);
+        Assert.Equal(51, pill.CurrentBounds.Height);
 
         pill.HandleTaskbarCreated();
         Assert.Equal(1, pill.TaskbarRecoveryCount);

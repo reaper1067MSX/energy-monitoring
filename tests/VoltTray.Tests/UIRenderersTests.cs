@@ -339,7 +339,8 @@ public class UIRenderersTests
 
         Assert.Contains("viewBox=\"0 0 28 16\"", fullOnline, StringComparison.Ordinal);
         Assert.Contains("width=\"17.6\"", fullOnline, StringComparison.Ordinal);
-        Assert.Contains("M11 1.4V3.8M14 1.4V3.8", fullOnline, StringComparison.Ordinal);
+        Assert.Contains("#4ade80", fullOnline, StringComparison.Ordinal);
+        Assert.Contains("M13.4 1.2L8.9 8.2H12.4L11.4 14L16.1 6.8H12.6L13.4 1.2Z", fullOnline, StringComparison.Ordinal);
 
         Assert.Contains("width=\"8.8\"", halfBattery, StringComparison.Ordinal);
         Assert.Contains("#d97706", halfBattery, StringComparison.Ordinal);

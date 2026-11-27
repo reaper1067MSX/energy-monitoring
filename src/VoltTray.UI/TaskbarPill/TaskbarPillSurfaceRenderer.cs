@@ -157,53 +157,12 @@ internal sealed class TaskbarPillSurfaceRenderer : ITaskbarPillSurfaceRenderer, 
         }
 
         string primaryText = FormatPrimaryText(telemetry);
-        string secondaryText = string.Create(CultureInfo.InvariantCulture, $" · {Math.Clamp(telemetry.LoadPercentage, 0, 100)}%");
-
         using var primaryFont = new SKFont(_semiBoldTypeface, TaskbarPillLayoutConstants.PrimaryFontSize * scale);
-        using var secondaryFont = new SKFont(_regularTypeface, TaskbarPillLayoutConstants.SecondaryFontSize * scale);
         using var primaryPaint = new SKPaint { Color = SKColor.Parse(palette.Text), IsAntialias = true };
-        using var secondaryPaint = new SKPaint { Color = SKColor.Parse(palette.TextMuted), IsAntialias = true };
 
-        float barHeight = TaskbarPillLayoutConstants.BarHeightPx * scale;
-        float barGap = TaskbarPillLayoutConstants.BarTopGapPx * scale;
-        float textCenterY = pillRect.MidY - ((barHeight + barGap) / 2f) - (TaskbarPillLayoutConstants.TextVerticalBiasPx * scale);
         SKFontMetrics metrics = primaryFont.Metrics;
-        float baseline = textCenterY - ((metrics.Ascent + metrics.Descent) / 2f);
-
+        float baseline = pillRect.MidY - ((metrics.Ascent + metrics.Descent) / 2f);
         canvas.DrawText(primaryText, textLeft, baseline, SKTextAlign.Left, primaryFont, primaryPaint);
-
-        float primaryWidth = primaryFont.MeasureText(primaryText);
-        float secondaryX = textLeft + primaryWidth;
-        float secondaryWidth = secondaryFont.MeasureText(secondaryText);
-        if (secondaryX + secondaryWidth <= contentRight)
-        {
-            canvas.DrawText(secondaryText, secondaryX, baseline, SKTextAlign.Left, secondaryFont, secondaryPaint);
-        }
-
-        float barTop = textCenterY + (primaryFont.Size * 0.45f) + barGap;
-        barTop = Math.Min(barTop, pillRect.Bottom - barHeight - (4f * scale));
-        var trackRect = new SKRect(textLeft, barTop, contentRight, barTop + barHeight);
-        float barRadius = TaskbarPillLayoutConstants.BarCornerRadiusPx * scale;
-
-        using var trackPaint = new SKPaint
-        {
-            Color = SKColor.Parse(palette.Border).WithAlpha(TaskbarPillLayoutConstants.TrackAlpha),
-            IsAntialias = true
-        };
-        canvas.DrawRoundRect(trackRect, barRadius, barRadius, trackPaint);
-
-        int battery = Math.Clamp(telemetry.BatteryPercentage, 0, 100);
-        if (battery > 0 && telemetry.State != UpsOperationalState.CommunicationsLost)
-        {
-            float fillWidth = Math.Max(barHeight, trackRect.Width * (battery / 100f));
-            var barFillRect = new SKRect(
-                trackRect.Left,
-                trackRect.Top,
-                Math.Min(trackRect.Right, trackRect.Left + fillWidth),
-                trackRect.Bottom);
-            using var barFillPaint = new SKPaint { Color = accentColor, IsAntialias = true };
-            canvas.DrawRoundRect(barFillRect, barRadius, barRadius, barFillPaint);
-        }
 
         return surface;
     }

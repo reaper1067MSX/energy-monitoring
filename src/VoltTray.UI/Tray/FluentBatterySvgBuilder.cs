@@ -71,7 +71,9 @@ internal static class FluentBatterySvgBuilder
 
     private static string ResolveFillColor(UpsOperationalState state, bool isLightTaskbar, string stroke) => state switch
     {
-        UpsOperationalState.LineNormal => stroke,
+        UpsOperationalState.LineNormal => isLightTaskbar
+            ? FluentBatterySvgConstants.LightOnlineGreenColor
+            : FluentBatterySvgConstants.DarkOnlineGreenColor,
         UpsOperationalState.OnBattery => isLightTaskbar
             ? FluentBatterySvgConstants.LightOnBatteryColor
             : FluentBatterySvgConstants.DarkOnBatteryColor,
@@ -91,7 +93,7 @@ internal static class FluentBatterySvgBuilder
     {
         UpsOperationalState.LineNormal => string.Format(
             CultureInfo.InvariantCulture,
-            FluentBatterySvgConstants.OnlinePlugBadgeFormat,
+            FluentBatterySvgConstants.ChargingBoltBadgeFormat,
             stroke,
             halo),
         UpsOperationalState.ChargingAvr => string.Format(

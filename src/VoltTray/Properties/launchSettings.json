@@ -3,7 +3,7 @@
   "profiles": {
     "VoltTray (Hardware USB)": {
       "commandName": "Project",
-      "commandLineArgs": "",
+      "commandLineArgs": "--taskbar-pill",
       "environmentVariables": {
         "DOTNET_ENVIRONMENT": "Production"
       }
