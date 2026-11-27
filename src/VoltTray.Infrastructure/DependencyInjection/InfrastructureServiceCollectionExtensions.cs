@@ -4,6 +4,7 @@ using VoltTray.Core.Safety;
 using VoltTray.Core.Telemetry;
 using VoltTray.Infrastructure.Diagnostics;
 using VoltTray.Infrastructure.OS;
+using VoltTray.Infrastructure.Settings;
 
 namespace VoltTray.Infrastructure.DependencyInjection;
 
@@ -24,6 +25,7 @@ public static class InfrastructureServiceCollectionExtensions
             sp.GetRequiredService<InProcessTelemetryProbe>()));
         services.AddSingleton<ISafetyShutdownPort, WindowsShutdownPort>();
         services.AddSingleton<INotificationPort, WindowsNotificationPort>();
+        services.AddSingleton<IUserSettingsStore>(_ => new JsonUserSettingsStore());
 
         return services;
     }

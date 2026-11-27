@@ -1,3 +1,5 @@
+using VoltTray.Core.Telemetry;
+
 namespace VoltTray.Hosting;
 
 /// <summary>
@@ -7,4 +9,5 @@ public sealed record TrayMonitorLaunchOptions(
     bool IsSimulation,
     bool IsDryRun,
     int PollingIntervalMs,
-    bool EnableTaskbarPill = false) : ApplicationLaunchOptions;
+    bool EnableTaskbarPill = false,
+    UpsModelPreset? SelectedModel = null) : ApplicationLaunchOptions;
