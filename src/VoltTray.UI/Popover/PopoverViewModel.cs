@@ -32,7 +32,9 @@ public sealed record PopoverViewModel(
     bool IsTestInProgress,
     string RegulationModeText = LocalizationConstants.UnavailablePlaceholder,
     string? CellsSummaryText = null,
-    string? BankEnergyWhText = null)
+    string? BankEnergyWhText = null,
+    string? Cell1Text = null,
+    string? Cell2Text = null)
 {
     public static PopoverViewModel FromTelemetry(UpsTelemetry telemetry, CultureInfo? culture = null)
     {
@@ -72,6 +74,12 @@ public sealed record PopoverViewModel(
         string? cellsSummaryText = telemetry.Cell1VoltageDc > 0 && telemetry.Cell2VoltageDc > 0
             ? FormattableString.Invariant($"C1 {telemetry.Cell1VoltageDc:F2}V · C2 {telemetry.Cell2VoltageDc:F2}V")
             : null;
+        string? cell1Text = telemetry.Cell1VoltageDc > 0
+            ? FormattableString.Invariant($"{telemetry.Cell1VoltageDc:F2} V")
+            : null;
+        string? cell2Text = telemetry.Cell2VoltageDc > 0
+            ? FormattableString.Invariant($"{telemetry.Cell2VoltageDc:F2} V")
+            : null;
         string? bankEnergyWhText = telemetry.BankSpec.RatedCapacityAh is double ratedAh && ratedAh > 0
             ? FormattableString.Invariant($"{(int)Math.Round(telemetry.BankSpec.NominalVoltageDc * ratedAh)} Wh")
             : null;
@@ -107,7 +115,9 @@ public sealed record PopoverViewModel(
             IsTestInProgress: telemetry.IsTestInProgress,
             RegulationModeText: regulationModeText,
             CellsSummaryText: cellsSummaryText,
-            BankEnergyWhText: bankEnergyWhText);
+            BankEnergyWhText: bankEnergyWhText,
+            Cell1Text: cell1Text,
+            Cell2Text: cell2Text);
     }
 
     private static string DeriveEmblem(string title)

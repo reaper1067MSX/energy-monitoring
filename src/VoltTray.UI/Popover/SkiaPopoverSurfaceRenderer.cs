@@ -86,8 +86,15 @@ internal sealed class SkiaPopoverSurfaceRenderer : IPopoverSurfaceRenderer
         bool isSpanish = CultureInfo.CurrentUICulture.TwoLetterISOLanguageName
             .Equals(LocalizationConstants.SpanishCulturePrefix, StringComparison.OrdinalIgnoreCase);
 
-        canvas.Clear(ParseColor(palette.Surface));
-        DrawCardFrame(canvas, width, height, palette);
+        SKColor surfaceFill = ParseColor(palette.Surface);
+        if (state.UseAcrylicBackdrop)
+        {
+            surfaceFill = surfaceFill.WithAlpha(
+                isLight ? PopoverLayoutConstants.AcrylicLightSurfaceAlpha : PopoverLayoutConstants.AcrylicDarkSurfaceAlpha);
+        }
+
+        canvas.Clear(surfaceFill);
+        DrawCardFrame(canvas, width, height, palette, isLight);
         DrawHeader(canvas, width, vm, palette, isLight);
 
         int contentWidth = width - (PopoverLayoutConstants.OuterMargin * 2);
@@ -105,8 +112,8 @@ internal sealed class SkiaPopoverSurfaceRenderer : IPopoverSurfaceRenderer
             PopoverLayoutConstants.OuterMargin + contentWidth,
             subCardTop + PopoverLayoutConstants.SubCardHeight);
 
-        DrawGridSubCard(canvas, leftCard, vm, palette, isSpanish);
-        DrawBatterySubCard(canvas, rightCard, vm, palette, isSpanish);
+        DrawGridSubCard(canvas, leftCard, vm, palette, isSpanish, state.UseAcrylicBackdrop, isLight);
+        DrawBatterySubCard(canvas, rightCard, vm, palette, isSpanish, state.UseAcrylicBackdrop, isLight);
 
         int loadBandTop = subCardTop + PopoverLayoutConstants.SubCardHeight + PopoverLayoutConstants.SectionGap;
         var loadBandRect = new SKRect(
@@ -114,7 +121,7 @@ internal sealed class SkiaPopoverSurfaceRenderer : IPopoverSurfaceRenderer
             loadBandTop,
             PopoverLayoutConstants.OuterMargin + contentWidth,
             loadBandTop + PopoverLayoutConstants.LoadBandHeight);
-        DrawLoadBand(canvas, loadBandRect, vm, palette, isSpanish);
+        DrawLoadBand(canvas, loadBandRect, vm, palette, isSpanish, state.UseAcrylicBackdrop, isLight);
 
         var layout = new PopoverHitTestLayout(width, height);
         DrawActionButton(
@@ -123,6 +130,7 @@ internal sealed class SkiaPopoverSurfaceRenderer : IPopoverSurfaceRenderer
             SvgIconConstants.MenuBatteryTest,
             vm.SelfTestButtonLabel,
             palette,
+            ParseColor(palette.Accent),
             state.HoveredAction == PopoverActionId.SelfTest && !vm.IsTestInProgress,
             state.PressedAction == PopoverActionId.SelfTest && !vm.IsTestInProgress,
             state.FocusedActionIndex == 0,
@@ -131,12 +139,16 @@ internal sealed class SkiaPopoverSurfaceRenderer : IPopoverSurfaceRenderer
         string beeperIcon = vm.IsBeeperMuted
             ? SvgIconConstants.TelemetryBeeperMute
             : SvgIconConstants.TelemetryBeeper;
+        SKColor beeperIconTint = vm.IsBeeperMuted
+            ? ParseColor(palette.TextMuted)
+            : ParseColor(palette.Ok);
         DrawActionButton(
             canvas,
             layout.ToggleBeeperButton,
             beeperIcon,
             vm.BeeperButtonLabel,
             palette,
+            beeperIconTint,
             state.HoveredAction == PopoverActionId.ToggleBeeper,
             state.PressedAction == PopoverActionId.ToggleBeeper,
             state.FocusedActionIndex == 1,
@@ -145,7 +157,7 @@ internal sealed class SkiaPopoverSurfaceRenderer : IPopoverSurfaceRenderer
         return surface;
     }
 
-    private static void DrawCardFrame(SKCanvas canvas, int width, int height, ThemePalette palette)
+    private static void DrawCardFrame(SKCanvas canvas, int width, int height, ThemePalette palette, bool isLight)
     {
         using var borderPaint = new SKPaint
         {
@@ -157,11 +169,20 @@ internal sealed class SkiaPopoverSurfaceRenderer : IPopoverSurfaceRenderer
 
         var rect = new SKRect(0.5f, 0.5f, width - 0.5f, height - 0.5f);
         canvas.DrawRoundRect(rect, LayoutTokens.CardRadius, LayoutTokens.CardRadius, borderPaint);
+
+        using var highlightPaint = new SKPaint
+        {
+            Color = SKColors.White.WithAlpha(
+                isLight ? PopoverLayoutConstants.SpecularHighlightAlphaLight : PopoverLayoutConstants.SpecularHighlightAlphaDark),
+            StrokeWidth = PopoverLayoutConstants.StrokeThin,
+            IsAntialias = true
+        };
+        canvas.DrawLine(LayoutTokens.CardRadius, 1.5f, width - LayoutTokens.CardRadius, 1.5f, highlightPaint);
     }
 
     private void DrawHeader(SKCanvas canvas, int width, PopoverViewModel vm, ThemePalette palette, bool isLight)
     {
-        using var titleFont = new SKFont(_semiBoldTypeface, PopoverLayoutConstants.FontTitleSize);
+        using var titleFont = new SKFont(_boldTypeface, PopoverLayoutConstants.FontTitleSize);
         using var subFont = new SKFont(_regularTypeface, PopoverLayoutConstants.FontSubtitleSize);
         using var chipFont = new SKFont(_semiBoldTypeface, PopoverLayoutConstants.FontChipSize);
 
@@ -178,7 +199,15 @@ internal sealed class SkiaPopoverSurfaceRenderer : IPopoverSurfaceRenderer
         var chipRect = new SKRect(chipLeft, chipTop, chipRight, chipTop + PopoverLayoutConstants.ChipHeight);
 
         using var chipFill = new SKPaint { Color = chipBg, IsAntialias = true };
+        using var chipBorder = new SKPaint
+        {
+            Color = chipFg.WithAlpha(PopoverLayoutConstants.DividerAlpha),
+            Style = SKPaintStyle.Stroke,
+            StrokeWidth = PopoverLayoutConstants.StrokeThin,
+            IsAntialias = true
+        };
         canvas.DrawRoundRect(chipRect, LayoutTokens.ChipRadius, LayoutTokens.ChipRadius, chipFill);
+        canvas.DrawRoundRect(chipRect, LayoutTokens.ChipRadius, LayoutTokens.ChipRadius, chipBorder);
 
         float chipContentX = chipRect.Left + PopoverLayoutConstants.ChipHorizontalPadding;
         if (chipIcon != null)
@@ -204,11 +233,26 @@ internal sealed class SkiaPopoverSurfaceRenderer : IPopoverSurfaceRenderer
 
         canvas.DrawText(title, PopoverLayoutConstants.OuterMargin, PopoverLayoutConstants.OuterMargin + 15f, SKTextAlign.Left, titleFont, titlePaint);
         canvas.DrawText(subtitle, PopoverLayoutConstants.OuterMargin, PopoverLayoutConstants.OuterMargin + 33f, SKTextAlign.Left, subFont, subPaint);
+
+        float dividerY = PopoverLayoutConstants.OuterMargin + PopoverLayoutConstants.HeaderHeight - 2f;
+        using var dividerPaint = new SKPaint
+        {
+            Color = ParseColor(palette.Border).WithAlpha(PopoverLayoutConstants.DividerAlpha),
+            StrokeWidth = PopoverLayoutConstants.StrokeThin
+        };
+        canvas.DrawLine(PopoverLayoutConstants.OuterMargin, dividerY, width - PopoverLayoutConstants.OuterMargin, dividerY, dividerPaint);
     }
 
-    private void DrawGridSubCard(SKCanvas canvas, SKRect bounds, PopoverViewModel vm, ThemePalette palette, bool isSpanish)
+    private void DrawGridSubCard(
+        SKCanvas canvas,
+        SKRect bounds,
+        PopoverViewModel vm,
+        ThemePalette palette,
+        bool isSpanish,
+        bool useAcrylicBackdrop,
+        bool isLight)
     {
-        DrawInsetCard(canvas, bounds, palette);
+        DrawInsetCard(canvas, bounds, palette, useAcrylicBackdrop, isLight);
 
         float pad = PopoverLayoutConstants.SubCardPadding;
         float innerLeft = bounds.Left + pad;
@@ -216,33 +260,41 @@ internal sealed class SkiaPopoverSurfaceRenderer : IPopoverSurfaceRenderer
         float headerY = bounds.Top + pad;
 
         using var sectionFont = new SKFont(_semiBoldTypeface, PopoverLayoutConstants.FontSectionSize);
+        using var microFont = new SKFont(_semiBoldTypeface, PopoverLayoutConstants.FontMicroLabelSize);
         using var heroFont = new SKFont(_boldTypeface, PopoverLayoutConstants.FontHeroSize);
         using var metricFont = new SKFont(_regularTypeface, PopoverLayoutConstants.FontMetricSize);
         using var metricStrongFont = new SKFont(_semiBoldTypeface, PopoverLayoutConstants.FontMetricSize);
         using var textPaint = new SKPaint { Color = ParseColor(palette.Text), IsAntialias = true };
         using var mutedPaint = new SKPaint { Color = ParseColor(palette.TextMuted), IsAntialias = true };
+        using var accentPaint = new SKPaint { Color = ParseColor(palette.Accent), IsAntialias = true };
 
         var iconRect = new SKRect(innerLeft, headerY, innerLeft + PopoverLayoutConstants.IconSizeSm, headerY + PopoverLayoutConstants.IconSizeSm);
         _svgIconLibrary.TryDraw(canvas, SvgIconConstants.TelemetryGrid, iconRect, ParseColor(palette.Accent));
 
         string sectionLabel = isSpanish ? LocalizationConstants.GridSectionEs : LocalizationConstants.GridSectionEn;
-        DrawTextBaselineCentered(canvas, sectionLabel, iconRect.Right + 5f, iconRect.MidY, sectionFont, mutedPaint);
-        DrawTextRightAligned(canvas, vm.FrequencyText, innerRight, iconRect.MidY, metricFont, mutedPaint);
+        DrawTextBaselineCentered(canvas, sectionLabel, iconRect.Right + 5f, iconRect.MidY, sectionFont, textPaint);
+        DrawTextRightAligned(canvas, vm.FrequencyText, innerRight, iconRect.MidY, metricStrongFont, accentPaint);
 
-        canvas.DrawText(vm.InputVoltageText, innerLeft, bounds.Top + 56f, SKTextAlign.Left, heroFont, textPaint);
+        string inputMicro = isSpanish ? LocalizationConstants.InputAcMicroLabelEs : LocalizationConstants.InputAcMicroLabelEn;
+        canvas.DrawText(inputMicro, innerLeft, bounds.Top + 44f, SKTextAlign.Left, microFont, mutedPaint);
+        canvas.DrawText(vm.InputVoltageText, innerLeft, bounds.Top + 69f, SKTextAlign.Left, heroFont, textPaint);
+
+        float dividerY = bounds.Top + 86f;
+        DrawInnerDivider(canvas, innerLeft, innerRight, dividerY, palette);
 
         string outputLabel = isSpanish ? LocalizationConstants.OutputLabelEs : LocalizationConstants.OutputLabelEn;
-        float row1Y = bounds.Top + 82f;
+        float row1Y = bounds.Top + 106f;
         canvas.DrawText(outputLabel, innerLeft, row1Y, SKTextAlign.Left, metricFont, mutedPaint);
-        DrawTextRightAligned(canvas, vm.OutputVoltageText, innerRight, row1Y - 4f, metricStrongFont, textPaint);
+        using var okPaint = new SKPaint { Color = ParseColor(palette.Ok), IsAntialias = true };
+        DrawTextRightAligned(canvas, vm.OutputVoltageText, innerRight, row1Y - 4f, metricStrongFont, okPaint);
 
         string modeLabel = isSpanish ? LocalizationConstants.ModeLabelEs : LocalizationConstants.ModeLabelEn;
-        float row2Y = bounds.Top + 101f;
+        float row2Y = bounds.Top + 127f;
         canvas.DrawText(modeLabel, innerLeft, row2Y, SKTextAlign.Left, metricFont, mutedPaint);
         using var modePaint = new SKPaint { Color = ResolveBatteryAccentColor(vm.State, palette), IsAntialias = true };
         DrawTextRightAligned(canvas, vm.RegulationModeText, innerRight, row2Y - 4f, metricStrongFont, modePaint);
 
-        float row3Y = bounds.Top + 120f;
+        float row3Y = bounds.Top + 148f;
         if (!string.IsNullOrWhiteSpace(vm.TemperatureText))
         {
             var tempIconRect = new SKRect(innerLeft, row3Y - 10f, innerLeft + 12f, row3Y + 2f);
@@ -259,9 +311,16 @@ internal sealed class SkiaPopoverSurfaceRenderer : IPopoverSurfaceRenderer
         }
     }
 
-    private void DrawBatterySubCard(SKCanvas canvas, SKRect bounds, PopoverViewModel vm, ThemePalette palette, bool isSpanish)
+    private void DrawBatterySubCard(
+        SKCanvas canvas,
+        SKRect bounds,
+        PopoverViewModel vm,
+        ThemePalette palette,
+        bool isSpanish,
+        bool useAcrylicBackdrop,
+        bool isLight)
     {
-        DrawInsetCard(canvas, bounds, palette);
+        DrawInsetCard(canvas, bounds, palette, useAcrylicBackdrop, isLight);
 
         float pad = PopoverLayoutConstants.SubCardPadding;
         float innerLeft = bounds.Left + pad;
@@ -269,9 +328,10 @@ internal sealed class SkiaPopoverSurfaceRenderer : IPopoverSurfaceRenderer
         float headerY = bounds.Top + pad;
 
         using var sectionFont = new SKFont(_semiBoldTypeface, PopoverLayoutConstants.FontSectionSize);
+        using var microFont = new SKFont(_semiBoldTypeface, PopoverLayoutConstants.FontMicroLabelSize);
         using var heroFont = new SKFont(_boldTypeface, PopoverLayoutConstants.FontHeroLargeSize);
-        using var runtimeFont = new SKFont(_semiBoldTypeface, PopoverLayoutConstants.FontRuntimeSize);
         using var metricFont = new SKFont(_regularTypeface, PopoverLayoutConstants.FontMetricSize);
+        using var metricStrongFont = new SKFont(_semiBoldTypeface, PopoverLayoutConstants.FontMetricSize);
         using var textPaint = new SKPaint { Color = ParseColor(palette.Text), IsAntialias = true };
         using var mutedPaint = new SKPaint { Color = ParseColor(palette.TextMuted), IsAntialias = true };
 
@@ -282,38 +342,55 @@ internal sealed class SkiaPopoverSurfaceRenderer : IPopoverSurfaceRenderer
         _svgIconLibrary.TryDraw(canvas, SvgIconConstants.TelemetryBatteryBank, iconRect, stateColor);
 
         string sectionLabel = isSpanish ? LocalizationConstants.BatterySectionEs : LocalizationConstants.BatterySectionEn;
-        DrawTextBaselineCentered(canvas, sectionLabel, iconRect.Right + 5f, iconRect.MidY, sectionFont, mutedPaint);
-        DrawTextRightAligned(canvas, vm.BatteryVoltageText, innerRight, iconRect.MidY, metricFont, mutedPaint);
+        DrawTextBaselineCentered(canvas, sectionLabel, iconRect.Right + 5f, iconRect.MidY, sectionFont, textPaint);
+        DrawTextRightAligned(canvas, vm.BatteryVoltageText, innerRight, iconRect.MidY, metricStrongFont, accentPaint);
 
-        canvas.DrawText(vm.BatteryPercentageText, innerLeft, bounds.Top + 58f, SKTextAlign.Left, heroFont, accentPaint);
+        string runtimeMicro = isSpanish ? LocalizationConstants.RuntimeMicroLabelEs : LocalizationConstants.RuntimeMicroLabelEn;
+        canvas.DrawText(runtimeMicro, innerLeft, bounds.Top + 44f, SKTextAlign.Left, microFont, mutedPaint);
 
-        float runtimeRowY = bounds.Top + 84f;
-        var runtimeIconRect = new SKRect(innerLeft, runtimeRowY - 11f, innerLeft + 13f, runtimeRowY + 2f);
-        _svgIconLibrary.TryDraw(canvas, SvgIconConstants.TelemetryRuntime, runtimeIconRect, ParseColor(palette.TextMuted));
-        canvas.DrawText(vm.RuntimeText, runtimeIconRect.Right + 5f, runtimeRowY, SKTextAlign.Left, runtimeFont, textPaint);
+        string heroText = vm.RuntimeText != LocalizationConstants.UnavailablePlaceholder
+            ? vm.RuntimeText
+            : vm.BatteryPercentageText;
+        canvas.DrawText(heroText, innerLeft, bounds.Top + 69f, SKTextAlign.Left, heroFont, accentPaint);
 
-        if (!string.IsNullOrWhiteSpace(vm.CellsSummaryText))
+        string capacityLabel = isSpanish ? LocalizationConstants.CapacityLabelEs : LocalizationConstants.CapacityLabelEn;
+        canvas.DrawText(capacityLabel, innerLeft, bounds.Top + 84f, SKTextAlign.Left, metricFont, mutedPaint);
+        DrawTextRightAligned(canvas, vm.BatteryPercentageText, innerRight, bounds.Top + 80f, metricStrongFont, textPaint);
+
+        float dividerY = bounds.Top + 94f;
+        DrawInnerDivider(canvas, innerLeft, innerRight, dividerY, palette);
+
+        if (!string.IsNullOrWhiteSpace(vm.Cell1Text))
         {
-            canvas.DrawText(
-                EllipsizeText(vm.CellsSummaryText, metricFont, innerRight - innerLeft),
-                innerLeft,
-                bounds.Top + 104f,
-                SKTextAlign.Left,
-                metricFont,
-                mutedPaint);
+            float row1Y = bounds.Top + 112f;
+            canvas.DrawText(LocalizationConstants.Cell1Label, innerLeft, row1Y, SKTextAlign.Left, metricFont, mutedPaint);
+            DrawTextRightAligned(canvas, vm.Cell1Text, innerRight, row1Y - 4f, metricStrongFont, accentPaint);
         }
 
-        string runtimeLabel = isSpanish ? LocalizationConstants.RuntimeLabelEs : LocalizationConstants.RuntimeLabelEn;
+        if (!string.IsNullOrWhiteSpace(vm.Cell2Text))
+        {
+            float row2Y = bounds.Top + 131f;
+            canvas.DrawText(LocalizationConstants.Cell2Label, innerLeft, row2Y, SKTextAlign.Left, metricFont, mutedPaint);
+            DrawTextRightAligned(canvas, vm.Cell2Text, innerRight, row2Y - 4f, metricStrongFont, accentPaint);
+        }
+
         string loadSuffix = isSpanish ? LocalizationConstants.LoadCapacitySuffixEs : LocalizationConstants.LoadCapacitySuffixEn;
-        string caption = vm.BankEnergyWhText is not null
+        string footer = vm.BankEnergyWhText is not null
             ? $"{vm.BankEnergyWhText} · {vm.LoadPercentageText} {loadSuffix}"
-            : $"{runtimeLabel} · {vm.LoadPercentageText} {loadSuffix}";
-        canvas.DrawText(EllipsizeText(caption, metricFont, innerRight - innerLeft), innerLeft, bounds.Top + 122f, SKTextAlign.Left, metricFont, mutedPaint);
+            : $"{vm.LoadPercentageText} {loadSuffix}";
+        canvas.DrawText(EllipsizeText(footer, metricFont, innerRight - innerLeft), innerLeft, bounds.Top + 152f, SKTextAlign.Left, metricFont, mutedPaint);
     }
 
-    private void DrawLoadBand(SKCanvas canvas, SKRect bounds, PopoverViewModel vm, ThemePalette palette, bool isSpanish)
+    private void DrawLoadBand(
+        SKCanvas canvas,
+        SKRect bounds,
+        PopoverViewModel vm,
+        ThemePalette palette,
+        bool isSpanish,
+        bool useAcrylicBackdrop,
+        bool isLight)
     {
-        DrawInsetCard(canvas, bounds, palette);
+        DrawInsetCard(canvas, bounds, palette, useAcrylicBackdrop, isLight);
 
         float pad = PopoverLayoutConstants.LoadBandPadding;
         float innerLeft = bounds.Left + pad;
@@ -324,18 +401,26 @@ internal sealed class SkiaPopoverSurfaceRenderer : IPopoverSurfaceRenderer
         using var textPaint = new SKPaint { Color = ParseColor(palette.Text), IsAntialias = true };
         using var mutedPaint = new SKPaint { Color = ParseColor(palette.TextMuted), IsAntialias = true };
 
+        SKColor barColor = vm.LoadPercentage switch
+        {
+            >= PopoverLayoutConstants.LoadDangerThreshold => ParseColor(palette.Danger),
+            >= PopoverLayoutConstants.LoadWarningThreshold => ParseColor(palette.Warning),
+            _ => ParseColor(palette.Ok)
+        };
+
         var iconRect = new SKRect(innerLeft, topY, innerLeft + PopoverLayoutConstants.IconSizeMd, topY + PopoverLayoutConstants.IconSizeMd);
-        _svgIconLibrary.TryDraw(canvas, SvgIconConstants.TelemetryLoad, iconRect, ParseColor(palette.Accent));
+        _svgIconLibrary.TryDraw(canvas, SvgIconConstants.TelemetryLoad, iconRect, ParseColor(palette.Warning));
 
         string sectionLabel = isSpanish ? LocalizationConstants.ActiveLoadSectionEs : LocalizationConstants.ActiveLoadSectionEn;
-        DrawTextBaselineCentered(canvas, sectionLabel, iconRect.Right + 6f, iconRect.MidY, sectionFont, mutedPaint);
+        DrawTextBaselineCentered(canvas, sectionLabel, iconRect.Right + 6f, iconRect.MidY, sectionFont, textPaint);
 
         string loadSummary = vm.ActiveLoadWattsText is null
             ? vm.LoadPercentageText
             : $"{vm.LoadPercentageText} · {vm.ActiveLoadWattsText}";
-        DrawTextRightAligned(canvas, loadSummary, innerRight, iconRect.MidY, sectionFont, textPaint);
+        using var summaryPaint = new SKPaint { Color = barColor, IsAntialias = true };
+        DrawTextRightAligned(canvas, loadSummary, innerRight, iconRect.MidY, sectionFont, summaryPaint);
 
-        float barTop = bounds.Top + 40f;
+        float barTop = bounds.Top + 39f;
         var trackRect = new SKRect(innerLeft, barTop, innerRight, barTop + PopoverLayoutConstants.BarHeight);
         using var trackPaint = new SKPaint { Color = ParseColor(palette.Border), IsAntialias = true };
         canvas.DrawRoundRect(trackRect, LayoutTokens.BarRadius, LayoutTokens.BarRadius, trackPaint);
@@ -351,13 +436,12 @@ internal sealed class SkiaPopoverSurfaceRenderer : IPopoverSurfaceRenderer
                 Math.Min(trackRect.Right, trackRect.Left + fillWidth),
                 trackRect.Bottom);
 
-            SKColor barColor = vm.LoadPercentage switch
-            {
-                >= PopoverLayoutConstants.LoadDangerThreshold => ParseColor(palette.Danger),
-                >= PopoverLayoutConstants.LoadWarningThreshold => ParseColor(palette.Warning),
-                _ => ParseColor(palette.Ok)
-            };
-            using var fillPaint = new SKPaint { Color = barColor, IsAntialias = true };
+            using var shader = SKShader.CreateLinearGradient(
+                new SKPoint(fillRect.Left, fillRect.MidY),
+                new SKPoint(fillRect.Right, fillRect.MidY),
+                [barColor.WithAlpha(220), barColor],
+                SKShaderTileMode.Clamp);
+            using var fillPaint = new SKPaint { Shader = shader, IsAntialias = true };
             canvas.DrawRoundRect(fillRect, LayoutTokens.BarRadius, LayoutTokens.BarRadius, fillPaint);
         }
     }
@@ -368,6 +452,7 @@ internal sealed class SkiaPopoverSurfaceRenderer : IPopoverSurfaceRenderer
         string iconName,
         string label,
         ThemePalette palette,
+        SKColor iconColor,
         bool isHovered,
         bool isPressed,
         bool isFocused,
@@ -388,6 +473,7 @@ internal sealed class SkiaPopoverSurfaceRenderer : IPopoverSurfaceRenderer
         SKColor contentColor = isDisabled
             ? ParseColor(palette.TextMuted)
             : ParseColor(palette.Text);
+        SKColor resolvedIconColor = isDisabled ? ParseColor(palette.TextMuted) : iconColor;
 
         using var fillPaint = new SKPaint { Color = fillColor, IsAntialias = true };
         using var borderPaint = new SKPaint
@@ -414,7 +500,7 @@ internal sealed class SkiaPopoverSurfaceRenderer : IPopoverSurfaceRenderer
             skRect.MidY - (PopoverLayoutConstants.IconSizeMd / 2f),
             startX + PopoverLayoutConstants.IconSizeMd,
             skRect.MidY + (PopoverLayoutConstants.IconSizeMd / 2f));
-        _svgIconLibrary.TryDraw(canvas, iconName, iconRect, contentColor);
+        _svgIconLibrary.TryDraw(canvas, iconName, iconRect, resolvedIconColor);
         DrawTextBaselineCentered(
             canvas,
             displayLabel,
@@ -424,9 +510,21 @@ internal sealed class SkiaPopoverSurfaceRenderer : IPopoverSurfaceRenderer
             textPaint);
     }
 
-    private static void DrawInsetCard(SKCanvas canvas, SKRect rect, ThemePalette palette)
+    private static void DrawInsetCard(
+        SKCanvas canvas,
+        SKRect rect,
+        ThemePalette palette,
+        bool useAcrylicBackdrop,
+        bool isLight)
     {
-        using var fillPaint = new SKPaint { Color = ParseColor(palette.SurfaceInset), IsAntialias = true };
+        SKColor insetColor = ParseColor(palette.SurfaceInset);
+        if (useAcrylicBackdrop)
+        {
+            insetColor = insetColor.WithAlpha(
+                isLight ? PopoverLayoutConstants.AcrylicLightInsetAlpha : PopoverLayoutConstants.AcrylicDarkInsetAlpha);
+        }
+
+        using var fillPaint = new SKPaint { Color = insetColor, IsAntialias = true };
         using var borderPaint = new SKPaint
         {
             Color = ParseColor(palette.Border),
@@ -437,6 +535,16 @@ internal sealed class SkiaPopoverSurfaceRenderer : IPopoverSurfaceRenderer
 
         canvas.DrawRoundRect(rect, LayoutTokens.CardRadius, LayoutTokens.CardRadius, fillPaint);
         canvas.DrawRoundRect(rect, LayoutTokens.CardRadius, LayoutTokens.CardRadius, borderPaint);
+    }
+
+    private static void DrawInnerDivider(SKCanvas canvas, float left, float right, float y, ThemePalette palette)
+    {
+        using var paint = new SKPaint
+        {
+            Color = ParseColor(palette.Border).WithAlpha(PopoverLayoutConstants.DividerAlpha),
+            StrokeWidth = PopoverLayoutConstants.StrokeThin
+        };
+        canvas.DrawLine(left, y, right, y, paint);
     }
 
     private static (SKColor Background, SKColor Foreground, string? IconName) ResolveStatusChipStyle(
