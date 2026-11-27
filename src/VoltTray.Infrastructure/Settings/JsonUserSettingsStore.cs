@@ -68,6 +68,39 @@ internal sealed class JsonUserSettingsStore : IUserSettingsStore
         SaveDocument(document);
     }
 
+    public ThemePreference LoadThemePreference()
+    {
+        UserSettingsDocument? document = LoadDocument();
+        if (document is null)
+        {
+            return ThemePreference.Auto;
+        }
+
+        if (string.Equals(document.ThemePreference, SettingsConstants.DarkThemeKey, StringComparison.OrdinalIgnoreCase))
+        {
+            return ThemePreference.Dark;
+        }
+
+        if (string.Equals(document.ThemePreference, SettingsConstants.LightThemeKey, StringComparison.OrdinalIgnoreCase))
+        {
+            return ThemePreference.Light;
+        }
+
+        return ThemePreference.Auto;
+    }
+
+    public void SaveThemePreference(ThemePreference preference)
+    {
+        UserSettingsDocument document = LoadDocument() ?? new UserSettingsDocument();
+        document.ThemePreference = preference switch
+        {
+            ThemePreference.Dark => SettingsConstants.DarkThemeKey,
+            ThemePreference.Light => SettingsConstants.LightThemeKey,
+            _ => SettingsConstants.AutoThemeKey
+        };
+        SaveDocument(document);
+    }
+
     private UserSettingsDocument? LoadDocument()
     {
         if (!File.Exists(_settingsFilePath))

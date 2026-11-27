@@ -31,8 +31,9 @@ public sealed class HostLifecycle : IHostLifecycle
     private readonly IContextMenuView? _contextMenu;
     private readonly Func<bool>? _isCompactIconModeProvider;
     private readonly Action? _toggleIconModeAction;
+    private readonly Action<ThemePreference>? _onThemePreferenceChanged;
     private readonly List<IDisposable> _subscriptions = new();
-    private UITheme? _themeOverride;
+    private ThemePreference _themePreference;
     private CancellationTokenSource? _cts;
     private Task? _pollingTask;
     private Timer? _pauseTimer;
@@ -66,7 +67,9 @@ public sealed class HostLifecycle : IHostLifecycle
         Func<UITheme>? appThemeProvider = null,
         IContextMenuView? contextMenu = null,
         Func<bool>? isCompactIconModeProvider = null,
-        Action? toggleIconModeAction = null)
+        Action? toggleIconModeAction = null,
+        ThemePreference initialThemePreference = ThemePreference.Auto,
+        Action<ThemePreference>? onThemePreferenceChanged = null)
     {
         _upsPort = upsPort ?? throw new ArgumentNullException(nameof(upsPort));
         _trayRenderer = trayRenderer ?? new TrayRenderer();
@@ -80,6 +83,8 @@ public sealed class HostLifecycle : IHostLifecycle
         _contextMenu = contextMenu;
         _isCompactIconModeProvider = isCompactIconModeProvider;
         _toggleIconModeAction = toggleIconModeAction;
+        _themePreference = initialThemePreference;
+        _onThemePreferenceChanged = onThemePreferenceChanged;
         _shutdownCoordinator = new ShutdownCoordinator(
             shutdownPort ?? new WindowsShutdownPort(),
             notificationPort ?? new WindowsNotificationPort());
@@ -370,11 +375,16 @@ public sealed class HostLifecycle : IHostLifecycle
                 HandleToggleBeeperRequested();
                 break;
             case ContextMenuAction.ToggleTheme:
-                _themeOverride = ResolveAppTheme() == UITheme.Dark ? UITheme.Light : UITheme.Dark;
+                UITheme windowsDefault = _appThemeProvider?.Invoke() ?? UITheme.Light;
+                UITheme targetTheme = ResolveAppTheme() == UITheme.Dark ? UITheme.Light : UITheme.Dark;
+                _themePreference = targetTheme == windowsDefault
+                    ? ThemePreference.Auto
+                    : (targetTheme == UITheme.Dark ? ThemePreference.Dark : ThemePreference.Light);
+                _onThemePreferenceChanged?.Invoke(_themePreference);
                 if (_popoverPainter.IsVisible && CurrentTelemetry != null)
                 {
                     (ViewRect anchorRect, ViewRect workArea, TaskbarEdge edge) = ResolvePlacement();
-                    _popoverPainter.Show(CurrentTelemetry, _themeOverride.Value, anchorRect, edge, workArea);
+                    _popoverPainter.Show(CurrentTelemetry, targetTheme, anchorRect, edge, workArea);
                 }
                 break;
             case ContextMenuAction.ToggleIconMode:
@@ -386,7 +396,12 @@ public sealed class HostLifecycle : IHostLifecycle
         }
     }
 
-    private UITheme ResolveAppTheme() => _themeOverride ?? _appThemeProvider?.Invoke() ?? _popoverPainter.CurrentTheme;
+    private UITheme ResolveAppTheme() => _themePreference switch
+    {
+        ThemePreference.Dark => UITheme.Dark,
+        ThemePreference.Light => UITheme.Light,
+        _ => _appThemeProvider?.Invoke() ?? _popoverPainter.CurrentTheme
+    };
 
     private void HandleTrayIconClicked() => HandleTrayIconClicked(anchorOverride: null);
 
