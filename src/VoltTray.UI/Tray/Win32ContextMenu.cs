@@ -1,4 +1,7 @@
 using System.Globalization;
+using Windows.Win32;
+using Windows.Win32.Foundation;
+using Windows.Win32.UI.WindowsAndMessaging;
 using VoltTray.UI.Interop;
 using VoltTray.UI.Tokens;
 
@@ -36,10 +39,10 @@ public sealed class Win32ContextMenu : IContextMenuView
         return ShowNativeMenu(state, ownerHandle);
     }
 
-    private static ContextMenuAction ShowNativeMenu(ContextMenuState state, nint ownerHandle)
+    private static unsafe ContextMenuAction ShowNativeMenu(ContextMenuState state, nint ownerHandle)
     {
-        IntPtr menuHandle = GdiNative.CreatePopupMenu();
-        if (menuHandle == IntPtr.Zero)
+        HMENU menuHandle = PInvoke.CreatePopupMenu();
+        if (menuHandle.IsNull)
         {
             return ContextMenuAction.None;
         }
@@ -55,53 +58,54 @@ public sealed class Win32ContextMenu : IContextMenuView
             string beeperLabel = isSpanish ? LocalizationConstants.MenuMuteAlarmEs : LocalizationConstants.MenuMuteAlarmEn;
             string exitLabel = isSpanish ? LocalizationConstants.MenuExitEs : LocalizationConstants.MenuExitEn;
 
-            GdiNative.AppendMenu(menuHandle, Win32UiConstants.MfString, Win32UiConstants.MenuCmdOpen, openLabel);
-            GdiNative.SetMenuDefaultItem(menuHandle, Win32UiConstants.MenuCmdOpen, 0);
+            AppendStringItem(menuHandle, MENU_ITEM_FLAGS.MF_STRING, Win32UiConstants.MenuCmdOpen, openLabel);
+            PInvoke.SetMenuDefaultItem(menuHandle, Win32UiConstants.MenuCmdOpen, 0);
 
-            GdiNative.AppendMenu(menuHandle, Win32UiConstants.MfSeparator, 0, null);
+            PInvoke.AppendMenu(menuHandle, MENU_ITEM_FLAGS.MF_SEPARATOR, 0, default);
 
-            uint usbFlags = Win32UiConstants.MfString | (state.IsPaused ? 0u : Win32UiConstants.MfChecked);
-            GdiNative.AppendMenu(menuHandle, usbFlags, Win32UiConstants.MenuCmdToggleUsb, usbLabel);
+            MENU_ITEM_FLAGS usbFlags = MENU_ITEM_FLAGS.MF_STRING | (state.IsPaused ? 0 : MENU_ITEM_FLAGS.MF_CHECKED);
+            AppendStringItem(menuHandle, usbFlags, Win32UiConstants.MenuCmdToggleUsb, usbLabel);
 
-            uint testFlags = Win32UiConstants.MfString | (state.IsTestInProgress ? Win32UiConstants.MfGrayed : 0u);
-            GdiNative.AppendMenu(menuHandle, testFlags, Win32UiConstants.MenuCmdBatteryTest, testLabel);
+            MENU_ITEM_FLAGS testFlags = MENU_ITEM_FLAGS.MF_STRING | (state.IsTestInProgress ? MENU_ITEM_FLAGS.MF_GRAYED : 0);
+            AppendStringItem(menuHandle, testFlags, Win32UiConstants.MenuCmdBatteryTest, testLabel);
 
-            uint beeperFlags = Win32UiConstants.MfString | (state.IsBeeperMuted ? Win32UiConstants.MfChecked : 0u);
-            GdiNative.AppendMenu(menuHandle, beeperFlags, Win32UiConstants.MenuCmdToggleBeeper, beeperLabel);
+            MENU_ITEM_FLAGS beeperFlags = MENU_ITEM_FLAGS.MF_STRING | (state.IsBeeperMuted ? MENU_ITEM_FLAGS.MF_CHECKED : 0);
+            AppendStringItem(menuHandle, beeperFlags, Win32UiConstants.MenuCmdToggleBeeper, beeperLabel);
 
-            GdiNative.AppendMenu(menuHandle, Win32UiConstants.MfSeparator, 0, null);
-            GdiNative.AppendMenu(menuHandle, Win32UiConstants.MfString, Win32UiConstants.MenuCmdExit, exitLabel);
+            PInvoke.AppendMenu(menuHandle, MENU_ITEM_FLAGS.MF_SEPARATOR, 0, default);
+            AppendStringItem(menuHandle, MENU_ITEM_FLAGS.MF_STRING, Win32UiConstants.MenuCmdExit, exitLabel);
 
-            if (!GdiNative.GetCursorPos(out NativePoint cursor))
+            if (!PInvoke.GetCursorPos(out System.Drawing.Point cursor))
             {
-                cursor = new NativePoint(0, 0);
+                cursor = default;
             }
 
-            if (ownerHandle != 0)
+            var owner = new HWND(ownerHandle);
+            if (!owner.IsNull)
             {
-                GdiNative.SetForegroundWindow(ownerHandle);
+                PInvoke.SetForegroundWindow(owner);
             }
 
-            uint trackFlags =
-                Win32UiConstants.TpmReturnCmd |
-                Win32UiConstants.TpmNonotify |
-                Win32UiConstants.TpmRightButton |
-                Win32UiConstants.TpmBottomAlign;
+            TRACK_POPUP_MENU_FLAGS trackFlags =
+                TRACK_POPUP_MENU_FLAGS.TPM_RETURNCMD |
+                TRACK_POPUP_MENU_FLAGS.TPM_NONOTIFY |
+                TRACK_POPUP_MENU_FLAGS.TPM_RIGHTBUTTON |
+                TRACK_POPUP_MENU_FLAGS.TPM_BOTTOMALIGN;
 
-            int commandId = GdiNative.TrackPopupMenuEx(
+            BOOL commandResult = PInvoke.TrackPopupMenuEx(
                 menuHandle,
-                trackFlags,
+                (uint)trackFlags,
                 cursor.X,
                 cursor.Y,
-                ownerHandle,
-                IntPtr.Zero);
+                owner,
+                null);
 
-            if (ownerHandle != 0)
+            if (!owner.IsNull)
             {
-                GdiNative.PostMessage(ownerHandle, Win32UiConstants.WmNull, IntPtr.Zero, IntPtr.Zero);
+                PInvoke.PostMessage(owner, PInvoke.WM_NULL, default, default);
             }
 
-            return (uint)commandId switch
+            return (uint)commandResult.Value switch
             {
                 Win32UiConstants.MenuCmdOpen => ContextMenuAction.Open,
                 Win32UiConstants.MenuCmdToggleUsb => ContextMenuAction.ToggleUsbMonitoring,
@@ -113,7 +117,15 @@ public sealed class Win32ContextMenu : IContextMenuView
         }
         finally
         {
-            GdiNative.DestroyMenu(menuHandle);
+            PInvoke.DestroyMenu(menuHandle);
+        }
+    }
+
+    private static unsafe void AppendStringItem(HMENU menuHandle, MENU_ITEM_FLAGS flags, uint commandId, string label)
+    {
+        fixed (char* pLabel = label)
+        {
+            PInvoke.AppendMenu(menuHandle, flags, commandId, new PCWSTR(pLabel));
         }
     }
 }

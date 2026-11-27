@@ -1,18 +1,19 @@
-using VoltTray.UI.Interop;
+using Windows.Win32;
+using Windows.Win32.UI.Shell;
 
 namespace VoltTray.UI.TaskbarPill;
 
 public sealed class Win32FullscreenStateProvider : IFullscreenStateProvider
 {
-    public bool IsFullscreenActive()
+    public unsafe bool IsFullscreenActive()
     {
         try
         {
-            if (GdiNative.SHQueryUserNotificationState(out int state) == 0)
+            if (PInvoke.SHQueryUserNotificationState(out QUERY_USER_NOTIFICATION_STATE state).Succeeded)
             {
-                return state == Win32UiConstants.QunsBusy ||
-                       state == Win32UiConstants.QunsRunningD3dFullScreen ||
-                       state == Win32UiConstants.QunsPresentationMode;
+                return state == QUERY_USER_NOTIFICATION_STATE.QUNS_BUSY ||
+                       state == QUERY_USER_NOTIFICATION_STATE.QUNS_RUNNING_D3D_FULL_SCREEN ||
+                       state == QUERY_USER_NOTIFICATION_STATE.QUNS_PRESENTATION_MODE;
             }
         }
         catch (Exception ex) when (ex is DllNotFoundException or EntryPointNotFoundException or PlatformNotSupportedException)

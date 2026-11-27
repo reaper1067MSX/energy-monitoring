@@ -1,4 +1,11 @@
+using System.Collections.Concurrent;
+using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
+using Windows.Win32;
+using Windows.Win32.Foundation;
+using Windows.Win32.Graphics.Dwm;
+using Windows.Win32.Graphics.Gdi;
+using Windows.Win32.UI.WindowsAndMessaging;
 using VoltTray.Core.Telemetry;
 using VoltTray.UI.Atoms;
 using VoltTray.UI.Interop;
@@ -15,6 +22,11 @@ namespace VoltTray.UI.Popover;
 /// </summary>
 public sealed class PopoverPainter : IPopoverView
 {
+    private static readonly ConcurrentDictionary<nint, PopoverPainter> Instances = new();
+
+    [ThreadStatic]
+    private static PopoverPainter? t_creatingInstance;
+
     private readonly Func<DateTimeOffset> _clock;
     private readonly bool _enableNativeWindow;
     private readonly IPopoverSurfaceRenderer _surfaceRenderer;
@@ -22,10 +34,9 @@ public sealed class PopoverPainter : IPopoverView
     private readonly bool _ownsSurfaceRenderer;
     private DateTimeOffset? _lastHiddenAt;
     private long _lastShownTickMs;
-    private IntPtr _hwnd;
-    private IntPtr _handCursor;
-    private IntPtr _arrowCursor;
-    private WndProcDelegate? _wndProc;
+    private HWND _hwnd;
+    private HCURSOR _handCursor;
+    private HCURSOR _arrowCursor;
 
     public bool IsVisible { get; private set; }
     public UpsTelemetry? CurrentTelemetry { get; private set; }
@@ -109,9 +120,9 @@ public sealed class PopoverPainter : IPopoverView
         HoveredAction = PopoverActionId.None;
         PressedAction = PopoverActionId.None;
 
-        if (_hwnd != IntPtr.Zero)
+        if (!_hwnd.IsNull)
         {
-            GdiNative.ShowWindow(_hwnd, Win32UiConstants.SwHide);
+            PInvoke.ShowWindow(_hwnd, SHOW_WINDOW_CMD.SW_HIDE);
         }
     }
 
@@ -233,15 +244,19 @@ public sealed class PopoverPainter : IPopoverView
     public void TriggerSelfTest() => OnSelfTestRequested?.Invoke();
     public void TriggerToggleBeeper() => OnToggleBeeperRequested?.Invoke();
 
-    public void Dispose()
+    public unsafe void Dispose()
     {
         Hide();
-        if (_hwnd != IntPtr.Zero)
+        if (!_hwnd.IsNull)
         {
-            GdiNative.DestroyWindow(_hwnd);
-            _hwnd = IntPtr.Zero;
-            IntPtr hInstance = GdiNative.GetModuleHandle(null);
-            GdiNative.UnregisterClass(Win32UiConstants.PopoverWindowClass, hInstance);
+            Instances.TryRemove((nint)_hwnd.Value, out _);
+            PInvoke.DestroyWindow(_hwnd);
+            _hwnd = default;
+            HMODULE hInstance = PInvoke.GetModuleHandle((PCWSTR)null);
+            fixed (char* classNamePtr = Win32UiConstants.PopoverWindowClass)
+            {
+                PInvoke.UnregisterClass(new PCWSTR(classNamePtr), hInstance);
+            }
         }
 
         if (_ownsSurfaceRenderer)
@@ -260,9 +275,9 @@ public sealed class PopoverPainter : IPopoverView
 
     private void InvalidateNativeWindow()
     {
-        if (_hwnd != IntPtr.Zero)
+        if (!_hwnd.IsNull)
         {
-            GdiNative.InvalidateRect(_hwnd, IntPtr.Zero, false);
+            PInvoke.InvalidateRect(_hwnd, (RECT?)null, false);
         }
     }
 
@@ -271,29 +286,29 @@ public sealed class PopoverPainter : IPopoverView
         try
         {
             EnsureNativeWindowCreated(bounds);
-            if (_hwnd == IntPtr.Zero)
+            if (_hwnd.IsNull)
             {
                 return;
             }
 
             int darkMode = CurrentTheme == UITheme.Dark ? 1 : 0;
-            _ = GdiNative.DwmSetWindowAttribute(
+            _ = PInvoke.DwmSetWindowAttribute(
                 _hwnd,
-                Win32UiConstants.DwmwaUseImmersiveDarkMode,
-                ref darkMode,
+                DWMWINDOWATTRIBUTE.DWMWA_USE_IMMERSIVE_DARK_MODE,
+                &darkMode,
                 sizeof(int));
 
-            GdiNative.SetWindowPos(
+            PInvoke.SetWindowPos(
                 _hwnd,
-                (IntPtr)Win32UiConstants.HwndTopmost,
+                new HWND((void*)-1),
                 bounds.Left,
                 bounds.Top,
                 bounds.Width,
                 bounds.Height,
-                Win32UiConstants.SwpNoActivate);
-            GdiNative.ShowWindow(_hwnd, Win32UiConstants.SwShow);
-            GdiNative.SetForegroundWindow(_hwnd);
-            GdiNative.InvalidateRect(_hwnd, IntPtr.Zero, false);
+                SET_WINDOW_POS_FLAGS.SWP_NOACTIVATE);
+            PInvoke.ShowWindow(_hwnd, SHOW_WINDOW_CMD.SW_SHOW);
+            PInvoke.SetForegroundWindow(_hwnd);
+            PInvoke.InvalidateRect(_hwnd, (RECT?)null, false);
         }
         catch (Exception ex) when (ex is DllNotFoundException or EntryPointNotFoundException or PlatformNotSupportedException)
         {
@@ -303,101 +318,129 @@ public sealed class PopoverPainter : IPopoverView
 
     private unsafe void EnsureNativeWindowCreated(ViewRect bounds)
     {
-        if (_hwnd != IntPtr.Zero)
+        if (!_hwnd.IsNull)
         {
             return;
         }
 
-        _wndProc = PopoverWndProc;
-        _handCursor = GdiNative.LoadCursor(IntPtr.Zero, (IntPtr)Win32UiConstants.IdcHand);
-        _arrowCursor = GdiNative.LoadCursor(IntPtr.Zero, (IntPtr)Win32UiConstants.IdcArrow);
-        IntPtr hInstance = GdiNative.GetModuleHandle(null);
+        _handCursor = PInvoke.LoadCursor(default, PInvoke.IDC_HAND);
+        _arrowCursor = PInvoke.LoadCursor(default, PInvoke.IDC_ARROW);
+        HMODULE hInstance = PInvoke.GetModuleHandle((PCWSTR)null);
+        string title = CurrentViewModel?.Title ?? nameof(PopoverPainter);
 
         fixed (char* classNamePtr = Win32UiConstants.PopoverWindowClass)
+        fixed (char* titlePtr = title)
         {
-            var wcx = new WindowClassExW
+            var wcx = new WNDCLASSEXW
             {
-                Size = (uint)sizeof(WindowClassExW),
-                WindowProc = Marshal.GetFunctionPointerForDelegate(_wndProc),
-                Instance = hInstance,
-                Cursor = _arrowCursor,
-                ClassName = classNamePtr
+                cbSize = (uint)sizeof(WNDCLASSEXW),
+                lpfnWndProc = new WNDPROC(&StaticPopoverWndProc),
+                hInstance = new HINSTANCE(hInstance.Value),
+                hCursor = _arrowCursor,
+                lpszClassName = new PCWSTR(classNamePtr)
             };
 
-            GdiNative.RegisterClassEx(ref wcx);
+            PInvoke.RegisterClassEx(&wcx);
+
+            t_creatingInstance = this;
+            try
+            {
+                _hwnd = PInvoke.CreateWindowEx(
+                    WINDOW_EX_STYLE.WS_EX_TOOLWINDOW | WINDOW_EX_STYLE.WS_EX_TOPMOST,
+                    new PCWSTR(classNamePtr),
+                    new PCWSTR(titlePtr),
+                    WINDOW_STYLE.WS_POPUP,
+                    bounds.Left,
+                    bounds.Top,
+                    bounds.Width,
+                    bounds.Height,
+                    default,
+                    default,
+                    hInstance,
+                    null);
+            }
+            finally
+            {
+                t_creatingInstance = null;
+            }
         }
 
-        _hwnd = GdiNative.CreateWindowEx(
-            Win32UiConstants.WsExToolWindow | Win32UiConstants.WsExTopmost,
-            Win32UiConstants.PopoverWindowClass,
-            CurrentViewModel?.Title ?? nameof(PopoverPainter),
-            Win32UiConstants.WsPopup,
-            bounds.Left,
-            bounds.Top,
-            bounds.Width,
-            bounds.Height,
-            IntPtr.Zero,
-            IntPtr.Zero,
-            hInstance,
-            IntPtr.Zero);
-
-        if (_hwnd != IntPtr.Zero)
+        if (!_hwnd.IsNull)
         {
-            int roundPreference = Win32UiConstants.DwmwcpRound;
-            _ = GdiNative.DwmSetWindowAttribute(
+            Instances[(nint)_hwnd.Value] = this;
+            int roundPreference = (int)DWM_WINDOW_CORNER_PREFERENCE.DWMWCP_ROUND;
+            _ = PInvoke.DwmSetWindowAttribute(
                 _hwnd,
-                Win32UiConstants.DwmwaWindowCornerPreference,
-                ref roundPreference,
+                DWMWINDOWATTRIBUTE.DWMWA_WINDOW_CORNER_PREFERENCE,
+                &roundPreference,
                 sizeof(int));
         }
     }
 
-    private IntPtr PopoverWndProc(IntPtr hWnd, uint msg, IntPtr wParam, IntPtr lParam)
+    [UnmanagedCallersOnly(CallConvs = [typeof(CallConvStdcall)])]
+    private static unsafe LRESULT StaticPopoverWndProc(HWND hWnd, uint msg, WPARAM wParam, LPARAM lParam)
+    {
+        nint key = (nint)hWnd.Value;
+        if (!Instances.TryGetValue(key, out PopoverPainter? instance) && t_creatingInstance != null)
+        {
+            instance = t_creatingInstance;
+            Instances[key] = instance;
+        }
+
+        if (instance != null)
+        {
+            return instance.PopoverWndProc(hWnd, msg, wParam, lParam);
+        }
+
+        return PInvoke.DefWindowProc(hWnd, msg, wParam, lParam);
+    }
+
+    private LRESULT PopoverWndProc(HWND hWnd, uint msg, WPARAM wParam, LPARAM lParam)
     {
         switch (msg)
         {
-            case Win32UiConstants.WmEraseBkgnd:
-                return (IntPtr)1;
-            case Win32UiConstants.WmActivate when (wParam.ToInt64() & 0xFFFF) == Win32UiConstants.WaInactive:
+            case PInvoke.WM_ERASEBKGND:
+                return new LRESULT(1);
+            case PInvoke.WM_ACTIVATE when (wParam.Value.ToUInt64() & 0xFFFF) == PInvoke.WA_INACTIVE:
                 if (Environment.TickCount64 - _lastShownTickMs >= PopoverLayoutConstants.ShowGracePeriodMs)
                 {
                     Hide();
                 }
-                return IntPtr.Zero;
-            case Win32UiConstants.WmMouseMove:
+                return default;
+            case PInvoke.WM_MOUSEMOVE:
             {
-                (int x, int y) = DecodePoint(lParam);
+                (int x, int y) = DecodePoint(lParam.Value);
                 HandlePointerMove(x, y);
-                IntPtr cursor = HoveredAction != PopoverActionId.None ? _handCursor : _arrowCursor;
-                if (cursor != IntPtr.Zero)
+                HCURSOR cursor = HoveredAction != PopoverActionId.None ? _handCursor : _arrowCursor;
+                if (!cursor.IsNull)
                 {
-                    GdiNative.SetCursor(cursor);
+                    PInvoke.SetCursor(cursor);
                 }
-                return IntPtr.Zero;
+                return default;
             }
-            case Win32UiConstants.WmLButtonDown:
+            case PInvoke.WM_LBUTTONDOWN:
             {
-                (int x, int y) = DecodePoint(lParam);
+                (int x, int y) = DecodePoint(lParam.Value);
                 HandlePointerDown(x, y);
-                return IntPtr.Zero;
+                return default;
             }
-            case Win32UiConstants.WmLButtonUp:
+            case PInvoke.WM_LBUTTONUP:
             {
-                (int x, int y) = DecodePoint(lParam);
+                (int x, int y) = DecodePoint(lParam.Value);
                 HandlePointerUp(x, y);
-                return IntPtr.Zero;
+                return default;
             }
-            case Win32UiConstants.WmMouseLeave:
+            case PInvoke.WM_MOUSELEAVE:
                 HandlePointerMove(-1, -1);
-                return IntPtr.Zero;
-            case Win32UiConstants.WmKeyDown:
-                HandleKeyDown((int)wParam.ToInt64());
-                return IntPtr.Zero;
-            case Win32UiConstants.WmPaint:
+                return default;
+            case PInvoke.WM_KEYDOWN:
+                HandleKeyDown((int)wParam.Value.ToUInt64());
+                return default;
+            case PInvoke.WM_PAINT:
                 PaintNativeWindow(hWnd);
-                return IntPtr.Zero;
+                return default;
             default:
-                return GdiNative.DefWindowProc(hWnd, msg, wParam, lParam);
+                return PInvoke.DefWindowProc(hWnd, msg, wParam, lParam);
         }
     }
 
@@ -409,9 +452,9 @@ public sealed class PopoverPainter : IPopoverView
         return (x, y);
     }
 
-    private unsafe void PaintNativeWindow(IntPtr hWnd)
+    private unsafe void PaintNativeWindow(HWND hWnd)
     {
-        IntPtr hdc = GdiNative.BeginPaint(hWnd, out PaintStruct paintStruct);
+        HDC hdc = PInvoke.BeginPaint(hWnd, out PAINTSTRUCT paintStruct);
         try
         {
             if (CurrentViewModel is not PopoverViewModel vm)
@@ -435,57 +478,60 @@ public sealed class PopoverPainter : IPopoverView
         }
         finally
         {
-            GdiNative.EndPaint(hWnd, ref paintStruct);
+            PInvoke.EndPaint(hWnd, &paintStruct);
         }
     }
 
-    private static unsafe void BlitBgra32(IntPtr hdcDest, int width, int height, byte[] pixels)
+    private static unsafe void BlitBgra32(HDC hdcDest, int width, int height, byte[] pixels)
     {
-        var bmi = new BitmapInfoHeader
+        var bmi = new BITMAPINFO
         {
-            Size = (uint)sizeof(BitmapInfoHeader),
-            Width = width,
-            Height = -height,
-            Planes = Win32UiConstants.ColorPlanesSingle,
-            BitCount = Win32UiConstants.BitsPerPixel32,
-            Compression = Win32UiConstants.BiRgb
+            bmiHeader = new BITMAPINFOHEADER
+            {
+                biSize = (uint)sizeof(BITMAPINFOHEADER),
+                biWidth = width,
+                biHeight = -height,
+                biPlanes = Win32UiConstants.ColorPlanesSingle,
+                biBitCount = Win32UiConstants.BitsPerPixel32,
+                biCompression = (uint)BI_COMPRESSION.BI_RGB
+            }
         };
 
-        IntPtr memDc = GdiNative.CreateCompatibleDC(hdcDest);
-        if (memDc == IntPtr.Zero)
+        HDC memDc = PInvoke.CreateCompatibleDC(hdcDest);
+        if (memDc.IsNull)
         {
             return;
         }
 
-        IntPtr dib = GdiNative.CreateDIBSection(memDc, ref bmi, Win32UiConstants.DibRgbColors, out IntPtr bits, IntPtr.Zero, 0);
-        if (dib == IntPtr.Zero || bits == IntPtr.Zero)
+        HBITMAP dib = PInvoke.CreateDIBSection(memDc, &bmi, DIB_USAGE.DIB_RGB_COLORS, out void* bits, default, 0);
+        if (dib.IsNull || bits == null)
         {
-            if (dib != IntPtr.Zero)
+            if (!dib.IsNull)
             {
-                GdiNative.DeleteObject(dib);
+                PInvoke.DeleteObject(dib);
             }
 
-            GdiNative.DeleteDC(memDc);
+            PInvoke.DeleteDC(memDc);
             return;
         }
 
-        IntPtr oldBitmap = GdiNative.SelectObject(memDc, dib);
+        HGDIOBJ oldBitmap = PInvoke.SelectObject(memDc, dib);
         try
         {
             long expectedBytes = (long)width * height * PopoverLayoutConstants.BgraBytesPerPixel;
             long copyBytes = Math.Min(expectedBytes, pixels.Length);
             fixed (byte* src = pixels)
             {
-                Buffer.MemoryCopy(src, (void*)bits, expectedBytes, copyBytes);
+                Buffer.MemoryCopy(src, bits, expectedBytes, copyBytes);
             }
 
-            GdiNative.BitBlt(hdcDest, 0, 0, width, height, memDc, 0, 0, Win32UiConstants.SrcCopy);
+            PInvoke.BitBlt(hdcDest, 0, 0, width, height, memDc, 0, 0, ROP_CODE.SRCCOPY);
         }
         finally
         {
-            GdiNative.SelectObject(memDc, oldBitmap);
-            GdiNative.DeleteObject(dib);
-            GdiNative.DeleteDC(memDc);
+            PInvoke.SelectObject(memDc, oldBitmap);
+            PInvoke.DeleteObject(dib);
+            PInvoke.DeleteDC(memDc);
         }
     }
 }

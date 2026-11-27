@@ -1,4 +1,10 @@
+using System.Collections.Concurrent;
+using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
+using Windows.Win32;
+using Windows.Win32.Foundation;
+using Windows.Win32.UI.Shell;
+using Windows.Win32.UI.WindowsAndMessaging;
 using VoltTray.Core.Telemetry;
 using VoltTray.Shared;
 using VoltTray.UI.Atoms;
@@ -21,10 +27,14 @@ public sealed class TrayRenderer : ITrayIconView
     private IntPtr _currentHIcon = IntPtr.Zero;
     private bool _isDisposed;
 
-    private IntPtr _hwnd = IntPtr.Zero;
+    private static readonly ConcurrentDictionary<nint, TrayRenderer> Instances = new();
+
+    [ThreadStatic]
+    private static TrayRenderer? t_creatingInstance;
+
+    private HWND _hwnd;
     private uint _taskbarCreatedMessage;
-    private WndProcDelegate? _wndProc;
-    private NotifyIconDataW _nid;
+    private NOTIFYICONDATAW _nid;
     private bool _iconAdded;
 
     public event Action? OnTrayIconClicked;
@@ -38,7 +48,7 @@ public sealed class TrayRenderer : ITrayIconView
 
     public string? CurrentTooltip { get; private set; }
     public uint TaskbarCreatedMessageId => _taskbarCreatedMessage;
-    public nint WindowHandle => _hwnd;
+    public unsafe nint WindowHandle => (nint)_hwnd.Value;
 
     public TrayRenderer(
         ITrayIconRasterizer? rasterizer = null,
@@ -55,36 +65,53 @@ public sealed class TrayRenderer : ITrayIconView
     {
         try
         {
-            _taskbarCreatedMessage = GdiNative.RegisterWindowMessage(Win32UiConstants.TaskbarCreatedMessageName);
-            _wndProc = TrayWndProc;
-            IntPtr hInstance = GdiNative.GetModuleHandle(null);
-
-            fixed (char* classNamePtr = Win32UiConstants.TrayHostWindowClass)
+            fixed (char* msgNamePtr = Win32UiConstants.TaskbarCreatedMessageName)
             {
-                var wcx = new WindowClassExW
-                {
-                    Size = (uint)sizeof(WindowClassExW),
-                    WindowProc = Marshal.GetFunctionPointerForDelegate(_wndProc),
-                    Instance = hInstance,
-                    ClassName = classNamePtr
-                };
-
-                GdiNative.RegisterClassEx(ref wcx);
+                _taskbarCreatedMessage = PInvoke.RegisterWindowMessage(new PCWSTR(msgNamePtr));
             }
 
-            _hwnd = GdiNative.CreateWindowEx(
-                0,
-                Win32UiConstants.TrayHostWindowClass,
-                Win32UiConstants.TrayHostWindowTitle,
-                0,
-                0,
-                0,
-                0,
-                0,
-                IntPtr.Zero,
-                IntPtr.Zero,
-                hInstance,
-                IntPtr.Zero);
+            HMODULE hInstance = PInvoke.GetModuleHandle((PCWSTR)null);
+
+            fixed (char* classNamePtr = Win32UiConstants.TrayHostWindowClass)
+            fixed (char* windowTitlePtr = Win32UiConstants.TrayHostWindowTitle)
+            {
+                var wcx = new WNDCLASSEXW
+                {
+                    cbSize = (uint)sizeof(WNDCLASSEXW),
+                    lpfnWndProc = new WNDPROC(&StaticTrayWndProc),
+                    hInstance = new HINSTANCE(hInstance.Value),
+                    lpszClassName = new PCWSTR(classNamePtr)
+                };
+
+                PInvoke.RegisterClassEx(&wcx);
+
+                t_creatingInstance = this;
+                try
+                {
+                    _hwnd = PInvoke.CreateWindowEx(
+                        0,
+                        new PCWSTR(classNamePtr),
+                        new PCWSTR(windowTitlePtr),
+                        0,
+                        0,
+                        0,
+                        0,
+                        0,
+                        default,
+                        default,
+                        hInstance,
+                        null);
+                }
+                finally
+                {
+                    t_creatingInstance = null;
+                }
+
+                if (!_hwnd.IsNull)
+                {
+                    Instances[(nint)_hwnd.Value] = this;
+                }
+            }
         }
         catch
         {
@@ -92,14 +119,22 @@ public sealed class TrayRenderer : ITrayIconView
         }
     }
 
-    private IntPtr TrayWndProc(IntPtr hWnd, uint msg, IntPtr wParam, IntPtr lParam)
+    [UnmanagedCallersOnly(CallConvs = [typeof(CallConvStdcall)])]
+    private static unsafe LRESULT StaticTrayWndProc(HWND hWnd, uint msg, WPARAM wParam, LPARAM lParam)
     {
-        if (HandleWindowMessage(msg, lParam))
+        nint key = (nint)hWnd.Value;
+        if (!Instances.TryGetValue(key, out TrayRenderer? instance) && t_creatingInstance != null)
         {
-            return IntPtr.Zero;
+            instance = t_creatingInstance;
+            Instances[key] = instance;
         }
 
-        return GdiNative.DefWindowProc(hWnd, msg, wParam, lParam);
+        if (instance != null && instance.HandleWindowMessage(msg, lParam.Value))
+        {
+            return default;
+        }
+
+        return PInvoke.DefWindowProc(hWnd, msg, wParam, lParam);
     }
 
     public bool HandleWindowMessage(uint msg, IntPtr lParam)
@@ -114,20 +149,20 @@ public sealed class TrayRenderer : ITrayIconView
         if (msg == Win32UiConstants.WmTrayIcon)
         {
             uint evt = (uint)(lParam.ToInt64() & 0xFFFF);
-            if (evt == Win32UiConstants.WmLButtonUp)
+            if (evt == PInvoke.WM_LBUTTONUP)
             {
-                if (_hwnd != IntPtr.Zero)
+                if (!_hwnd.IsNull)
                 {
-                    GdiNative.SetForegroundWindow(_hwnd);
+                    PInvoke.SetForegroundWindow(_hwnd);
                 }
 
                 OnTrayIconClicked?.Invoke();
             }
-            else if (evt == Win32UiConstants.WmRButtonUp)
+            else if (evt == PInvoke.WM_RBUTTONUP)
             {
-                if (_hwnd != IntPtr.Zero)
+                if (!_hwnd.IsNull)
                 {
-                    GdiNative.SetForegroundWindow(_hwnd);
+                    PInvoke.SetForegroundWindow(_hwnd);
                 }
 
                 OnContextMenuRequested?.Invoke();
@@ -148,60 +183,75 @@ public sealed class TrayRenderer : ITrayIconView
             _iconFactory.DestroyIcon(_currentHIcon);
             _currentHIcon = hNew;
 
-            if (_hwnd != IntPtr.Zero && _currentHIcon != IntPtr.Zero)
+            if (!_hwnd.IsNull && _currentHIcon != IntPtr.Zero)
             {
                 if (!_iconAdded)
                 {
-                    _nid = new NotifyIconDataW
+                    _nid = new NOTIFYICONDATAW
                     {
-                        Size = (uint)sizeof(NotifyIconDataW),
-                        WindowHandle = _hwnd,
-                        Id = Win32UiConstants.TrayIconId,
-                        Flags = Win32UiConstants.NifMessage | Win32UiConstants.NifIcon | Win32UiConstants.NifTip,
-                        CallbackMessage = Win32UiConstants.WmTrayIcon,
-                        IconHandle = _currentHIcon
+                        cbSize = (uint)sizeof(NOTIFYICONDATAW),
+                        hWnd = _hwnd,
+                        uID = Win32UiConstants.TrayIconId,
+                        uFlags = NOTIFY_ICON_DATA_FLAGS.NIF_MESSAGE | NOTIFY_ICON_DATA_FLAGS.NIF_ICON | NOTIFY_ICON_DATA_FLAGS.NIF_TIP,
+                        uCallbackMessage = Win32UiConstants.WmTrayIcon,
+                        hIcon = new HICON(_currentHIcon)
                     };
-                    _nid.SetTip(CurrentTooltip ?? ApplicationDefaults.DefaultUpsDisplayName);
-                    _iconAdded = GdiNative.Shell_NotifyIcon(Win32UiConstants.NimAdd, ref _nid);
+                    SetTipText(CurrentTooltip ?? ApplicationDefaults.DefaultUpsDisplayName);
+                    fixed (NOTIFYICONDATAW* pNid = &_nid)
+                    {
+                        _iconAdded = PInvoke.Shell_NotifyIcon(NOTIFY_ICON_MESSAGE.NIM_ADD, pNid);
+                    }
                 }
                 else
                 {
-                    _nid.Flags = Win32UiConstants.NifIcon;
-                    _nid.IconHandle = _currentHIcon;
-                    GdiNative.Shell_NotifyIcon(Win32UiConstants.NimModify, ref _nid);
+                    _nid.uFlags = NOTIFY_ICON_DATA_FLAGS.NIF_ICON;
+                    _nid.hIcon = new HICON(_currentHIcon);
+                    fixed (NOTIFYICONDATAW* pNid = &_nid)
+                    {
+                        PInvoke.Shell_NotifyIcon(NOTIFY_ICON_MESSAGE.NIM_MODIFY, pNid);
+                    }
                 }
             }
         }
     }
 
-    public void SetTooltip(string text)
+    public unsafe void SetTooltip(string text)
     {
         lock (_lock)
         {
             CurrentTooltip = text;
-            if (_iconAdded && _hwnd != IntPtr.Zero)
+            if (_iconAdded && !_hwnd.IsNull)
             {
-                _nid.Flags = Win32UiConstants.NifTip;
-                _nid.SetTip(text);
-                GdiNative.Shell_NotifyIcon(Win32UiConstants.NimModify, ref _nid);
+                _nid.uFlags = NOTIFY_ICON_DATA_FLAGS.NIF_TIP;
+                SetTipText(text);
+                fixed (NOTIFYICONDATAW* pNid = &_nid)
+                {
+                    PInvoke.Shell_NotifyIcon(NOTIFY_ICON_MESSAGE.NIM_MODIFY, pNid);
+                }
             }
         }
     }
 
-    public void Recreate()
+    public unsafe void Recreate()
     {
         lock (_lock)
         {
             if (_iconAdded)
             {
-                GdiNative.Shell_NotifyIcon(Win32UiConstants.NimDelete, ref _nid);
+                fixed (NOTIFYICONDATAW* pNid = &_nid)
+                {
+                    PInvoke.Shell_NotifyIcon(NOTIFY_ICON_MESSAGE.NIM_DELETE, pNid);
+                }
                 _iconAdded = false;
             }
-            if (_currentHIcon != IntPtr.Zero && _hwnd != IntPtr.Zero)
+            if (_currentHIcon != IntPtr.Zero && !_hwnd.IsNull)
             {
-                _nid.Flags = Win32UiConstants.NifMessage | Win32UiConstants.NifIcon | Win32UiConstants.NifTip;
-                _nid.IconHandle = _currentHIcon;
-                _iconAdded = GdiNative.Shell_NotifyIcon(Win32UiConstants.NimAdd, ref _nid);
+                _nid.uFlags = NOTIFY_ICON_DATA_FLAGS.NIF_MESSAGE | NOTIFY_ICON_DATA_FLAGS.NIF_ICON | NOTIFY_ICON_DATA_FLAGS.NIF_TIP;
+                _nid.hIcon = new HICON(_currentHIcon);
+                fixed (NOTIFYICONDATAW* pNid = &_nid)
+                {
+                    _iconAdded = PInvoke.Shell_NotifyIcon(NOTIFY_ICON_MESSAGE.NIM_ADD, pNid);
+                }
             }
         }
     }
@@ -210,30 +260,30 @@ public sealed class TrayRenderer : ITrayIconView
     {
         lock (_lock)
         {
-            if (!_iconAdded || _hwnd == IntPtr.Zero)
+            if (!_iconAdded || _hwnd.IsNull)
             {
                 return null;
             }
 
-            var identifier = new NotifyIconIdentifier
+            var identifier = new NOTIFYICONIDENTIFIER
             {
-                Size = (uint)sizeof(NotifyIconIdentifier),
-                WindowHandle = _hwnd,
-                Id = Win32UiConstants.TrayIconId,
-                GuidItem = Guid.Empty
+                cbSize = (uint)sizeof(NOTIFYICONIDENTIFIER),
+                hWnd = _hwnd,
+                uID = Win32UiConstants.TrayIconId,
+                guidItem = Guid.Empty
             };
 
-            int hresult = GdiNative.Shell_NotifyIconGetRect(ref identifier, out NativeRect iconRect);
-            if (hresult < 0 || iconRect.Right <= iconRect.Left || iconRect.Bottom <= iconRect.Top)
+            int hresult = PInvoke.Shell_NotifyIconGetRect(in identifier, out RECT iconRect).Value;
+            if (hresult < 0 || iconRect.right <= iconRect.left || iconRect.bottom <= iconRect.top)
             {
                 return null;
             }
 
-            return new ViewRect(iconRect.Left, iconRect.Top, iconRect.Right, iconRect.Bottom);
+            return new ViewRect(iconRect.left, iconRect.top, iconRect.right, iconRect.bottom);
         }
     }
 
-    public void Dispose()
+    public unsafe void Dispose()
     {
         if (_isDisposed) return;
         _isDisposed = true;
@@ -241,7 +291,10 @@ public sealed class TrayRenderer : ITrayIconView
         {
             if (_iconAdded)
             {
-                GdiNative.Shell_NotifyIcon(Win32UiConstants.NimDelete, ref _nid);
+                fixed (NOTIFYICONDATAW* pNid = &_nid)
+                {
+                    PInvoke.Shell_NotifyIcon(NOTIFY_ICON_MESSAGE.NIM_DELETE, pNid);
+                }
                 _iconAdded = false;
             }
             if (_currentHIcon != IntPtr.Zero)
@@ -249,11 +302,27 @@ public sealed class TrayRenderer : ITrayIconView
                 _iconFactory.DestroyIcon(_currentHIcon);
                 _currentHIcon = IntPtr.Zero;
             }
-            if (_hwnd != IntPtr.Zero)
+            if (!_hwnd.IsNull)
             {
-                GdiNative.DestroyWindow(_hwnd);
-                _hwnd = IntPtr.Zero;
+                Instances.TryRemove((nint)_hwnd.Value, out _);
+                PInvoke.DestroyWindow(_hwnd);
+                _hwnd = default;
             }
+        }
+    }
+
+    private unsafe void SetTipText(string? text)
+    {
+        string value = text ?? string.Empty;
+        fixed (char* tipPtr = _nid.szTip.AsSpan())
+        {
+            int capacity = _nid.szTip.Length - 1;
+            int copyLen = Math.Min(value.Length, capacity);
+            for (int i = 0; i < copyLen; i++)
+            {
+                tipPtr[i] = value[i];
+            }
+            tipPtr[copyLen] = '\0';
         }
     }
 }

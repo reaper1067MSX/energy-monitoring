@@ -1,4 +1,7 @@
-using VoltTray.UI.Interop;
+using Windows.Win32;
+using Windows.Win32.Foundation;
+using Windows.Win32.Graphics.Gdi;
+using Windows.Win32.UI.WindowsAndMessaging;
 using VoltTray.UI.Models;
 using VoltTray.UI.Tokens;
 
@@ -13,33 +16,33 @@ public sealed class Win32ScreenPlacementProvider : IScreenPlacementProvider
     {
         try
         {
-            var nativeAnchor = new NativeRect(
+            var nativeAnchor = new RECT(
                 anchorRect.Left,
                 anchorRect.Top,
                 anchorRect.Right,
                 anchorRect.Bottom);
 
-            IntPtr monitorHandle = GdiNative.MonitorFromRect(ref nativeAnchor, Win32UiConstants.MonitorDefaultToNearest);
-            if (monitorHandle != IntPtr.Zero)
+            HMONITOR monitorHandle = PInvoke.MonitorFromRect(&nativeAnchor, MONITOR_FROM_FLAGS.MONITOR_DEFAULTTONEAREST);
+            if (!monitorHandle.IsNull)
             {
-                var monitorInfo = new MonitorInfo
+                var monitorInfo = new MONITORINFO
                 {
-                    Size = (uint)sizeof(MonitorInfo)
+                    cbSize = (uint)sizeof(MONITORINFO)
                 };
 
-                if (GdiNative.GetMonitorInfo(monitorHandle, ref monitorInfo))
+                if (PInvoke.GetMonitorInfo(monitorHandle, ref monitorInfo))
                 {
                     var monitorBounds = new ViewRect(
-                        monitorInfo.MonitorBounds.Left,
-                        monitorInfo.MonitorBounds.Top,
-                        monitorInfo.MonitorBounds.Right,
-                        monitorInfo.MonitorBounds.Bottom);
+                        monitorInfo.rcMonitor.left,
+                        monitorInfo.rcMonitor.top,
+                        monitorInfo.rcMonitor.right,
+                        monitorInfo.rcMonitor.bottom);
 
                     var workArea = new ViewRect(
-                        monitorInfo.WorkArea.Left,
-                        monitorInfo.WorkArea.Top,
-                        monitorInfo.WorkArea.Right,
-                        monitorInfo.WorkArea.Bottom);
+                        monitorInfo.rcWork.left,
+                        monitorInfo.rcWork.top,
+                        monitorInfo.rcWork.right,
+                        monitorInfo.rcWork.bottom);
 
                     return (workArea, InferTaskbarEdge(monitorBounds, workArea));
                 }
@@ -50,8 +53,8 @@ public sealed class Win32ScreenPlacementProvider : IScreenPlacementProvider
             // Headless or non-interactive fallback handled below
         }
 
-        int screenWidth = GdiNative.GetSystemMetrics(Win32UiConstants.SmCxScreen);
-        int screenHeight = GdiNative.GetSystemMetrics(Win32UiConstants.SmCyScreen);
+        int screenWidth = PInvoke.GetSystemMetrics(SYSTEM_METRICS_INDEX.SM_CXSCREEN);
+        int screenHeight = PInvoke.GetSystemMetrics(SYSTEM_METRICS_INDEX.SM_CYSCREEN);
         int resolvedWidth = screenWidth > 0 ? screenWidth : DesignTokens.Sizes.FallbackScreenWidthPx;
         int resolvedHeight = screenHeight > 0 ? screenHeight : DesignTokens.Sizes.FallbackScreenHeightPx;
         return (new ViewRect(0, 0, resolvedWidth, resolvedHeight), TaskbarEdge.Bottom);
