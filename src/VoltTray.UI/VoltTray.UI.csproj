@@ -14,4 +14,13 @@
     <ProjectReference Include="..\VoltTray.Shared\VoltTray.Shared.csproj" />
   </ItemGroup>
 
+  <ItemGroup>
+    <EmbeddedResource Include="Assets\Icons\*.svg" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="SkiaSharp" Version="4.158.0" />
+    <PackageReference Include="Svg.Skia" Version="5.2.4" />
+  </ItemGroup>
+
 </Project>

@@ -1,8 +1,10 @@
 using VoltTray.UI.Tray;
 using VoltTray.UI.Popover;
 using System.Globalization;
+using SkiaSharp;
 using VoltTray.Core.Battery;
 using VoltTray.Core.Telemetry;
+using VoltTray.UI.Atoms;
 using VoltTray.UI.Dialogs;
 using VoltTray.UI.Models;
 using VoltTray.UI.Tokens;
@@ -223,5 +225,27 @@ public class UIRenderersTests
         }
 
         Assert.Equal(iconBefore, renderer.CurrentHIcon);
+    }
+
+    [Theory]
+    [InlineData(SvgIconConstants.TrayOnline)]
+    [InlineData(SvgIconConstants.StatusCheck)]
+    [InlineData(SvgIconConstants.TelemetryGrid)]
+    public void SkiaSvgIconLibrary_LoadsAndRasterizesEmbeddedHandoffSvgs_AsPremultipliedArgb(string iconName)
+    {
+        using ISvgIconLibrary library = new SkiaSvgIconLibrary();
+        uint[]? pixels = library.RenderArgbPixels(iconName, 24, SKColors.White);
+
+        Assert.NotNull(pixels);
+        Assert.Equal(24 * 24, pixels.Length);
+        Assert.Contains(pixels, px => (px >> 24) > 0);
+        Assert.All(pixels, px =>
+        {
+            byte a = (byte)(px >> 24);
+            byte r = (byte)((px >> 16) & 0xFF);
+            byte g = (byte)((px >> 8) & 0xFF);
+            byte b = (byte)(px & 0xFF);
+            Assert.True(r <= a && g <= a && b <= a);
+        });
     }
 }
