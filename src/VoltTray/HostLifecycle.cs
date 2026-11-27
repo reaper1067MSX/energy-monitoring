@@ -28,6 +28,7 @@ public sealed class HostLifecycle : IDisposable
     private readonly SplitCockpitPresenter _presenter;
     private readonly IEventBus _eventBus;
     private readonly Func<UITheme>? _appThemeProvider;
+    private readonly IContextMenuView? _contextMenu;
     private readonly List<IDisposable> _subscriptions = new();
     private CancellationTokenSource? _cts;
     private Task? _pollingTask;
@@ -59,7 +60,8 @@ public sealed class HostLifecycle : IDisposable
         IExecutionBoundary? executionBoundary = null,
         bool delegateDiagnosticsToPort = false,
         IEventBus? eventBus = null,
-        Func<UITheme>? appThemeProvider = null)
+        Func<UITheme>? appThemeProvider = null,
+        IContextMenuView? contextMenu = null)
     {
         _upsPort = upsPort ?? throw new ArgumentNullException(nameof(upsPort));
         _trayRenderer = trayRenderer ?? new TrayRenderer();
@@ -70,6 +72,7 @@ public sealed class HostLifecycle : IDisposable
         _executionBoundary = executionBoundary ?? new SafeExecutionMiddleware(_telemetryProbe);
         _delegateDiagnosticsToPort = delegateDiagnosticsToPort;
         _appThemeProvider = appThemeProvider;
+        _contextMenu = contextMenu;
         _shutdownCoordinator = new ShutdownCoordinator(
             shutdownPort ?? new WindowsShutdownPort(),
             notificationPort ?? new WindowsNotificationPort());
@@ -325,7 +328,43 @@ public sealed class HostLifecycle : IDisposable
 
     private void HandleContextMenuRequested()
     {
-        ShowExitDialog();
+        if (_contextMenu == null)
+        {
+            ShowExitDialog(_appThemeProvider?.Invoke() ?? _popoverPainter.CurrentTheme);
+            return;
+        }
+
+        var state = new ContextMenuState(
+            IsPaused,
+            CurrentTelemetry?.IsBeeperMuted ?? false,
+            CurrentTelemetry?.IsTestInProgress ?? false);
+
+        ContextMenuAction action = _contextMenu.Show(state, _trayRenderer.WindowHandle);
+        switch (action)
+        {
+            case ContextMenuAction.Open:
+                TogglePopoverFromTray();
+                break;
+            case ContextMenuAction.ToggleUsbMonitoring:
+                if (IsPaused)
+                {
+                    Resume();
+                }
+                else
+                {
+                    Pause();
+                }
+                break;
+            case ContextMenuAction.BatteryTest:
+                HandleSelfTestRequested();
+                break;
+            case ContextMenuAction.ToggleBeeper:
+                HandleToggleBeeperRequested();
+                break;
+            case ContextMenuAction.Exit:
+                ShowExitDialog(_appThemeProvider?.Invoke() ?? _popoverPainter.CurrentTheme);
+                break;
+        }
     }
 
     private void HandleTrayIconClicked() => HandleTrayIconClicked(anchorOverride: null);

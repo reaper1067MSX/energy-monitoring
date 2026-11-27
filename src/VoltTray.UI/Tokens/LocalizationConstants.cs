@@ -68,4 +68,15 @@ public static class LocalizationConstants
     public const string ExitCloseHelpEs = "cierra VoltTray y libera la memoria.";
     public const string ExitCancelEn = "Cancel";
     public const string ExitCancelEs = "Cancelar";
+
+    public const string MenuOpenEn = "Open";
+    public const string MenuOpenEs = "Abrir panel";
+    public const string MenuUsbMonitoringEn = "USB monitoring active";
+    public const string MenuUsbMonitoringEs = "Monitoreo USB activo";
+    public const string MenuBatteryTestEn = "Battery test (10s)";
+    public const string MenuBatteryTestEs = "Prueba de batería (10s)";
+    public const string MenuMuteAlarmEn = "Mute alarm";
+    public const string MenuMuteAlarmEs = "Silenciar alarma";
+    public const string MenuExitEn = "Exit VoltTray...";
+    public const string MenuExitEs = "Salir de VoltTray...";
 }

@@ -38,6 +38,7 @@ public sealed class TrayRenderer : ITrayIconView
 
     public string? CurrentTooltip { get; private set; }
     public uint TaskbarCreatedMessageId => _taskbarCreatedMessage;
+    public nint WindowHandle => _hwnd;
 
     public TrayRenderer(
         ITrayIconRasterizer? rasterizer = null,

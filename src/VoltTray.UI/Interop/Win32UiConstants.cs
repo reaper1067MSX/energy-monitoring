@@ -111,4 +111,20 @@ internal static class Win32UiConstants
     public const uint MbTopmost = 0x00040000;
     public const int IdYes = 6;
     public const int IdNo = 7;
+
+    public const uint WmNull = 0x0000;
+    public const uint MfString = 0x00000000;
+    public const uint MfGrayed = 0x00000001;
+    public const uint MfChecked = 0x00000008;
+    public const uint MfSeparator = 0x00000800;
+    public const uint TpmRightButton = 0x0002;
+    public const uint TpmNonotify = 0x0080;
+    public const uint TpmReturnCmd = 0x0100;
+    public const uint TpmBottomAlign = 0x0020;
+
+    public const uint MenuCmdOpen = 1001;
+    public const uint MenuCmdToggleUsb = 1002;
+    public const uint MenuCmdBatteryTest = 1003;
+    public const uint MenuCmdToggleBeeper = 1004;
+    public const uint MenuCmdExit = 1005;
 }

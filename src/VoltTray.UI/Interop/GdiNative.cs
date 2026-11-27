@@ -209,4 +209,26 @@ internal static partial class GdiNative
 
     [LibraryImport("user32.dll")]
     public static partial IntPtr SetCursor(IntPtr hCursor);
+
+    [LibraryImport("user32.dll", SetLastError = true)]
+    public static partial IntPtr CreatePopupMenu();
+
+    [LibraryImport("user32.dll", EntryPoint = "AppendMenuW", SetLastError = true, StringMarshalling = StringMarshalling.Utf16)]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    public static partial bool AppendMenu(IntPtr hMenu, uint uFlags, nuint uIDNewItem, string? lpNewItem);
+
+    [LibraryImport("user32.dll", SetLastError = true)]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    public static partial bool SetMenuDefaultItem(IntPtr hMenu, uint uItem, uint fByPos);
+
+    [LibraryImport("user32.dll", SetLastError = true)]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    public static partial bool GetCursorPos(out NativePoint lpPoint);
+
+    [LibraryImport("user32.dll", SetLastError = true)]
+    public static partial int TrackPopupMenuEx(IntPtr hMenu, uint uFlags, int x, int y, IntPtr hWnd, IntPtr lptpm);
+
+    [LibraryImport("user32.dll", SetLastError = true)]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    public static partial bool DestroyMenu(IntPtr hMenu);
 }

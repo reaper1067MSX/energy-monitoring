@@ -305,4 +305,16 @@ public class UIRenderersTests
         Assert.Equal(1, selfTestCount);
         Assert.Equal(1, beeperCount);
     }
+
+    [Fact]
+    public void Win32ContextMenu_ReturnsMockedAction_AndReturnsNoneWhenNativeMenuDisabled()
+    {
+        var menu = new Win32ContextMenu(enableNativeMenu: false);
+        var state = new ContextMenuState(IsPaused: false, IsBeeperMuted: true, IsTestInProgress: false);
+
+        Assert.Equal(ContextMenuAction.None, menu.Show(state));
+
+        menu.MockMenuHandler = s => s.IsBeeperMuted ? ContextMenuAction.ToggleBeeper : ContextMenuAction.Open;
+        Assert.Equal(ContextMenuAction.ToggleBeeper, menu.Show(state));
+    }
 }
