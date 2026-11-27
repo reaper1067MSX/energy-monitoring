@@ -23,8 +23,8 @@ public sealed class TrayRenderer : ITrayIconView
     private readonly ITrayIconRasterizer _rasterizer;
     private readonly INativeIconFactory _iconFactory;
     private readonly Func<bool> _isLightTaskbarProvider;
-    private readonly bool _showTrayIcon;
     private readonly object _lock = new();
+    private bool _showTrayIcon;
     private IntPtr _currentHIcon = IntPtr.Zero;
     private bool _isDisposed;
 
@@ -230,6 +230,53 @@ public sealed class TrayRenderer : ITrayIconView
                 fixed (NOTIFYICONDATAW* pNid = &_nid)
                 {
                     PInvoke.Shell_NotifyIcon(NOTIFY_ICON_MESSAGE.NIM_MODIFY, pNid);
+                }
+            }
+        }
+    }
+
+    public unsafe void SetTrayIconVisibility(bool visible)
+    {
+        lock (_lock)
+        {
+            if (_showTrayIcon == visible)
+            {
+                return;
+            }
+
+            _showTrayIcon = visible;
+            if (_hwnd.IsNull)
+            {
+                return;
+            }
+
+            if (!visible)
+            {
+                if (_iconAdded)
+                {
+                    fixed (NOTIFYICONDATAW* pNid = &_nid)
+                    {
+                        PInvoke.Shell_NotifyIcon(NOTIFY_ICON_MESSAGE.NIM_DELETE, pNid);
+                    }
+
+                    _iconAdded = false;
+                }
+            }
+            else if (_currentHIcon != IntPtr.Zero && !_iconAdded)
+            {
+                _nid = new NOTIFYICONDATAW
+                {
+                    cbSize = (uint)sizeof(NOTIFYICONDATAW),
+                    hWnd = _hwnd,
+                    uID = Win32UiConstants.TrayIconId,
+                    uFlags = NOTIFY_ICON_DATA_FLAGS.NIF_MESSAGE | NOTIFY_ICON_DATA_FLAGS.NIF_ICON | NOTIFY_ICON_DATA_FLAGS.NIF_TIP,
+                    uCallbackMessage = Win32UiConstants.WmTrayIcon,
+                    hIcon = new HICON(_currentHIcon)
+                };
+                SetTipText(CurrentTooltip ?? ApplicationDefaults.DefaultUpsDisplayName);
+                fixed (NOTIFYICONDATAW* pNid = &_nid)
+                {
+                    _iconAdded = PInvoke.Shell_NotifyIcon(NOTIFY_ICON_MESSAGE.NIM_ADD, pNid);
                 }
             }
         }

@@ -12,16 +12,28 @@ public sealed class TaskbarPillSubscriber : IDisposable
     private readonly IDisposable _telemetrySubscription;
     private readonly ITaskbarPillView _pillView;
     private readonly IHostLifecycle _lifecycle;
+    private readonly Func<bool> _isLargeModeProvider;
 
-    public TaskbarPillSubscriber(IEventBus eventBus, ITaskbarPillView pillView, IHostLifecycle lifecycle)
+    public TaskbarPillSubscriber(
+        IEventBus eventBus,
+        ITaskbarPillView pillView,
+        IHostLifecycle lifecycle,
+        Func<bool>? isLargeModeProvider = null)
     {
         ArgumentNullException.ThrowIfNull(eventBus);
         _pillView = pillView ?? throw new ArgumentNullException(nameof(pillView));
         _lifecycle = lifecycle ?? throw new ArgumentNullException(nameof(lifecycle));
+        _isLargeModeProvider = isLargeModeProvider ?? (() => true);
 
         _pillView.OnPillLeftClicked += HandleLeftClick;
         _pillView.OnPillRightClicked += HandleRightClick;
-        _telemetrySubscription = eventBus.Subscribe<TelemetryReceived>(received => _pillView.Update(received.Telemetry));
+        _telemetrySubscription = eventBus.Subscribe<TelemetryReceived>(received =>
+        {
+            if (_isLargeModeProvider())
+            {
+                _pillView.Update(received.Telemetry);
+            }
+        });
     }
 
     public void Dispose()

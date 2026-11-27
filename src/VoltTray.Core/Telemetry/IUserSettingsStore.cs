@@ -4,4 +4,6 @@ public interface IUserSettingsStore
 {
     UpsModelPreset? LoadSelectedModel();
     void SaveSelectedModel(UpsModelPreset preset);
+    TrayIconMode? LoadIconMode();
+    void SaveIconMode(TrayIconMode mode);
 }

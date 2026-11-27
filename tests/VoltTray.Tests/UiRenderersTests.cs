@@ -1,6 +1,7 @@
 using VoltTray.UI.Tray;
 using VoltTray.UI.Popover;
 using System.Globalization;
+using System.Runtime.CompilerServices;
 using SkiaSharp;
 using VoltTray.Core.Battery;
 using VoltTray.Core.Telemetry;
@@ -11,7 +12,7 @@ using VoltTray.UI.Tokens;
 
 namespace VoltTray.Tests;
 
-public class UIRenderersTests
+public class UiRenderersTests
 {
     [Fact]
     public void TrayRenderer_UpdatesAllOperationalStates_WithoutLeak()
@@ -140,8 +141,8 @@ public class UIRenderersTests
     [Fact]
     public void PopoverPainter_Debounce350Ms_PreventsImmediateReopenAfterHide_AndAllowsKeyboardActions()
     {
-        DateTimeOffset now = new(2026, 11, 26, 12, 0, 0, TimeSpan.Zero);
-        using var painter = new PopoverPainter(enableNativeWindow: false, clock: () => now);
+        var clock = new StrongBox<DateTimeOffset>(new DateTimeOffset(2026, 11, 26, 12, 0, 0, TimeSpan.Zero));
+        using var painter = new PopoverPainter(enableNativeWindow: false, clock: () => clock.Value);
         UpsTelemetry telemetry = UpsTelemetry.CreateDefault();
         var anchor = new ViewRect(1800, 1040, 1824, 1064);
         var workArea = new ViewRect(0, 0, 1920, 1040);
@@ -155,11 +156,11 @@ public class UIRenderersTests
         painter.Hide();
         Assert.False(painter.IsVisible);
 
-        now = now.AddMilliseconds(100);
+        clock.Value = clock.Value.AddMilliseconds(100);
         painter.Show(telemetry, UITheme.Dark, anchor, TaskbarEdge.Bottom, workArea);
         Assert.False(painter.IsVisible);
 
-        now = now.AddMilliseconds(300);
+        clock.Value = clock.Value.AddMilliseconds(300);
         painter.Show(telemetry, UITheme.Dark, anchor, TaskbarEdge.Bottom, workArea);
         Assert.True(painter.IsVisible);
 
@@ -348,5 +349,24 @@ public class UIRenderersTests
         Assert.DoesNotContain("rx=\"1.2\"", zeroBattery, StringComparison.Ordinal);
         Assert.DoesNotContain("rx=\"1.2\"", noComm, StringComparison.Ordinal);
         Assert.Contains("M10.2 5.7L14.8 10.3", noComm, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void RingBatterySvgBuilder_GeneratesStyleDRing_WithProportionalOffset_AndStateGlyphs()
+    {
+        string fullOnline = RingBatterySvgBuilder.BuildIconSvg(UpsOperationalState.LineNormal, 100, isLightTaskbar: true);
+        string halfBattery = RingBatterySvgBuilder.BuildIconSvg(UpsOperationalState.OnBattery, 50, isLightTaskbar: false);
+        string noComm = RingBatterySvgBuilder.BuildIconSvg(UpsOperationalState.CommunicationsLost, 100, isLightTaskbar: false);
+
+        Assert.Contains("viewBox=\"0 0 24 24\"", fullOnline, StringComparison.Ordinal);
+        Assert.Contains("stroke-dasharray=\"57.81\"", fullOnline, StringComparison.Ordinal);
+        Assert.Contains("stroke-dashoffset=\"0\"", fullOnline, StringComparison.Ordinal);
+        Assert.Contains("M12.8 6.8L8.8 12.6H11.8L11.2 17.2L15.2 11.4H12.2L12.8 6.8Z", fullOnline, StringComparison.Ordinal);
+
+        Assert.Contains("stroke-dashoffset=\"28.91\"", halfBattery, StringComparison.Ordinal);
+        Assert.Contains("#fbbf24", halfBattery, StringComparison.Ordinal);
+
+        Assert.DoesNotContain("stroke-dasharray=\"57.81\"", noComm, StringComparison.Ordinal);
+        Assert.Contains("M9 9L15 15M15 9L9 15", noComm, StringComparison.Ordinal);
     }
 }

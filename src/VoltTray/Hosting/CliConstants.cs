@@ -10,6 +10,7 @@ public static class CliConstants
     public const string DryRunFlag = "--dry-run";
     public const string IntervalFlag = "--interval";
     public const string ModelFlag = "--model";
+    public const string IconModeFlag = "--icon-mode";
     public const string TaskbarPillFlag = "--taskbar-pill";
     public const string AllHidFlag = "--all-hid";
     public const string CommandFlag = "--cmd";

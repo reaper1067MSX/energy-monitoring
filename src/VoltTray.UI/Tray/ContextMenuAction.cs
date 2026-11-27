@@ -8,5 +8,6 @@ public enum ContextMenuAction
     BatteryTest = 3,
     ToggleBeeper = 4,
     Exit = 5,
-    ToggleTheme = 6
+    ToggleTheme = 6,
+    ToggleIconMode = 7
 }

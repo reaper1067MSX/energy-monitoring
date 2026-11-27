@@ -29,6 +29,8 @@ public sealed class HostLifecycle : IHostLifecycle
     private readonly IEventBus _eventBus;
     private readonly Func<UITheme>? _appThemeProvider;
     private readonly IContextMenuView? _contextMenu;
+    private readonly Func<bool>? _isCompactIconModeProvider;
+    private readonly Action? _toggleIconModeAction;
     private readonly List<IDisposable> _subscriptions = new();
     private UITheme? _themeOverride;
     private CancellationTokenSource? _cts;
@@ -62,7 +64,9 @@ public sealed class HostLifecycle : IHostLifecycle
         bool delegateDiagnosticsToPort = false,
         IEventBus? eventBus = null,
         Func<UITheme>? appThemeProvider = null,
-        IContextMenuView? contextMenu = null)
+        IContextMenuView? contextMenu = null,
+        Func<bool>? isCompactIconModeProvider = null,
+        Action? toggleIconModeAction = null)
     {
         _upsPort = upsPort ?? throw new ArgumentNullException(nameof(upsPort));
         _trayRenderer = trayRenderer ?? new TrayRenderer();
@@ -74,6 +78,8 @@ public sealed class HostLifecycle : IHostLifecycle
         _delegateDiagnosticsToPort = delegateDiagnosticsToPort;
         _appThemeProvider = appThemeProvider;
         _contextMenu = contextMenu;
+        _isCompactIconModeProvider = isCompactIconModeProvider;
+        _toggleIconModeAction = toggleIconModeAction;
         _shutdownCoordinator = new ShutdownCoordinator(
             shutdownPort ?? new WindowsShutdownPort(),
             notificationPort ?? new WindowsNotificationPort());
@@ -338,7 +344,8 @@ public sealed class HostLifecycle : IHostLifecycle
             IsPaused,
             CurrentTelemetry?.IsBeeperMuted ?? false,
             CurrentTelemetry?.IsTestInProgress ?? false,
-            ResolveAppTheme() == UITheme.Dark);
+            ResolveAppTheme() == UITheme.Dark,
+            _isCompactIconModeProvider?.Invoke() ?? false);
 
         ContextMenuAction action = _contextMenu.Show(state, _trayRenderer.WindowHandle);
         switch (action)
@@ -369,6 +376,9 @@ public sealed class HostLifecycle : IHostLifecycle
                     (ViewRect anchorRect, ViewRect workArea, TaskbarEdge edge) = ResolvePlacement();
                     _popoverPainter.Show(CurrentTelemetry, _themeOverride.Value, anchorRect, edge, workArea);
                 }
+                break;
+            case ContextMenuAction.ToggleIconMode:
+                _toggleIconModeAction?.Invoke();
                 break;
             case ContextMenuAction.Exit:
                 ShowExitDialog(ResolveAppTheme());

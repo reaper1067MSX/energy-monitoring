@@ -21,7 +21,9 @@ public sealed class TrayMonitorBootstrapper : IDisposable
     private readonly IUpsDevicePort _rawPort;
     private readonly ServiceProvider _serviceProvider;
     private readonly ITrayIconView _trayIconView;
-    private readonly ITaskbarPillView? _taskbarPillView;
+    private readonly ITaskbarPillView _taskbarPillView;
+    private readonly IUserSettingsStore _settingsStore;
+    private TrayIconMode _iconMode;
 
     public IHostLifecycle Lifecycle { get; }
 
@@ -34,7 +36,11 @@ public sealed class TrayMonitorBootstrapper : IDisposable
 
         var services = new ServiceCollection();
         services.AddVoltTrayInfrastructure(() => _rawPort);
-        services.AddVoltTrayUi(options.EnableTaskbarPill);
+        using ServiceProvider probeProvider = services.BuildServiceProvider();
+        IUserSettingsStore initialStore = probeProvider.GetRequiredService<IUserSettingsStore>();
+        _iconMode = ResolveInitialIconMode(options, initialStore);
+
+        services.AddVoltTrayUi(enableTaskbarPill: true, showTrayIcon: _iconMode == TrayIconMode.Short);
 
         services.AddSingleton<IHostLifecycle>(sp => new HostLifecycle(
             sp.GetRequiredService<IUpsDevicePort>(),
@@ -49,41 +55,76 @@ public sealed class TrayMonitorBootstrapper : IDisposable
             delegateDiagnosticsToPort: true,
             eventBus: null,
             appThemeProvider: WindowsThemeDetector.GetAppTheme,
-            contextMenu: sp.GetRequiredService<IContextMenuView>()));
+            contextMenu: sp.GetRequiredService<IContextMenuView>(),
+            isCompactIconModeProvider: () => _iconMode == TrayIconMode.Short,
+            toggleIconModeAction: ToggleIconMode));
 
-        if (options.EnableTaskbarPill)
-        {
-            services.AddSingleton(sp => new TaskbarPillSubscriber(
-                sp.GetRequiredService<IHostLifecycle>().EventBus,
-                sp.GetRequiredService<ITaskbarPillView>(),
-                sp.GetRequiredService<IHostLifecycle>()));
-        }
+        services.AddSingleton(sp => new TaskbarPillSubscriber(
+            sp.GetRequiredService<IHostLifecycle>().EventBus,
+            sp.GetRequiredService<ITaskbarPillView>(),
+            sp.GetRequiredService<IHostLifecycle>(),
+            () => _iconMode == TrayIconMode.Large));
 
         _serviceProvider = services.BuildServiceProvider();
+        _settingsStore = _serviceProvider.GetRequiredService<IUserSettingsStore>();
         Lifecycle = _serviceProvider.GetRequiredService<IHostLifecycle>();
         _trayIconView = _serviceProvider.GetRequiredService<ITrayIconView>();
+        _taskbarPillView = _serviceProvider.GetRequiredService<ITaskbarPillView>();
+        _ = _serviceProvider.GetRequiredService<TaskbarPillSubscriber>();
+        _trayIconView.OnTaskbarCreated += HandleTaskbarCreated;
 
         if (options.IsDryRun)
         {
             Lifecycle.ShutdownCoordinator.DryRun = true;
         }
-
-        if (options.EnableTaskbarPill)
-        {
-            _taskbarPillView = _serviceProvider.GetRequiredService<ITaskbarPillView>();
-            _ = _serviceProvider.GetRequiredService<TaskbarPillSubscriber>();
-            _trayIconView.OnTaskbarCreated += _taskbarPillView.HandleTaskbarCreated;
-        }
     }
 
     public void Dispose()
     {
-        if (_taskbarPillView != null)
-        {
-            _trayIconView.OnTaskbarCreated -= _taskbarPillView.HandleTaskbarCreated;
-        }
-
+        _trayIconView.OnTaskbarCreated -= HandleTaskbarCreated;
         _serviceProvider.Dispose();
         _rawPort.Dispose();
+    }
+
+    private static TrayIconMode ResolveInitialIconMode(TrayMonitorLaunchOptions options, IUserSettingsStore settingsStore)
+    {
+        if (options.SelectedIconMode is TrayIconMode explicitMode)
+        {
+            settingsStore.SaveIconMode(explicitMode);
+            return explicitMode;
+        }
+
+        if (settingsStore.LoadIconMode() is TrayIconMode savedMode)
+        {
+            return savedMode;
+        }
+
+        return options.EnableTaskbarPill ? TrayIconMode.Large : TrayIconMode.Short;
+    }
+
+    private void ToggleIconMode()
+    {
+        _iconMode = _iconMode == TrayIconMode.Large ? TrayIconMode.Short : TrayIconMode.Large;
+        _settingsStore.SaveIconMode(_iconMode);
+
+        bool isShort = _iconMode == TrayIconMode.Short;
+        _trayIconView.SetTrayIconVisibility(isShort);
+
+        if (isShort)
+        {
+            _taskbarPillView.Hide();
+        }
+        else if (Lifecycle.CurrentTelemetry is UpsTelemetry telemetry)
+        {
+            _taskbarPillView.Update(telemetry);
+        }
+    }
+
+    private void HandleTaskbarCreated()
+    {
+        if (_iconMode == TrayIconMode.Large)
+        {
+            _taskbarPillView.HandleTaskbarCreated();
+        }
     }
 }

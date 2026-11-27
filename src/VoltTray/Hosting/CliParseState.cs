@@ -12,6 +12,7 @@ internal sealed class CliParseState
     public bool EnableTaskbarPill { get; set; }
     public int PollingIntervalMs { get; set; } = ApplicationDefaults.DefaultPollingIntervalMs;
     public UpsModelPreset? SelectedModel { get; set; }
+    public TrayIconMode? SelectedIconMode { get; set; }
     public bool IncludeAllHidDevices { get; set; }
     public UpsDiagnosticInquiry Inquiry { get; set; } = UpsDiagnosticInquiry.QuickStatus;
     public string? ExportPath { get; set; }
